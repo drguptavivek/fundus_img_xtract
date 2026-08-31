@@ -4,6 +4,8 @@
 
 The pre-graded image upload feature allows users to upload fundus images with previously assigned grades and import those grades into the system. This functionality is particularly useful for creating training datasets with known ground truth or for importing results from other systems.
 
+This infrequently used administrative workflow intentionally remains web-only. It does not expose a mobile API; both web routes delegate authorization and target resolution to the shared `pregraded_upload` domain module.
+
 ## Key Components
 
 ### 1. Routes
@@ -12,7 +14,7 @@ The pre-graded image upload feature allows users to upload fundus images with pr
 - **Module**: `direct_uploads/pregraded.py`
 - **Function**: `pregraded_upload()`
 - **Purpose**: Handles uploading of pre-graded images
-- **Roles**: `fileUploader`, `optometrist`, `data_manager`, `admin`
+- **Roles**: dedicated `pregarded_uploader`, with `admin` break-glass
 - **Upload Process**:
   - Accepts image files (JPG/PNG) with metadata
   - Validates file types and sizes
@@ -25,7 +27,7 @@ The pre-graded image upload feature allows users to upload fundus images with pr
 - **Module**: `direct_uploads/pregraded_grades.py`
 - **Function**: `pregraded_grades()`
 - **Purpose**: Handles importing pre-graded results from Excel files
-- **Roles**: `fileUploader`, `optometrist`, `data_manager`, `admin`
+- **Roles**: dedicated `pregarded_uploader`, with `admin` break-glass
 - **Import Process**:
   - Accepts Excel files containing image names and grades
   - Maps grade text values to system grade IDs
@@ -64,8 +66,8 @@ DIRECT_UPLOAD_ALLOWED_MIMETYPES="image/jpeg,image/png"
 ### 4. Processing Workflow
 
 #### Image Upload Process
-1. **Validation**: Verify all required fields (hospital, lab unit, camera, disease, area)
-2. **Access Check**: Ensure user has access to the selected lab unit
+1. **Validation**: Verify all required fields (project, hospital, lab unit, camera, disease, area, mydriatic state)
+2. **Authorization**: Resolve the exact active pregraded upload-profile assignment and validate every selected fact
 3. **Job Creation**: Create a job with status "processing"
 4. **File Processing**: For each file:
    - Validate size and MIME type
@@ -79,16 +81,17 @@ DIRECT_UPLOAD_ALLOWED_MIMETYPES="image/jpeg,image/png"
 #### Grade Import Process
 1. **File Validation**: Validate Excel file structure
 2. **Role Detection**: Identify if grades are for resident, resident2, or AI
-3. **Grade Mapping**: Map grade text values to system grade IDs
-4. **Row Extraction**: Extract image names and grade values from spreadsheet
-5. **Auto-Mapping**: Attempt to automatically map grade values to system grades. If not, ask User for mapoing
-6. **Processing**: For each row:
+3. **Target authorization**: Resolve every image name to one unambiguous pregraded record, derive its project/camera/area/mydriatic lineage, and revalidate the caller's active pregraded profile assignment
+4. **Grade Mapping**: Map grade text values to system grade IDs
+5. **Row Extraction**: Extract image names and grade values from spreadsheet
+6. **Auto-Mapping**: Attempt to automatically map grade values to system grades. If not, ask the user for mapping; authorization is checked again when that mapping is submitted
+7. **Processing**: For each row:
    - Find corresponding DirectImageUpload
    - Ensure grading task exists
    - Apply grade to the task
    - Update task state based on grades
    - Create consensus if resident2 grade added
-7. **Logging**: Detailed logging for each step of processing
+8. **Logging**: Detailed logging for each step of processing
 
 ### 5. Key Functions
 
@@ -114,8 +117,9 @@ DIRECT_UPLOAD_ALLOWED_MIMETYPES="image/jpeg,image/png"
 
 ### 6. Security Features
 
-- **Role-Based Access**: Only authorized users can upload pre-graded images
-- **Lab Unit Validation**: Ensures users can only upload to accessible lab units
+- **Role-Based Access**: Generic `fileUploader` authority is insufficient; the dedicated pregraded role is required
+- **Profile and lineage validation**: The profile permits the kind and exact disease/camera/area/mydriatic facts, while its assignment supplies the exact project and Lab Unit
+- **Fail-closed import matching**: Missing, unauthorized, cross-project, or ambiguous workbook targets deny the whole import
 - **File Validation**: Checks file types, sizes, and duplicates
 - **Session Management**: Secure session handling for import data
 - **IP Logging**: All uploads and imports are logged with IP addresses

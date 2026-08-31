@@ -1,8 +1,12 @@
 from models import Project
+from grading_allocation.models import ProjectGraderAllocation
+from project_configuration.models import ProjectLabUnit
+from utils.dualGradingEligibility import get_user_eligibility_for_task
 from project_annotations.models import (
     ProjectAnnotationClass,
     ProjectAnnotationPolicyRevision,
 )
+from project_annotations.service import parse_policy_update, save_project_policy
 from tests.helpers.test_factories import TestDataFactory
 
 
@@ -14,6 +18,7 @@ def _project_task(db_session, test_users, core_test_data):
     project = Project(title="HTML annotation project", code="HTML-ANNOTATION", active=True)
     db_session.add(project)
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab_unit.id, active=True))
     image = TestDataFactory.create_direct_image_upload(
         db_session,
         lab_unit_id=lab_unit.id,
@@ -30,7 +35,20 @@ def _project_task(db_session, test_users, core_test_data):
         disease_id=core_test_data["glaucoma"].id,
         direct_image_upload_id=image.id,
     )
-    db_session.flush()
+    resident = db_session.merge(test_users["resident"])
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=resident.id,
+            lab_unit_id=lab_unit.id,
+            scope="disease_image",
+            disease_id=core_test_data["glaucoma"].id,
+            encounter_set_type_id=None,
+            capacity="resident",
+            active=True,
+        )
+    )
+    db_session.commit()
     return project, task
 
 
@@ -103,18 +121,28 @@ def test_grader_can_read_resolved_task_annotation_context(
     app, db_session, test_users, core_test_data
 ):
     project, task = _project_task(db_session, test_users, core_test_data)
-    with app.test_client(user=test_users["admin"]) as client:
-        saved = client.put(
-            f"/api/projects/{project.id}/annotation-policy", json=_payload()
-        )
-    assert saved.status_code == 200
+    save_project_policy(
+        db_session,
+        project_id=project.id,
+        actor_user_id=test_users["admin"].id,
+        update=parse_policy_update(_payload()),
+    )
+    db_session.commit()
 
-    with app.test_client(user=test_users["resident"]) as client:
+    assert get_user_eligibility_for_task(
+        db_session,
+        test_users["resident"].id,
+        task.id,
+        "resident",
+    )
+
+    resident = db_session.merge(test_users["resident"])
+    with app.test_client(user=resident) as client:
         response = client.get(
             f"/api/grading-tasks/{task.uuid}/annotation-context?slot=resident"
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json(silent=True)
     assert response.get_json()["project_id"] == project.id
     assert response.get_json()["project_classes"][0]["key"] == "optic_disc"
     assert response.headers["Cache-Control"] == "no-store, private"

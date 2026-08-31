@@ -396,10 +396,6 @@ admin_bp.add_url_rule(
     endpoint="image_metadata_run_pii_queue",
 )
 admin_bp.add_url_rule("/image-metadata/status", view_func=image_metadata_status, methods=["GET"])
-admin_bp.add_url_rule("/metadata-backfill", view_func=image_metadata_admin, methods=["GET"], endpoint="metadata_backfill_admin")
-admin_bp.add_url_rule("/metadata-backfill/run", view_func=image_metadata_backfill, methods=["POST"], endpoint="metadata_backfill_run")
-admin_bp.add_url_rule("/metadat-backfilll", view_func=image_metadata_admin, methods=["GET"], endpoint="metadata_backfill_admin_alias")
-
 # Task backfill
 admin_bp.add_url_rule("/task-backfill", view_func=task_backfill_admin, methods=["GET"])
 admin_bp.add_url_rule("/task-backfill/run", view_func=task_backfill_run, methods=["POST"])

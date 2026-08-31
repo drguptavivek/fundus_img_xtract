@@ -27,8 +27,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from auth.roles import roles_or_project_grant_required
-from utils.hospital_scoping import apply_scoping
+from authz import RecordColumns, access_context, role_scoped_rows
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UploadProfileError,
@@ -39,7 +38,7 @@ from encounter_sets.monocular_status import update_monocular_status
 
 
 @api_bp.route("/encounter-sets/<uuid>/monocular-status", methods=["PATCH"])
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
+@login_required
 def patch_encounter_set_monocular_status(uuid):
     """Correct canonical monocular status before or after verification."""
     payload = request.get_json(silent=True) or {}
@@ -276,7 +275,6 @@ def validate_image_file(file_obj):
 
 @api_bp.route('/v1/encounter-set/unverified', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def list_unverified_encounter_sets():
     """List set-based encounters that need verification."""
     with transaction_scope() as db:
@@ -287,7 +285,17 @@ def list_unverified_encounter_sets():
             )
         ).order_by(PatientEncounters.capture_date.desc())
         
-        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        query = role_scoped_rows(
+            query,
+            access_context(db, current_user),
+            RecordColumns(
+                project_id=PatientEncounters.project_id,
+                lab_unit_id=PatientEncounters.lab_unit_id,
+            ),
+            lab_roles={"verifier"},
+            project_roles={"verifier"},
+            allow_admin=True,
+        )
         encounters = db.execute(query).scalars().all()
         
         return jsonify([{
@@ -300,14 +308,23 @@ def list_unverified_encounter_sets():
 
 @api_bp.route('/v1/encounter-set/<uuid>/details', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def get_encounter_set_details(uuid):
     """Get details and images for a specific encounter set."""
     with transaction_scope() as db:
         query = select(PatientEncounters).where(PatientEncounters.uuid == uuid).options(
             selectinload(PatientEncounters.encounter_set_images)
         )
-        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        query = role_scoped_rows(
+            query,
+            access_context(db, current_user),
+            RecordColumns(
+                project_id=PatientEncounters.project_id,
+                lab_unit_id=PatientEncounters.lab_unit_id,
+            ),
+            lab_roles={"verifier"},
+            project_roles={"verifier"},
+            allow_admin=True,
+        )
         encounter = db.execute(query).scalar_one_or_none()
         
         if not encounter:
@@ -333,7 +350,6 @@ def get_encounter_set_details(uuid):
 
 @api_bp.route('/v1/encounter-set/image/<uuid>/position', methods=['POST'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def update_image_position(uuid):
     """Update the spatial position of an image."""
     # =========================================================================
@@ -362,44 +378,22 @@ def update_image_position(uuid):
             "message": "Must be between 1 and 9"
         }), 400
         
-    with transaction_scope() as db:
-        # Check permission via encounter scoping
-        query = select(EncounterSetImage).where(EncounterSetImage.uuid == uuid).options(
-            selectinload(EncounterSetImage.patient_encounter)
-        )
-        img = db.execute(query).scalar_one_or_none()
+    from encounter_sets.position_service import PositionMutationError, move_encounter_set_image
+    try:
+        with transaction_scope() as db:
+            move_encounter_set_image(
+                db, user=current_user, image_uuid=uuid, new_position=spatial_position
+            )
+    except PositionMutationError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
 
-        if not img:
-            return jsonify({"error": "Image not found"}), 404
+    logger.info(
+        "Image position updated",
+        extra={
+            'image_uuid': uuid,
+            'new_position': spatial_position,
+            'user_id': current_user.id
+        }
+    )
 
-        # Scope check - verify user has access to this encounter
-        enc_query = select(PatientEncounters).where(PatientEncounters.id == img.patient_encounter_id)
-        enc_query = apply_scoping(enc_query, PatientEncounters, current_user, "edit")
-        if not db.execute(enc_query).scalar_one_or_none():
-            return jsonify({"error": "Access denied"}), 403
-
-        # Update position (P0.5: Handle race condition via database constraint)
-        img.spatial_position = spatial_position
-
-        try:
-            db.commit()
-        except IntegrityError as e:
-            # Unique constraint violation - another request took this position
-            if 'uq_encounter_set_image_position' in str(e):
-                return jsonify({
-                    "error": "Position already occupied",
-                    "message": "Another user moved an image to this position. Please try a different position."
-                }), 409
-            # Other integrity errors should be raised
-            raise
-
-        logger.info(
-            "Image position updated",
-            extra={
-                'image_uuid': uuid,
-                'new_position': spatial_position,
-                'user_id': current_user.id
-            }
-        )
-
-        return jsonify({"message": "Position updated"})
+    return jsonify({"message": "Position updated"})

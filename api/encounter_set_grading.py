@@ -29,8 +29,8 @@ from . import api_bp
 
 MANAGER_ROLES = ("admin", "local_admin", "data_manager")
 GRADING_ROLES = (
-    "resident",
     "ophthalmologist",
+    "field_ophthalmologist",
 )
 
 

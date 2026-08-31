@@ -137,10 +137,7 @@ def test_dr_dme_candidate_api_exposes_filters_images_and_pagination(client, logi
         )
 
     monkeypatch.setattr(routes, "get_db_session", fake_session)
-    monkeypatch.setattr(
-        "data_authorization.policy.user_can_project_action",
-        lambda *args, **kwargs: True,
-    )
+    monkeypatch.setattr("authz.project_access.can_run_wai", lambda *args, **kwargs: True)
     monkeypatch.setattr(routes, "list_dr_dme_candidates", candidates)
 
     response = client.get(

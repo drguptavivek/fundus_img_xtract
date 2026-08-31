@@ -40,7 +40,7 @@ class TestUserFixtures:
         from models import UserDiseaseUnitRole
         
         assert resident_user is not None
-        assert resident_user.has_role('resident')
+        assert resident_user.has_role('ophthalmologist')
         
         # Check permissions
         permission = db_session.query(UserDiseaseUnitRole).filter_by(
@@ -75,14 +75,14 @@ class TestUserFixtures:
         assert 'arbitrator' in test_users
         
         assert test_users['admin'].has_role('admin')
-        assert test_users['resident'].has_role('resident')
+        assert test_users['resident'].has_role('ophthalmologist')
     
     def test_authenticated_client_fixture(self, authenticated_client, admin_user):
         """Verify authenticated client fixture works"""
         # The client should have a session with user_id set
         with authenticated_client.session_transaction() as sess:
-            assert 'user_id' in sess
-            assert sess['user_id'] == admin_user.id
+            assert '_user_id' in sess
+            assert sess['_user_id'] == str(admin_user.id)
 
 
 if __name__ == '__main__':

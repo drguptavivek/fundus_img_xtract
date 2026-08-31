@@ -78,7 +78,7 @@ Auth:
 ### `GET /admin/sensitive-operations`
 
 Auth:
-- `@roles_required("admin", "local_admin", "data_manager")`
+- `@roles_required("admin")`
 
 Query params:
 - `page` optional integer, default `1`
@@ -92,7 +92,7 @@ Response:
 ### `GET /admin/sensitive-operations/<log_id>`
 
 Auth:
-- `@roles_required("admin", "local_admin", "data_manager")`
+- `@roles_required("admin")`
 
 Response `200`:
 ```json

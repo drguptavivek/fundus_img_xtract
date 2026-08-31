@@ -1,7 +1,6 @@
 import pytest
 
-from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
-from encounter_sets.models import ProjectEncounterSetPermission
+from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role, User
 from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -27,6 +26,7 @@ from upload_profiles.service import (
 @pytest.fixture
 def upload_profile_entities(db_session):
     user = User(username="profile_uploader", full_name="Profile Uploader", password_hash="x", is_active=True)
+    user.roles.append(db_session.query(Role).filter_by(name="fileUploader").one())
     hospital = Hospital(name="Profile Hospital")
     lab = LabUnit(name="Profile Lab", hospital=hospital)
     user.lab_units.append(lab)
@@ -63,13 +63,6 @@ def upload_profile_entities(db_session):
             active=True,
         )
     )
-    db_session.add(ProjectEncounterSetPermission(
-        project_id=project.id,
-        user_id=user.id,
-        lab_unit_id=lab.id,
-        can_upload=True,
-        active=True,
-    ))
     db_session.commit()
     return {
         "user": user,
@@ -95,18 +88,23 @@ def test_get_user_upload_profiles_returns_detached_safe_dto(db_session, upload_p
 def test_upload_profile_assignment_is_the_project_upload_capability(
     db_session, upload_profile_entities
 ):
-    permission = db_session.query(ProjectEncounterSetPermission).filter_by(
-        project_id=upload_profile_entities["project"].id,
-        user_id=upload_profile_entities["user"].id,
-        lab_unit_id=upload_profile_entities["lab"].id,
-    ).one()
-    permission.can_upload = False
     upload_profile_entities["user"].lab_units.clear()
     db_session.flush()
 
     profiles = get_user_upload_profiles(db_session, upload_profile_entities["user"].id)
     assert len(profiles) == 1
     assert profiles[0].lab_unit_id == upload_profile_entities["lab"].id
+
+
+def test_upload_profile_assignment_requires_uploader_qualification(
+    db_session, upload_profile_entities
+):
+    upload_profile_entities["user"].roles.clear()
+    db_session.flush()
+
+    assert get_user_upload_profiles(
+        db_session, upload_profile_entities["user"].id
+    ) == []
 
 
 def test_validate_direct_upload_scope_rejects_unprofiled_camera(db_session, upload_profile_entities):

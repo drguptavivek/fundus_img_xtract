@@ -11,11 +11,10 @@ from flask_login import current_user, login_required
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from data_authorization.policy import (
-    ACTION_WAI_RESULTS,
-    ACTION_WAI_RUN,
-    allowed_lab_unit_ids_for_action,
-    user_can_project_action,
+from authz.project_access import (
+    allowed_project_lab_unit_ids,
+    can_run_wai,
+    can_view_wai_results,
 )
 from db_transaction_manager import get_db_session, transaction_scope
 from encounter_sets.models import EncounterSetAttachment
@@ -60,10 +59,10 @@ def encounter_set_wadhwani_inference():
     filters = _filters_from_request(request.args)
     with get_db_session() as db:
         integration = get_linked_wadhwani_integration(db)
-        action = _wai_action_from_request()
-        projects = _configured_projects(db, action=action)
+        results_only = _results_only_from_request()
+        projects = _configured_projects(db, results_only=results_only)
         cameras = _cameras(db)
-        context = _page_context(db, filters, integration, projects, cameras, include_encounters=False, action=action)
+        context = _page_context(db, filters, integration, projects, cameras, include_encounters=False, results_only=results_only)
     if not projects:
         abort(403)
     return render_template("remidio_api_uploads/wadhwani_inference.html", **context)
@@ -77,10 +76,10 @@ def encounter_set_wadhwani_inference_workspace():
     filters = _filters_from_request(request.args)
     with get_db_session() as db:
         integration = get_linked_wadhwani_integration(db)
-        action = _wai_action_from_request()
-        projects = _configured_projects(db, action=action)
+        results_only = _results_only_from_request()
+        projects = _configured_projects(db, results_only=results_only)
         cameras = _cameras(db)
-        context = _page_context(db, filters, integration, projects, cameras, include_encounters=True, action=action)
+        context = _page_context(db, filters, integration, projects, cameras, include_encounters=True, results_only=results_only)
     if not projects:
         abort(403)
     return render_template("remidio_api_uploads/_wadhwani_inference_workspace.html", **context)
@@ -112,8 +111,8 @@ def encounter_set_wadhwani_inference_run():
         flash("Select a project before queueing Wadhwani inference.", "warning")
         return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference"))
     with get_db_session() as db:
-        if not user_can_project_action(
-            db, user=current_user, project_id=project_id, action=ACTION_WAI_RUN
+        if not can_run_wai(
+            db, current_user, project_id=project_id
         ):
             abort(403)
     if not image_ids:
@@ -202,68 +201,107 @@ def _job_workflow(db, job_token: str, requested_workflow: str | None) -> str:
     return "dr_dme" if upload_type == encounter_service.JOB_TYPE else "glaucoma"
 
 
-def _wai_action_from_request() -> str:
-    return (
-        ACTION_WAI_RESULTS
-        if request.args.get("results_only") in {"1", "true", "on", "yes"}
-        else ACTION_WAI_RUN
+def _results_only_from_request() -> bool:
+    return request.args.get("results_only") in {"1", "true", "on", "yes"}
+
+
+def _allowed_wai_lab_ids(db, project_id: int, *, results_only: bool) -> frozenset[int]:
+    roles = (
+        {"project_pi", "site_pi", "project_admin", "optometrist"}
+        if results_only
+        else {"verifier", "optometrist", "field_optometrist", "field_ophthalmologist"}
+    )
+    return allowed_project_lab_unit_ids(
+        db,
+        current_user,
+        project_id=project_id,
+        roles=roles,
     )
 
 
+def _project_job_has_complete_task_lineage(
+    db, job: Job, allowed_lab_ids: frozenset[int]
+) -> bool:
+    """Require every project job item to resolve to one in-project authorized task."""
+    items = db.execute(
+        select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)
+    ).scalars().all()
+    task_ids = [_task_id_from_item(item) for item in items]
+    if not items or any(task_id is None for task_id in task_ids):
+        return False
+    resolved_task_ids = [task_id for task_id in task_ids if task_id is not None]
+    lineage_rows = db.execute(
+        select(
+            GradingTask.id,
+            GradingTask.lab_unit_id,
+            PatientEncounters.project_id,
+        )
+        .join(
+            EncounterSetImage,
+            EncounterSetImage.id == GradingTask.encounter_set_image_id,
+        )
+        .join(
+            PatientEncounters,
+            PatientEncounters.id == EncounterSetImage.patient_encounter_id,
+        )
+        .where(GradingTask.id.in_(resolved_task_ids))
+    ).all()
+    lineage_by_task_id = {
+        task_id: (lab_unit_id, project_id)
+        for task_id, lab_unit_id, project_id in lineage_rows
+    }
+    return len(lineage_by_task_id) == len(resolved_task_ids) and all(
+        task_id in lineage_by_task_id
+        and lineage_by_task_id[task_id][0] is not None
+        and lineage_by_task_id[task_id][0] in allowed_lab_ids
+        and lineage_by_task_id[task_id][1] == job.project_id
+        for task_id in resolved_task_ids
+    )
 def _require_job_access(db, job_token: str) -> None:
     job = db.execute(select(Job).where(Job.token == job_token)).scalar_one_or_none()
     if job is None:
         abort(404)
     if job.project_id is None:
-        if current_user.has_role("admin", "verifier", "optometrist"):
+        from jobs.access import job_visible_to_actor
+        from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+
+        if job_visible_to_actor(
+            job,
+            user_id=current_user.id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=get_user_lab_unit_ids_no_admin_override(current_user.id),
+        ):
             return
         abort(404)
-    can_view_results = user_can_project_action(
-        db,
-        user=current_user,
-        project_id=job.project_id,
-        action=ACTION_WAI_RESULTS,
+    can_view_results = can_view_wai_results(
+        db, current_user, project_id=job.project_id
     )
     can_view_own_run = (
         job.uploader_user_id == current_user.id
-        and user_can_project_action(
-            db,
-            user=current_user,
-            project_id=job.project_id,
-            action=ACTION_WAI_RUN,
-        )
+        and can_run_wai(db, current_user, project_id=job.project_id)
     )
     if not (can_view_results or can_view_own_run):
         abort(404)
-    action = ACTION_WAI_RESULTS if can_view_results else ACTION_WAI_RUN
-    allowed_lab_ids = allowed_lab_unit_ids_for_action(
-        db,
-        user=current_user,
-        project_id=job.project_id,
-        action=action,
+    allowed_lab_ids = _allowed_wai_lab_ids(
+        db, job.project_id, results_only=can_view_results
     )
     if job.lab_unit_id is not None and job.lab_unit_id not in allowed_lab_ids:
         abort(404)
-    if job.lab_unit_id is None:
-        from project_configuration.service import configured_project_lab_unit_ids
-
-        configured_lab_ids = configured_project_lab_unit_ids(db, project_id=job.project_id)
-        if allowed_lab_ids != configured_lab_ids:
-            task_lab_ids = set(db.execute(
-                select(GradingTask.lab_unit_id)
-                .join(JobItem, JobItem.task_id == GradingTask.id)
-                .where(JobItem.job_id == job.id)
-                .distinct()
-            ).scalars())
-            if not task_lab_ids or not task_lab_ids.issubset(allowed_lab_ids):
-                abort(404)
+    if (
+        job.lab_unit_id is None
+        and not current_user.has_role("admin")
+        and not _project_job_has_complete_task_lineage(db, job, allowed_lab_ids)
+    ):
+        abort(404)
 
 
 def _madhunetra_page(*, include_encounters: bool, partial: bool = False):
     project_id = _optional_int(request.args.get("project_id"))
-    action = _wai_action_from_request()
+    results_only = _results_only_from_request()
     with get_db_session() as db:
-        projects = encounter_service.list_manual_projects(db, current_user, action=action)
+        projects = encounter_service.list_manual_projects(
+            db, current_user, results_only=results_only
+        )
         if project_id is None or not any(row["id"] == project_id for row in projects):
             project_id = projects[0]["id"] if projects else None
         integration = encounter_service.integration_context(db)
@@ -289,9 +327,9 @@ def _madhunetra_page(*, include_encounters: bool, partial: bool = False):
         },
         "allowed_page_sizes": ALLOWED_PAGE_SIZES,
         "max_encounter_sets_per_batch": MAX_DR_DME_ENCOUNTERS,
-        "can_run_wai": action == ACTION_WAI_RUN,
-        "can_view_wai_results": action == ACTION_WAI_RESULTS,
-        "results_only": action == ACTION_WAI_RESULTS,
+        "can_run_wai": not results_only,
+        "can_view_wai_results": results_only,
+        "results_only": results_only,
     }
     if not projects:
         abort(403)
@@ -321,7 +359,7 @@ def _page_context(
     cameras: list[dict],
     *,
     include_encounters: bool,
-    action: str,
+    results_only: bool,
 ) -> dict[str, Any]:
     selected_project_id = filters.project_id or (projects[0]["id"] if projects else None)
     if selected_project_id and not any(project["id"] == selected_project_id for project in projects):
@@ -344,7 +382,7 @@ def _page_context(
             filters,
             integration.ai_model_id if integration else None,
             glaucoma.id if glaucoma else None,
-            action,
+            results_only,
         )
         if include_encounters
         else None
@@ -359,14 +397,16 @@ def _page_context(
         "pagination": encounters["pagination"] if encounters else {"page": filters.page, "has_prev": False, "has_next": False},
         "filter_stats": encounters["stats"] if encounters else {"encounter_count": 0, "image_count": 0},
         "max_encounter_sets_per_batch": MAX_ENCOUNTER_SETS_PER_BATCH,
-        "can_run_wai": action == ACTION_WAI_RUN,
-        "can_view_wai_results": action == ACTION_WAI_RESULTS,
-        "results_only": action == ACTION_WAI_RESULTS,
+        "can_run_wai": not results_only,
+        "can_view_wai_results": results_only,
+        "results_only": results_only,
     }
 
 
-def _configured_projects(db, *, action: str) -> list[dict[str, Any]]:
-    return list_manual_wadhwani_projects(db, current_user, action=action)
+def _configured_projects(db, *, results_only: bool) -> list[dict[str, Any]]:
+    return list_manual_wadhwani_projects(
+        db, current_user, results_only=results_only
+    )
 
 
 def _cameras(db) -> list[dict[str, Any]]:
@@ -378,7 +418,7 @@ def _encounter_cards(
     filters: InferenceFilters,
     ai_model_id: int | None,
     glaucoma_disease_id: int | None,
-    action: str,
+    results_only: bool,
 ) -> dict[str, Any]:
     if not filters.project_id:
         return {
@@ -404,11 +444,8 @@ def _encounter_cards(
         date_to = _date_value(filters.capture_date_to)
         if date_to:
             query = query.filter(PatientEncounters.capture_date_dt <= date_to)
-    allowed_lab_ids = allowed_lab_unit_ids_for_action(
-        db,
-        user=current_user,
-        project_id=filters.project_id,
-        action=action,
+    allowed_lab_ids = _allowed_wai_lab_ids(
+        db, filters.project_id, results_only=results_only
     )
     if allowed_lab_ids is not None:
         query = query.filter(PatientEncounters.lab_unit_id.in_(allowed_lab_ids or {-1}))
@@ -617,11 +654,8 @@ def _create_or_reuse_image_tasks(db, *, project_id: int, image_ids: list[int], d
         .join(PatientEncounters.encounter_set_images)
         .filter(PatientEncounters.project_id == project_id)
     )
-    allowed_lab_ids = allowed_lab_unit_ids_for_action(
-        db,
-        user=current_user,
-        project_id=project_id,
-        action=ACTION_WAI_RUN,
+    allowed_lab_ids = _allowed_wai_lab_ids(
+        db, project_id, results_only=False
     )
     if allowed_lab_ids is not None:
         scoped = scoped.filter(PatientEncounters.lab_unit_id.in_(allowed_lab_ids or {-1}))
@@ -671,11 +705,8 @@ def _selected_encounter_count(db, *, project_id: int, image_ids: list[int]) -> i
         .filter(PatientEncounters.project_id == project_id, EncounterSetImage.id.in_(image_ids))
         .distinct()
     )
-    allowed_lab_ids = allowed_lab_unit_ids_for_action(
-        db,
-        user=current_user,
-        project_id=project_id,
-        action=ACTION_WAI_RUN,
+    allowed_lab_ids = _allowed_wai_lab_ids(
+        db, project_id, results_only=False
     )
     if allowed_lab_ids is not None:
         scoped = scoped.filter(PatientEncounters.lab_unit_id.in_(allowed_lab_ids or {-1}))

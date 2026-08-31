@@ -10,6 +10,7 @@ Admin routes for monitoring and managing the thumbnail system including:
 
 from flask import jsonify, request, current_app, render_template
 from auth.roles import roles_required
+from auth.decorators import reauth_required
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 
@@ -29,7 +30,7 @@ from utils.log_sanitize import sanitize_log_value
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def thumbnail_management():
     """Display thumbnail management dashboard with status and controls."""
     from utils.datetime_filters import format_user_datetime
@@ -168,7 +169,7 @@ def get_recent_maintenance_history(limit=20):
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_thumbnail_stats():
     """API endpoint for thumbnail statistics."""
     try:
@@ -189,7 +190,7 @@ def api_thumbnail_stats():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_maintenance_status():
     """API endpoint for current maintenance status."""
     try:
@@ -210,7 +211,7 @@ def api_maintenance_status():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_manual_maintenance():
     """API endpoint to trigger manual maintenance tasks."""
     data = request.get_json() or {}
@@ -236,7 +237,8 @@ def api_manual_maintenance():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
+@reauth_required()
 def api_cleanup_orphaned():
     """API endpoint to run orphaned thumbnail cleanup."""
     try:
@@ -257,7 +259,7 @@ def api_cleanup_orphaned():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_regenerate_missing():
     """API endpoint to regenerate missing thumbnails."""
     data = request.get_json() or {}
@@ -281,7 +283,7 @@ def api_regenerate_missing():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_validate_integrity():
     """API endpoint to validate thumbnail integrity."""
     data = request.get_json() or {}
@@ -305,7 +307,8 @@ def api_validate_integrity():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
+@reauth_required()
 def api_full_maintenance():
     """API endpoint to run full maintenance cycle."""
     try:
@@ -391,7 +394,7 @@ def get_system_health():
 
 
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_thumbnail_health_check():
     """API endpoint for thumbnail system health check."""
     try:
@@ -465,7 +468,7 @@ def register_thumbnail_admin_routes(bp):
 
     # Main dashboard
     bp.add_url_rule(
-        '/admin/thumbnail_management',
+        '/thumbnail-management',
         'thumbnail_management',
         thumbnail_management,
         methods=['GET']

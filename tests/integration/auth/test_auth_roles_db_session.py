@@ -139,7 +139,7 @@ class TestAuthRolesDecorators:
         """Test that roles_required decorator blocks unauthenticated users"""
         with app.test_client() as client:
             # Test access to protected route without authentication
-            response = client.get('/admin')  # Use existing protected route
+            response = client.get('/admin/users')  # Use existing protected route
             # Should redirect to login
             assert response.status_code == 302
 

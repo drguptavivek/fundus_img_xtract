@@ -14,6 +14,7 @@ from .linked_tasks import get_linked_disease_ids, get_primary_disease_id
 from .queue import select_linked_followup_task, select_next_task
 from .sessions import expire_stale, issue_token, new_session_times
 from .revisions import is_user_eligible_for_revision
+from tasks.lineage import valid_task_lineage
 
 
 VALID_SLOTS = {"resident", "resident2", "arbitrator"}
@@ -56,7 +57,7 @@ def acquire_task(db, *, user_id: int, task_uuid: str, role_slot: str):
     _assert_no_active_session(db, user_id=user_id, role_slot=role_slot)
     candidate = (
         db.query(GradingTask)
-        .filter(GradingTask.uuid == task_uuid)
+        .filter(GradingTask.uuid == task_uuid, valid_task_lineage())
         .with_for_update()
         .first()
     )
@@ -67,7 +68,7 @@ def acquire_task(db, *, user_id: int, task_uuid: str, role_slot: str):
         conditions = _same_source_conditions(candidate)
         primary = (
             db.query(GradingTask)
-            .filter(GradingTask.disease_id == primary_id, *conditions)
+            .filter(GradingTask.disease_id == primary_id, valid_task_lineage(), *conditions)
             .with_for_update()
             .first()
         )
@@ -103,7 +104,14 @@ def acquire_revision(db, *, user_id: int, grade_id: int):
     if grade.role_slot not in VALID_SLOTS:
         raise WorkbenchAccessDenied("This grade cannot be revised in the workbench.")
     _assert_no_active_session(db, user_id=user_id, role_slot=grade.role_slot)
-    task = db.query(GradingTask).filter(GradingTask.id == grade.task_id).with_for_update().one()
+    task = (
+        db.query(GradingTask)
+        .filter(GradingTask.id == grade.task_id, valid_task_lineage())
+        .with_for_update()
+        .one_or_none()
+    )
+    if task is None:
+        raise WorkbenchAccessDenied("The grading task has incomplete or inconsistent source lineage.")
     eligibility = is_user_eligible_for_revision(
         db, user_id, task.id, grade.role_slot, grade
     )
@@ -228,10 +236,12 @@ def _lease_candidate(
 
     candidate = (
         db.query(GradingTask)
-        .filter(GradingTask.id == candidate.id)
+        .filter(GradingTask.id == candidate.id, valid_task_lineage())
         .with_for_update()
-        .one()
+        .one_or_none()
     )
+    if candidate is None:
+        raise WorkbenchAccessDenied("The grading task has incomplete or inconsistent source lineage.")
     if target_override is None:
         tasks, workflow = _target_group(db, candidate=candidate, user_id=user_id, role_slot=effective_slot)
     else:
@@ -324,7 +334,11 @@ def _target_group(db, *, candidate, user_id, role_slot):
     conditions = _same_source_conditions(candidate)
     tasks = (
         db.query(GradingTask)
-        .filter(GradingTask.disease_id.in_([candidate.disease_id, *linked_ids]), *conditions)
+        .filter(
+            GradingTask.disease_id.in_([candidate.disease_id, *linked_ids]),
+            valid_task_lineage(),
+            *conditions,
+        )
         .order_by(GradingTask.id)
         .all()
     )
@@ -363,8 +377,16 @@ def _target_purpose(*, task_state: str, role_slot: str, workflow: str) -> str:
 def _lock_tasks(db, tasks):
     ordered_ids = [task.id for task in tasks]
     ids = sorted(ordered_ids)
-    locked = db.query(GradingTask).filter(GradingTask.id.in_(ids)).order_by(GradingTask.id).with_for_update().all()
+    locked = (
+        db.query(GradingTask)
+        .filter(GradingTask.id.in_(ids), valid_task_lineage())
+        .order_by(GradingTask.id)
+        .with_for_update()
+        .all()
+    )
     by_id = {task.id: task for task in locked}
+    if len(by_id) != len(ids):
+        raise WorkbenchAccessDenied("A grading target has incomplete or inconsistent source lineage.")
     return [by_id[item] for item in ordered_ids]
 
 

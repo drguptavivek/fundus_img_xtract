@@ -56,7 +56,7 @@ class TestLoginFixtures:
         """Verify authenticated_client bypasses login flow"""
         # This fixture sets session directly without login
         with authenticated_client.session_transaction() as sess:
-            assert sess['user_id'] == admin_user.id
+            assert sess['_user_id'] == str(admin_user.id)
             assert sess['_fresh'] is True
 
 

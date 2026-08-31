@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, date as _date
+from datetime import date as _date
+from datetime import datetime
 from typing import Any
 
 from flask import current_app, flash, redirect, render_template, request, url_for
@@ -10,20 +11,27 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
 from models import (
-    Disease,
     DiabeticRetinopathyReport,
+    Disease,
     EncounterFile,
     LabUnit,
     PatientEncounters,
     Session,
     utcnow,
 )
-from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from services.taskCreationServices import (
+    can_unverify_image,
+    ensure_task,
+    remove_pending_tasks,
+)
 from utils.log_sanitize import sanitize_log_value
+from verify_remedio.access import (
+    classical_verification_files,
+    classical_verification_rows,
+    consistent_verification_files,
+)
 
 from . import bp
-
 
 DR_NAME_CANDIDATES = ("diabetic retinopathy", "dr")
 
@@ -37,16 +45,13 @@ def _get_dr_disease(db: Session) -> Disease | None:
     )
 
 
-def _base_encounter_query(db: Session, restricted_lab_units: set[int] | None):
-    query = (
-        db.query(PatientEncounters)
+def _base_encounter_query(db: Session, user):
+    return (
+        classical_verification_rows(db, db.query(PatientEncounters), user)
         .outerjoin(DiabeticRetinopathyReport, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
         .filter(DiabeticRetinopathyReport.id.is_(None))
         .filter(PatientEncounters.zip_file_id.isnot(None))
     )
-    if restricted_lab_units is not None:
-        query = query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
-    return query
 
 
 @bp.route("/list", methods=["GET"])
@@ -61,13 +66,7 @@ def nodr_list():
 
     db = Session()
     try:
-        allowed = set(get_user_lab_unit_ids_no_admin_override(current_user.id))
-        if not allowed:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-        restricted_lab_units: set[int] = allowed
-
-        base_query = _base_encounter_query(db, restricted_lab_units)
+        base_query = _base_encounter_query(db, current_user)
 
         date_rows = (
             base_query.filter(PatientEncounters.capture_date_dt.isnot(None))
@@ -151,6 +150,7 @@ def nodr_list():
             # Check if each verified encounter can be unverified
             items_with_unverify_status = []
             for enc in items:
+                consistent_verification_files(enc)
                 can_unverify = True
                 if enc.encounter_verified_status == "verified":
                     # Check if all images have only pending tasks
@@ -205,9 +205,9 @@ def nodr_list():
     )
 
 
-def _load_encounter(db: Session, encounter_id: int) -> PatientEncounters | None:
+def _load_encounter(db: Session, encounter_id: int, user) -> PatientEncounters | None:
     return (
-        db.query(PatientEncounters)
+        classical_verification_rows(db, db.query(PatientEncounters), user)
         .options(
             joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             selectinload(PatientEncounters.encounter_files),
@@ -225,19 +225,11 @@ def nodr_edit(encounter_id: int):
 
     db = Session()
     try:
-        encounter = _load_encounter(db, encounter_id)
+        encounter = _load_encounter(db, encounter_id, current_user)
         if not encounter:
             from flask import abort
             abort(404)
-
-        lab_unit_id = getattr(encounter, "lab_unit_id", None)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        # Compare unconditionally. lab_unit_id is nullable and the report may be
-        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
-        # encounter-less row be edited by any role holder in any hospital.
-        if lab_unit_id not in allowed_lab_units:
-            flash("You don't have permission to access this encounter.", "danger")
-            return redirect(url_for("verify_remedio_nodr.nodr_list"))
+        consistent_verification_files(encounter)
 
         if request.method == "POST":
             new_pid = (request.form.get("patient_id") or "").strip()
@@ -259,7 +251,7 @@ def nodr_edit(encounter_id: int):
         # Determine prev/next encounters for navigation based on capture date/id
         focus_date = encounter.capture_date_dt
         prev_encounter = (
-            _base_encounter_query(db, allowed_lab_units)
+            _base_encounter_query(db, current_user)
             .filter(
                 (PatientEncounters.capture_date_dt > focus_date)
                 | (
@@ -271,7 +263,7 @@ def nodr_edit(encounter_id: int):
             .first()
         )
         next_encounter = (
-            _base_encounter_query(db, allowed_lab_units)
+            _base_encounter_query(db, current_user)
             .filter(
                 (PatientEncounters.capture_date_dt < focus_date)
                 | (
@@ -332,17 +324,15 @@ def nodr_mark_eye(encounter_id: int):
 
     db = Session()
     try:
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        encounter = classical_verification_rows(
+            db, db.query(PatientEncounters), current_user
+        ).filter(PatientEncounters.id == encounter_id).first()
         if not encounter:
             from flask import abort
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-                return {"ok": False, "error": "forbidden"}, 403
-            flash("You don't have permission to modify this encounter.", "danger")
-            return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
-        ef = db.query(EncounterFile).filter(EncounterFile.id == ef_id_int).first()
+        ef = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.id == ef_id_int).first()
         if not ef or ef.patient_encounter_id != encounter.id:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "not_found"}, 404
@@ -367,15 +357,11 @@ def nodr_mark_eye(encounter_id: int):
 def nodr_verify(encounter_id: int):
     db = Session()
     try:
-        encounter = _load_encounter(db, encounter_id)
+        encounter = _load_encounter(db, encounter_id, current_user)
         if not encounter:
             from flask import abort
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            flash("You don't have permission to verify this encounter.", "danger")
-            return redirect(url_for("verify_remedio_nodr.nodr_list"))
-
+        consistent_verification_files(encounter)
         missing = [
             ef
             for ef in encounter.encounter_files
@@ -401,7 +387,9 @@ def nodr_verify(encounter_id: int):
         try:
             dr_disease = _get_dr_disease(db)
             if dr_disease:
-                images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+                images = classical_verification_files(
+                    db, db.query(EncounterFile), current_user
+                ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
                 for image in images:
                     try:
                         ensure_task(image.uuid, dr_disease.id, db)
@@ -440,17 +428,11 @@ def nodr_verify(encounter_id: int):
 def nodr_unverify(encounter_id: int):
     db = Session()
     try:
-        encounter = _load_encounter(db, encounter_id)
+        encounter = _load_encounter(db, encounter_id, current_user)
         if not encounter:
             from flask import abort
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-                return {"ok": False, "error": "forbidden", "message": "You don't have permission to unverify this encounter."}, 403
-            flash("You don't have permission to unverify this encounter.", "danger")
-            return redirect(url_for("verify_remedio_nodr.nodr_list"))
-
+        consistent_verification_files(encounter)
         # Check if we can unverify the encounter (all tasks must be pending)
         images = [ef for ef in encounter.encounter_files if ef.file_type == 'image']
         can_unverify = True

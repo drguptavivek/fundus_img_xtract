@@ -2,22 +2,24 @@
 from __future__ import annotations
 from functools import wraps
 from typing import Iterable, Dict, Any
-from flask import abort, redirect, url_for, g
+from flask import abort, redirect, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
 from models import Role
-from db_transaction_manager import get_db_session, transaction_scope
+from db_transaction_manager import get_db_session
 
 ROLE_ADMIN = "admin"
 ROLE_LOCAL_ADMIN = "local_admin"  # Site Admin
+ROLE_USER_MANAGER = "user_manager"
 # There is deliberately no ROLE_RESIDENT. "resident" is a grading *slot*,
 # not a user-level role: the qualification to grade any slot is
 # ROLE_OPHTHALMOLOGIST, and which slot a clinician may fill comes from their
-# grading slot or project allocation. See authz.policies for the vocabulary.
+# grading slot or project allocation. Those checks live in the named authz helpers.
 ROLE_OPHTHALMOLOGIST = "ophthalmologist"
 ROLE_OPTOMETRIST = "optometrist"
 ROLE_DATA_MANAGER = "data_manager"
+ROLE_PII_EXPORTER = "pii_exporter"
 ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"
@@ -38,12 +40,14 @@ FIELD_ROLE_NAMES = (ROLE_FIELD_OPTOMETRIST, ROLE_FIELD_OPHTHALMOLOGIST)
 DEFAULT_ROLES = [
     "admin",
     "local_admin",
+    ROLE_USER_MANAGER,
     "fileUploader",
     "ophthalmologist",
     "data_manager",
     "optometrist",
     "discrepancy_reviewer",
     "data_exporter",
+    ROLE_PII_EXPORTER,
     "pregarded_uploader",
     "regrade_adjudicator",
     ROLE_DATASET_CREATOR,
@@ -94,7 +98,7 @@ def roles_required(*required: str, require_all: bool = False):
         @wraps(fn)
         @login_required
         def wrapper(*args, **kwargs):
-            if not current_user.is_authenticated:
+            if not current_user.is_authenticated or not current_user.is_active:
                 return redirect(url_for("auth.login"))
             ok = (current_user.has_all_roles(*required) if require_all
                   else current_user.has_role(*required))
@@ -111,63 +115,6 @@ def roles_any(*names: str):
 def roles_all(*names: str):
     return roles_required(*names, require_all=True)
 
-
-def roles_or_project_grant_required(*required: str):
-    """Coarse route gate for classical global roles or project-only role grants.
-
-    This decorator does not authorize a resource. Routes must still apply the
-    shared object-level project/hospital/lab scope before returning data.
-    """
-    def decorator(fn):
-        @wraps(fn)
-        @login_required
-        def wrapper(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return redirect(url_for("auth.login"))
-            if current_user.has_role(*required):
-                return fn(*args, **kwargs)
-            from data_authorization.service import user_has_any_project_role
-
-            with get_db_session() as db:
-                has_project_grant = user_has_any_project_role(
-                    db,
-                    user_id=current_user.id,
-                    role_names=required,
-                )
-            if has_project_grant:
-                return fn(*args, **kwargs)
-            return abort(403)
-        return wrapper
-    return decorator
-
-
-def global_uploader_or_project_assignment_required(*upload_kinds: str):
-    """Allow legacy global uploaders or users assigned an active project profile.
-
-    This is only a coarse route gate.  Mutations must validate their exact
-    project/profile/lab selection through ``upload_profiles.service``.
-    """
-    required_kinds = frozenset(upload_kinds)
-
-    def decorator(fn):
-        @wraps(fn)
-        @login_required
-        def wrapper(*args, **kwargs):
-            if current_user.has_role("admin", "fileUploader"):
-                return fn(*args, **kwargs)
-            from data_authorization.policy import user_has_any_project_upload_assignment
-
-            with get_db_session() as db:
-                allowed = user_has_any_project_upload_assignment(
-                    db,
-                    user=current_user,
-                    upload_kinds=required_kinds,
-                )
-            if not allowed:
-                return abort(403)
-            return fn(*args, **kwargs)
-        return wrapper
-    return decorator
 
 # Dynamic role checking functions that can be used in templates or code
 def get_all_roles() -> list[str]:

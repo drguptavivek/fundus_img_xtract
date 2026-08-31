@@ -9,9 +9,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from encounter_sets.permissions import (
-    CAPABILITY_DISCREPANCY_REVIEW,
     apply_task_capability_scope,
 )
+
+DISCREPANCY_ROLES = frozenset({"discrepancy_reviewer"})
 from models import Consensus, GradingTask, Job, JobItem, User
 
 QUEUE_UPLOAD_TYPE = "discrepancy_review_queue"
@@ -74,7 +75,7 @@ def _authorized_tasks(db: Session, *, user: User, task_ids: tuple[int, ...]):
         query,
         GradingTask,
         user,
-        CAPABILITY_DISCREPANCY_REVIEW,
+        DISCREPANCY_ROLES,
     ).all()
 
 

@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, case
 
 from api import api_bp
-from app_cache import cache
 from auth.roles import roles_required
 from models import (
     Job,
@@ -58,17 +57,6 @@ def _day_bounds_utc(day: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
     start_local = datetime.combine(day, time.min).replace(tzinfo=tz)
     end_local = start_local + timedelta(days=1)
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
-
-
-def _cache_key(prefix: str, include_day: bool = False) -> str:
-    user_id = getattr(current_user, "id", None)
-    hospital_id = getattr(current_user, "hospital_id", None)
-    tz_name = getattr(current_user, "timezone", None) or "UTC"
-    parts = [prefix, f"u:{user_id}", f"h:{hospital_id}", f"tz:{tz_name}"]
-    if include_day:
-        day = datetime.now(_resolve_user_timezone()).date().isoformat()
-        parts.append(f"d:{day}")
-    return ":".join(parts)
 
 
 def _get_hospital_lab_units(db) -> List[int]:
@@ -286,7 +274,6 @@ def _direct_pregraded_by_disease(
     "optometrist",
     "fileUploader",
 )
-@cache.cached(timeout=120, key_prefix=lambda: _cache_key("upload-stats:today", include_day=True))
 def upload_stats_today():
     tz = _resolve_user_timezone()
     today_local = datetime.now(tz).date()
@@ -323,7 +310,6 @@ def upload_stats_today():
     "optometrist",
     "fileUploader",
 )
-@cache.cached(timeout=20 * 60 * 60, key_prefix=lambda: _cache_key("upload-stats:last-7-days", include_day=True))
 def upload_stats_last_7_days():
     tz = _resolve_user_timezone()
     today_local = datetime.now(tz).date()

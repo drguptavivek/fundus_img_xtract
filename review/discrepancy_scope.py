@@ -7,10 +7,13 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 
 from encounter_sets.permissions import (
-    CAPABILITY_DATA_EXPORT,
-    CAPABILITY_DISCREPANCY_REVIEW,
     capability_lab_unit_ids,
     project_task_capability_clause,
+)
+
+DISCREPANCY_ROLES = frozenset({"discrepancy_reviewer"})
+EXPORT_ROLES = frozenset(
+    {"local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"}
 )
 from models import (
     Disease,
@@ -35,11 +38,11 @@ def discrepancy_lab_unit_ids(db: Session, *, user: User) -> set[int]:
     return capability_lab_unit_ids(
         db,
         user=user,
-        capability=CAPABILITY_DISCREPANCY_REVIEW,
+        roles=DISCREPANCY_ROLES,
     ) | capability_lab_unit_ids(
         db,
         user=user,
-        capability=CAPABILITY_DATA_EXPORT,
+        roles=EXPORT_ROLES,
     )
 
 
@@ -131,10 +134,10 @@ def _task_scope_query(
         .filter(
             or_(
                 project_task_capability_clause(
-                    GradingTask.id, user, CAPABILITY_DISCREPANCY_REVIEW
+                    GradingTask.id, user, DISCREPANCY_ROLES
                 ),
                 project_task_capability_clause(
-                    GradingTask.id, user, CAPABILITY_DATA_EXPORT
+                    GradingTask.id, user, EXPORT_ROLES
                 ),
             )
         )

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -11,9 +11,9 @@ from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
 from grading.workbench.revision_policy import REVISION_WINDOW
+from grading.workbench.revisions import check_revision_eligibility_by_task_state
 from grading_allocation.models import (
     ProjectGraderAllocation,
-    ProjectGradingAllocationPolicy,
 )
 from models import (
     Disease,
@@ -30,9 +30,8 @@ from models import (
     User,
     UserDiseaseUnitRole,
 )
-from grading.workbench.revisions import check_revision_eligibility_by_task_state
+from tasks.lineage import valid_task_lineage
 from utils.timezone_choices import DEFAULT_TIMEZONE
-
 
 HISTORY_TYPES = {"all", "image", "encounter_set"}
 
@@ -108,12 +107,8 @@ def grader_eligibility_dto(db, *, user_id: int) -> dict[str, Any]:
         })
 
     project_rows = (
-        db.query(ProjectGraderAllocation, Project, ProjectGradingAllocationPolicy)
+        db.query(ProjectGraderAllocation, Project)
         .join(Project, Project.id == ProjectGraderAllocation.project_id)
-        .outerjoin(
-            ProjectGradingAllocationPolicy,
-            ProjectGradingAllocationPolicy.project_id == Project.id,
-        )
         .options(
             selectinload(ProjectGraderAllocation.lab_unit).selectinload(LabUnit.hospital),
             selectinload(ProjectGraderAllocation.disease),
@@ -128,7 +123,7 @@ def grader_eligibility_dto(db, *, user_id: int) -> dict[str, Any]:
         .all()
     )
     project = []
-    for allocation, project_row, policy in project_rows:
+    for allocation, project_row in project_rows:
         project.append({
             "project": {
                 "id": project_row.id,
@@ -152,8 +147,6 @@ def grader_eligibility_dto(db, *, user_id: int) -> dict[str, Any]:
                 }
                 if allocation.encounter_set_type else None
             ),
-            "enforcement_enabled": bool(policy and policy.enforcement_enabled),
-            "effective": bool(policy and policy.enforcement_enabled),
         })
     return {"non_project": non_project, "project": project}
 
@@ -378,7 +371,10 @@ def _items_for_record_refs(db, *, user, refs, disease_id):
                 selectinload(GradingTask.disease),
                 selectinload(GradingTask.encounter_set_image),
             )
-            .filter(GradingTask.id.in_(task_ids))
+            .filter(
+                GradingTask.id.in_(task_ids),
+                valid_task_lineage(GradingTask),
+            )
             .all()
             if task_ids else []
         )
@@ -402,6 +398,16 @@ def _items_for_record_refs(db, *, user, refs, disease_id):
 
 
 def _submission_query(db, *, user, disease_id):
+    invalid_item = exists(
+        select(1)
+        .select_from(EncounterSetGradingSubmissionItem)
+        .join(GradingTask, GradingTask.id == EncounterSetGradingSubmissionItem.task_id)
+        .where(
+            EncounterSetGradingSubmissionItem.submission_id
+            == EncounterSetGradingSubmission.id,
+            ~valid_task_lineage(GradingTask),
+        )
+    )
     query = (
         db.query(EncounterSetGradingSubmission)
         .join(EncounterSetGradingPackage)
@@ -412,7 +418,12 @@ def _submission_query(db, *, user, disease_id):
                 EncounterSetGradingPackage.patient_encounter
             ),
         )
-        .filter(EncounterSetGradingSubmission.grader_user_id == user.id)
+        .filter(
+            EncounterSetGradingSubmission.grader_user_id == user.id,
+            # A submission is one atomic grading record. Do not expose its
+            # valid-looking items if any task has broken source lineage.
+            ~invalid_item,
+        )
     )
     if disease_id:
         query = (
@@ -463,6 +474,7 @@ def _grade_query(db, *, user, history_type, disease_id):
             Grade.grader_user_id == user.id,
             Grade.role_slot != "review",
             ~exists(submitted_grade),
+            valid_task_lineage(GradingTask),
         )
     )
     encounter_predicate = or_(
@@ -629,14 +641,29 @@ def _available_diseases(db, *, user):
     grade_ids = db.execute(
         select(GradingTask.disease_id)
         .join(Grade, Grade.task_id == GradingTask.id)
-        .where(Grade.grader_user_id == user.id, Grade.role_slot != "review")
+        .where(
+            Grade.grader_user_id == user.id,
+            Grade.role_slot != "review",
+            valid_task_lineage(GradingTask),
+        )
     ).scalars().all()
+    invalid_submission_item = exists(
+        select(1)
+        .select_from(EncounterSetGradingSubmissionItem)
+        .join(GradingTask, GradingTask.id == EncounterSetGradingSubmissionItem.task_id)
+        .where(
+            EncounterSetGradingSubmissionItem.submission_id
+            == EncounterSetGradingSubmission.id,
+            ~valid_task_lineage(GradingTask),
+        )
+    )
     scope_ids = db.execute(
         select(EncounterSetGradingSubmissionItem.scope_disease_id)
         .join(EncounterSetGradingSubmission)
         .where(
             EncounterSetGradingSubmission.grader_user_id == user.id,
             EncounterSetGradingSubmissionItem.scope_disease_id.is_not(None),
+            ~invalid_submission_item,
         )
     ).scalars().all()
     disease_ids = set(grade_ids) | set(scope_ids)
@@ -667,8 +694,8 @@ def _user_timezone(user) -> ZoneInfo:
 def _utc_day_bounds(day: date, timezone_info: ZoneInfo):
     local_start = datetime.combine(day, time.min, tzinfo=timezone_info)
     local_end = datetime.combine(day.fromordinal(day.toordinal() + 1), time.min, tzinfo=timezone_info)
-    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
 
 
 def _aware(value: datetime) -> datetime:
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)

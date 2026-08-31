@@ -96,7 +96,7 @@ def encounter_set_with_images(db_session, core_test_data, tmp_path):
 
 def test_edit_encounter_set_image_get_route(client, auth_client_factory, encounter_set_with_images, db_session):
     """Test GET route to edit an encounter set image."""
-    user = UserFactory.create_optometrist(db_session, username="opt_edit_access")
+    user = UserFactory.create_optometrist(db_session, username="opt_edit_access", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -212,7 +212,7 @@ def test_edit_encounter_set_image_wrong_role(client, auth_client_factory, encoun
     image = encounter_set_with_images['images'][0]
 
     response = auth_client.get(f"/verify_encounter_set/edit/{image.uuid}")
-    assert response.status_code == 403
+    assert response.status_code == 404  # Family policy: non-disclosing deny
 
 
 def test_edit_encounter_set_image_wrong_lab_unit(client, auth_client_factory, encounter_set_with_images, db_session):
@@ -228,12 +228,12 @@ def test_edit_encounter_set_image_wrong_lab_unit(client, auth_client_factory, en
     image = encounter_set_with_images['images'][0]
 
     response = auth_client.get(f"/verify_encounter_set/edit/{image.uuid}")
-    assert response.status_code == 403
+    assert response.status_code == 404  # Family policy: non-disclosing deny
 
 
 def test_edit_encounter_set_image_with_grading_task_blocks(client, auth_client_factory, encounter_set_with_images, db_session):
     """Test that editing is blocked when grading tasks exist for the encounter."""
-    user = UserFactory.create_optometrist(db_session, username="opt_with_task")
+    user = UserFactory.create_optometrist(db_session, username="opt_with_task", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -244,8 +244,7 @@ def test_edit_encounter_set_image_with_grading_task_blocks(client, auth_client_f
         patient_encounter_id=encounter.id,
         disease_id=encounter_set_with_images['disease'].id,
         lab_unit_id=encounter.lab_unit_id,
-        state='pending',
-        created_by_id=user.id
+        state='resident_done',
     )
     db_session.add(task)
     db_session.flush()
@@ -257,24 +256,25 @@ def test_edit_encounter_set_image_with_grading_task_blocks(client, auth_client_f
     assert b"Editing blocked" in response.data or b"blocked" in response.data.lower()
 
 
-def test_save_edited_encounter_set_image(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token, tmp_path):
+def test_save_edited_encounter_set_image(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token, tmp_path, monkeypatch):
     """Test saving an edited (cropped/masked) image."""
-    user = UserFactory.create_optometrist(db_session, username="opt_save_edit")
+    user = UserFactory.create_optometrist(db_session, username="opt_save_edit", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
 
-    # Simulate sending edited image data (coordinates for crop/mask)
+    # The save_edit route requires a nested crop payload plus a valid
+    # base64 image, and stores under the module BASE_DIR.
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), "black").save(buf, format="PNG")
+    image_b64 = base64.b64encode(buf.getvalue()).decode()
+
     edit_data = {
-        'x': 10,
-        'y': 10,
-        'width': 200,
-        'height': 200,
-        'rotation': 0
+        'crop': {'x': 0, 'y': 0, 'width': 4, 'height': 4},
+        'image_data': f'data:image/png;base64,{image_b64}',
     }
 
-    # In real scenario, this would send actual image data
-    # For test, we verify the route exists and accepts the data
+    monkeypatch.setattr('models.BASE_DIR', tmp_path)
     response = auth_client.post(
         f"/verify_encounter_set/save_edit/{image.uuid}",
         json=edit_data,
@@ -284,15 +284,15 @@ def test_save_edited_encounter_set_image(client, auth_client_factory, encounter_
     assert response.status_code == 200
     assert response.json['success'] is True
 
-    # Verify edited_filename was set
+    # Verify edited_filename was set using the route's naming scheme
     db_session.refresh(image)
     assert image.edited_filename is not None
-    assert '_edited' in image.edited_filename
+    assert image.edited_filename.startswith('edited_')
 
 
 def test_mark_image_as_anonymized(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test marking a single image as anonymized."""
-    user = UserFactory.create_optometrist(db_session, username="opt_mark_anon")
+    user = UserFactory.create_optometrist(db_session, username="opt_mark_anon", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -312,7 +312,7 @@ def test_mark_image_as_anonymized(client, auth_client_factory, encounter_set_wit
 
 def test_mark_all_images_as_anonymized(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test marking all images in an encounter set as anonymized."""
-    user = UserFactory.create_optometrist(db_session, username="opt_mark_all")
+    user = UserFactory.create_optometrist(db_session, username="opt_mark_all", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -336,9 +336,9 @@ def test_mark_all_images_as_anonymized(client, auth_client_factory, encounter_se
         assert img.is_anonymized is True
 
 
-def test_restore_original_encounter_set_image(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token, tmp_path):
+def test_restore_original_encounter_set_image(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token, tmp_path, monkeypatch):
     """Test restoring the original image (removing edited version)."""
-    user = UserFactory.create_optometrist(db_session, username="opt_restore")
+    user = UserFactory.create_optometrist(db_session, username="opt_restore", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -347,7 +347,7 @@ def test_restore_original_encounter_set_image(client, auth_client_factory, encou
     image.edited_filename = f"test_pos_1_edited.jpg"
     db_session.flush()
 
-    # Verify edited file exists
+    monkeypatch.setattr('models.BASE_DIR', tmp_path)
     images_dir = encounter_set_with_images['tmp_path'] / "files" / "test_sets" / str(encounter_set_with_images['encounter'].id)
     edited_file = images_dir / image.edited_filename
     edited_file.write_bytes(b"edited data")
@@ -367,7 +367,7 @@ def test_restore_original_encounter_set_image(client, auth_client_factory, encou
 
 def test_restore_original_with_grading_task_blocks(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test that restoring original is blocked when grading tasks exist."""
-    user = UserFactory.create_optometrist(db_session, username="opt_restore_block")
+    user = UserFactory.create_optometrist(db_session, username="opt_restore_block", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -382,8 +382,7 @@ def test_restore_original_with_grading_task_blocks(client, auth_client_factory, 
         patient_encounter_id=encounter.id,
         disease_id=encounter_set_with_images['disease'].id,
         lab_unit_id=encounter.lab_unit_id,
-        state='in_progress',
-        created_by_id=user.id
+        state='resident_done'
     )
     db_session.add(task)
     db_session.flush()
@@ -399,7 +398,7 @@ def test_restore_original_with_grading_task_blocks(client, auth_client_factory, 
 
 def test_edit_page_loads_edited_version_when_exists(client, auth_client_factory, encounter_set_with_images, db_session, tmp_path):
     """Test that the edit page loads the edited version if it exists."""
-    user = UserFactory.create_optometrist(db_session, username="opt_edit_version")
+    user = UserFactory.create_optometrist(db_session, username="opt_edit_version", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -422,7 +421,7 @@ def test_edit_page_loads_edited_version_when_exists(client, auth_client_factory,
 
 def test_verification_page_shows_anonymization_status(client, auth_client_factory, encounter_set_with_images, db_session):
     """Test that the verification page shows which images have been anonymized."""
-    user = UserFactory.create_optometrist(db_session, username="opt_anon_status")
+    user = UserFactory.create_optometrist(db_session, username="opt_anon_status", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -441,7 +440,7 @@ def test_verification_page_shows_anonymization_status(client, auth_client_factor
 
 def test_finalize_verification_requires_all_images_reviewed(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test that finalizing verification requires all images to be reviewed (edited or marked as not gradable)."""
-    user = UserFactory.create_optometrist(db_session, username="opt_finalize_check")
+    user = UserFactory.create_optometrist(db_session, username="opt_finalize_check", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -463,7 +462,7 @@ def test_finalize_verification_requires_all_images_reviewed(client, auth_client_
 
 def test_mark_image_as_not_gradable(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test marking a single image as not gradable (e.g., poor quality, missing)."""
-    user = UserFactory.create_optometrist(db_session, username="opt_not_gradable")
+    user = UserFactory.create_optometrist(db_session, username="opt_not_gradable", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -486,7 +485,7 @@ def test_mark_image_as_not_gradable(client, auth_client_factory, encounter_set_w
 
 def test_mark_image_as_not_gradable_counts_as_reviewed(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test that marking an image as not gradable also marks it as reviewed."""
-    user = UserFactory.create_optometrist(db_session, username="opt_not_gradable_reviewed")
+    user = UserFactory.create_optometrist(db_session, username="opt_not_gradable_reviewed", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -506,7 +505,7 @@ def test_mark_image_as_not_gradable_counts_as_reviewed(client, auth_client_facto
 
 def test_mark_image_as_not_gradable_with_empty_reason(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test that marking not gradable requires a reason."""
-    user = UserFactory.create_optometrist(db_session, username="opt_no_reason")
+    user = UserFactory.create_optometrist(db_session, username="opt_no_reason", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -523,7 +522,7 @@ def test_mark_image_as_not_gradable_with_empty_reason(client, auth_client_factor
 
 def test_undo_not_gradable_status(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test undoing the not gradable status for an image."""
-    user = UserFactory.create_optometrist(db_session, username="opt_undo_not_gradable")
+    user = UserFactory.create_optometrist(db_session, username="opt_undo_not_gradable", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]
@@ -551,7 +550,7 @@ def test_undo_not_gradable_status(client, auth_client_factory, encounter_set_wit
 
 def test_finalize_with_all_images_reviewed_succeeds(client, auth_client_factory, encounter_set_with_images, db_session, csrf_token):
     """Test that finalization succeeds when all images are reviewed."""
-    user = UserFactory.create_optometrist(db_session, username="opt_finalize_success")
+    user = UserFactory.create_optometrist(db_session, username="opt_finalize_success", lab_unit_id=encounter_set_with_images['lab_unit'].id)
     auth_client = auth_client_factory(user)
 
     encounter = encounter_set_with_images['encounter']
@@ -564,11 +563,15 @@ def test_finalize_with_all_images_reviewed_succeeds(client, auth_client_factory,
     response = auth_client.post(
         f"/verify_encounter_set/finalize/{encounter.uuid}",
         headers={'X-CSRFToken': csrf_token},
-        follow_redirects=True
+        follow_redirects=False
     )
 
-    assert response.status_code == 200
-    assert b"verified successfully" in response.data.lower()
+    # Finalize redirects to the uploads browse view for the verified set.
+    assert response.status_code == 302
 
     db_session.refresh(encounter)
     assert encounter.encounter_verified_status == 'verified'
+
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

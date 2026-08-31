@@ -32,8 +32,6 @@ Common errors:
 
 ## Page routes with related JSON behavior
 
-- `GET /analytics/direct-uploads/kpi`
-- `GET /analytics/encounter-files`
 - `GET /analytics/images`
 - `GET /analytics/encounters`
 - `GET /analytics/encounter/view/<int:encounter_id>`

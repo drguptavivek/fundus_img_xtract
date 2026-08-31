@@ -14,8 +14,14 @@ from sqlalchemy.orm import selectinload
 from math import ceil
 from preprocess import bp
 from auth.roles import roles_required
+from authz import RecordColumns
+from authz.behaviors import (
+    CLINICAL_CLASSICAL_ROLES,
+    HOSPITAL_MANAGER_ROLES,
+    clinical_rows,
+    role_lab_units,
+)
 from utils.fileUtils import abs_from_parts
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value, escape_like
 from utils.sensitive_operations import _log_sensitive_operation
 from utils.media_cache import bump_media_cache_version, get_media_cache_version
@@ -67,9 +73,40 @@ def _normalize_task_state(state) -> str:
         return str(state).strip().lower()
     return state.strip().lower()
 
+
+def _parse_optional_positive_int_filter(name: str) -> int | None:
+    """Parse one optional query ID without collapsing bad input to omission."""
+    raw_value = request.args.get(name)
+    if raw_value is None:
+        return None
+    if not raw_value.strip():
+        raise ValueError(f"invalid_{name}")
+    try:
+        value = int(raw_value, 10)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid_{name}") from exc
+    if value <= 0:
+        raise ValueError(f"invalid_{name}")
+    return value
+
 def _allowed_lab_and_hospital_ids(db_session) -> tuple[set[int], set[int]]:
-    """Return allowed lab units (no admin override) and their hospital ids."""
-    allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    """Return the classical Lab Units authorized for this workflow.
+
+    Preprocess is a legacy classical-only surface.  The picker is still
+    derived from the same explicit clinical behaviour as its row queries so an
+    Admin break-glass path and hospital-manager scope cannot drift apart.
+    """
+    scoped = role_lab_units(
+        db_session,
+        select(LabUnit),
+        current_user,
+        lab_roles=CLINICAL_CLASSICAL_ROLES,
+        hospital_roles=HOSPITAL_MANAGER_ROLES,
+        allow_admin=True,
+    )
+    allowed_lab_unit_ids = {
+        int(lab.id) for lab in db_session.scalars(scoped).all() if lab.id is not None
+    }
     if not allowed_lab_unit_ids:
         return set(), set()
     allowed_hospital_ids = {
@@ -81,8 +118,68 @@ def _allowed_lab_and_hospital_ids(db_session) -> tuple[set[int], set[int]]:
     }
     return allowed_lab_unit_ids, allowed_hospital_ids
 
+
+def _classical_upload_scope(db_session):
+    """Return the fail-closed predicate for classical DirectImageUpload rows."""
+    columns = RecordColumns(
+        project_id=DirectImageUpload.project_id,
+        hospital_id=DirectImageUpload.hospital_id,
+        lab_unit_id=DirectImageUpload.lab_unit_id,
+        user_id=DirectImageUpload.uploader_id,
+        classical_only=True,
+    )
+    scoped = clinical_rows(
+        db_session,
+        select(DirectImageUpload.id),
+        current_user,
+        columns,
+    )
+    return and_(
+        scoped.whereclause,
+        DirectImageUpload.project_id.is_(None),
+        DirectImageUpload.hospital_id.is_not(None),
+        DirectImageUpload.lab_unit_id.is_not(None),
+        exists(
+            select(LabUnit.id).where(
+                LabUnit.id == DirectImageUpload.lab_unit_id,
+                LabUnit.hospital_id == DirectImageUpload.hospital_id,
+            )
+        ),
+    )
+
+
+def _classical_upload(db_session, uuid_value):
+    """Load one upload only after applying complete classical lineage scope."""
+    return db_session.scalars(
+        clinical_rows(
+            db_session,
+            select(DirectImageUpload).where(
+                DirectImageUpload.uuid == str(uuid_value),
+                DirectImageUpload.project_id.is_(None),
+                DirectImageUpload.hospital_id.is_not(None),
+                DirectImageUpload.lab_unit_id.is_not(None),
+                exists(
+                    select(LabUnit.id).where(
+                        LabUnit.id == DirectImageUpload.lab_unit_id,
+                        LabUnit.hospital_id == DirectImageUpload.hospital_id,
+                    )
+                ),
+            ),
+            current_user,
+            RecordColumns(
+                project_id=DirectImageUpload.project_id,
+                hospital_id=DirectImageUpload.hospital_id,
+                lab_unit_id=DirectImageUpload.lab_unit_id,
+                user_id=DirectImageUpload.uploader_id,
+                classical_only=True,
+            ),
+        )
+    ).one_or_none()
+
 def _base_candidate_query(require_unverified: bool, db_session, restrict_to_user: bool, allowed_lab_unit_ids: set[int] | None = None):
-    allowed_lab_unit_ids = set(allowed_lab_unit_ids or get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    allowed_lab_unit_ids = set(
+        allowed_lab_unit_ids or _allowed_lab_and_hospital_ids(db_session)[0] or []
+    )
     base = select(
         DirectImageUpload.id.label("du_id"),
         DirectImageUpload.uuid.label("du_uuid"),
@@ -102,6 +199,20 @@ def _base_candidate_query(require_unverified: bool, db_session, restrict_to_user
             ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
         )
 
+    # This workflow is intentionally classical-only; project rows require a
+    # project route with project authority and must never enter this queue.
+    base = base.where(
+        DirectImageUpload.project_id.is_(None),
+        DirectImageUpload.hospital_id.is_not(None),
+        DirectImageUpload.lab_unit_id.is_not(None),
+        exists(
+            select(LabUnit.id).where(
+                LabUnit.id == DirectImageUpload.lab_unit_id,
+                LabUnit.hospital_id == DirectImageUpload.hospital_id,
+            )
+        ),
+    )
+
     if restrict_to_user or allowed_lab_unit_ids:
         if not allowed_lab_unit_ids:
             base = base.where(False)
@@ -115,8 +226,9 @@ def _get_next_unverified_uuid(db_session, allowed_lab_unit_ids: set[int] | None 
     Return the UUID of the next unverified image the CURRENT USER can access (oldest first).
     If none remain, return None.
     """
-    from sqlalchemy import exists, and_, select
-    allowed_lab_unit_ids = set(allowed_lab_unit_ids or get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    allowed_lab_unit_ids = set(
+        allowed_lab_unit_ids or _allowed_lab_and_hospital_ids(db_session)[0] or []
+    )
     if not allowed_lab_unit_ids:
         return None
 
@@ -130,6 +242,17 @@ def _get_next_unverified_uuid(db_session, allowed_lab_unit_ids: set[int] | None 
     # Base: uploads that are NOT already resolved at verification stage
     stmt = select(DirectImageUpload.uuid).where(
         ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
+    )
+    stmt = stmt.where(
+        DirectImageUpload.project_id.is_(None),
+        DirectImageUpload.hospital_id.is_not(None),
+        DirectImageUpload.lab_unit_id.is_not(None),
+        exists(
+            select(LabUnit.id).where(
+                LabUnit.id == DirectImageUpload.lab_unit_id,
+                LabUnit.hospital_id == DirectImageUpload.hospital_id,
+            )
+        ),
     )
 
     stmt = stmt.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
@@ -167,6 +290,7 @@ def anonymization_dashboard():
     db_session = Session()
     try:
         allowed_lab_unit_ids, allowed_hospital_ids = _allowed_lab_and_hospital_ids(db_session)
+        classical_scope = _classical_upload_scope(db_session)
         if not allowed_lab_unit_ids:
             flash("No lab unit access.", "warning")
             return redirect(url_for("home.index"))
@@ -179,6 +303,7 @@ def anonymization_dashboard():
             .where(
                 DirectImageVerify.verified_status == "verified",
                 DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids),
+                classical_scope,
             )
         ).scalar_one()
 
@@ -195,6 +320,7 @@ def anonymization_dashboard():
         pending_anonymization_images = db_session.execute(
             select(func.count(DirectImageUpload.id)).where(
                 DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids),
+                classical_scope,
                 ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
             )
         ).scalar_one()
@@ -207,6 +333,7 @@ def anonymization_dashboard():
                 DirectImageVerify.verified_status == "verified",
                 DirectImageVerify.verified_by_id == current_user.id,
                 DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids),
+                classical_scope,
             )
         ).scalar_one()
 
@@ -214,23 +341,27 @@ def anonymization_dashboard():
         page = request.args.get('page', 1, type=int)
         per_page = 20  # or from config
         
-        f_hospital_id = request.args.get('hospital_id', default=None, type=int)
-        f_lab_unit_id = request.args.get('lab_unit_id', default=None, type=int)
-        f_camera_id = request.args.get('camera_id', default=None, type=int)
-        f_disease_id = request.args.get('disease_id', default=None, type=int)
-        f_area_id = request.args.get('area_id', default=None, type=int)
+        try:
+            f_hospital_id = _parse_optional_positive_int_filter("hospital_id")
+            f_lab_unit_id = _parse_optional_positive_int_filter("lab_unit_id")
+            f_camera_id = _parse_optional_positive_int_filter("camera_id")
+            f_disease_id = _parse_optional_positive_int_filter("disease_id")
+            f_area_id = _parse_optional_positive_int_filter("area_id")
+            f_verified_by_id = _parse_optional_positive_int_filter("verified_by_id")
+        except ValueError:
+            flash("Invalid numeric filter.", "danger")
+            return redirect(url_for("preprocess.anonymization_dashboard"))
         f_status = request.args.get('status', '', type=str)
         f_pii_status = request.args.get('pii_status', '', type=str)
         f_pii_source = request.args.get('pii_source', '', type=str)
         f_pii_detected = request.args.get('pii_detected', '', type=str)
-        f_verified_by_id = request.args.get('verified_by_id', default=None, type=int)
         f_filename = request.args.get('filename', '', type=str)
 
-        if f_hospital_id and f_hospital_id not in allowed_hospital_ids:
+        if f_hospital_id is not None and f_hospital_id not in allowed_hospital_ids:
             flash("Invalid hospital filter.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
 
-        if f_lab_unit_id and f_lab_unit_id not in allowed_lab_unit_ids:
+        if f_lab_unit_id is not None and f_lab_unit_id not in allowed_lab_unit_ids:
             flash("Invalid lab unit filter.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
 
@@ -251,6 +382,7 @@ def anonymization_dashboard():
             select(Camera)
             .join(DirectImageUpload, DirectImageUpload.camera_id == Camera.id)
             .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(classical_scope)
             .distinct()
             .order_by(Camera.name)
         ).scalars().all()
@@ -258,6 +390,7 @@ def anonymization_dashboard():
             select(Disease)
             .join(DirectImageUpload, DirectImageUpload.disease_id == Disease.id)
             .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(classical_scope)
             .distinct()
             .order_by(Disease.name)
         ).scalars().all()
@@ -265,9 +398,24 @@ def anonymization_dashboard():
             select(Area)
             .join(DirectImageUpload, DirectImageUpload.area_id == Area.id)
             .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(classical_scope)
             .distinct()
             .order_by(Area.name)
         ).scalars().all()
+
+        option_ids = {
+            "camera_id": {camera.id for camera in cameras},
+            "disease_id": {disease.id for disease in diseases},
+            "area_id": {area.id for area in areas},
+        }
+        for filter_name, filter_value in (
+            ("camera_id", f_camera_id),
+            ("disease_id", f_disease_id),
+            ("area_id", f_area_id),
+        ):
+            if filter_value is not None and filter_value not in option_ids[filter_name]:
+                flash(f"Invalid {filter_name.removesuffix('_id')} filter.", "danger")
+                return redirect(url_for("preprocess.anonymization_dashboard"))
         users = db_session.execute(
             select(User)
             .join(User.lab_units)
@@ -275,6 +423,12 @@ def anonymization_dashboard():
             .distinct()
             .order_by(User.username)
         ).scalars().all()
+
+        if f_verified_by_id is not None and f_verified_by_id not in {
+            user.id for user in users
+        }:
+            flash("Invalid verified-by filter.", "danger")
+            return redirect(url_for("preprocess.anonymization_dashboard"))
         
         # --- Build Query for Recent Verifications ---
         query = (
@@ -290,6 +444,7 @@ def anonymization_dashboard():
             )
         )
         query = query.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        query = query.where(classical_scope)
 
         # Apply filters
         if f_hospital_id:
@@ -355,7 +510,7 @@ def anonymization_dashboard():
                         )
                     ))
                 )
-        if f_verified_by_id:
+        if f_verified_by_id is not None:
             query = query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
         if f_filename:
             query = query.where(DirectImageUpload.filename.ilike(f'%{escape_like(f_filename)}%', escape='\\'))
@@ -376,6 +531,7 @@ def anonymization_dashboard():
             select(DirectImageUpload, DirectImageVerify)
             .outerjoin(DirectImageVerify, DirectImageVerify.image_upload_id == DirectImageUpload.id)
             .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(classical_scope)
         )
         if f_hospital_id:
             pending_query = pending_query.where(DirectImageUpload.hospital_id == f_hospital_id)
@@ -446,7 +602,7 @@ def anonymization_dashboard():
         )
         if f_status and f_status in {'unverified', 'pending'}:
             pending_query = pending_query.where(DirectImageVerify.verified_status == f_status)
-        if f_verified_by_id:
+        if f_verified_by_id is not None:
             pending_query = pending_query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
 
         pending_total = db_session.execute(select(func.count()).select_from(pending_query.subquery())).scalar_one()
@@ -482,6 +638,7 @@ def anonymization_dashboard():
             select(Disease)
             .join(DirectImageUpload, DirectImageUpload.disease_id == Disease.id)
             .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(classical_scope)
             .distinct()
             .order_by(Disease.name)
         ).scalars().all()
@@ -502,6 +659,7 @@ def anonymization_dashboard():
                     .where(
                         DirectImageUpload.disease_id == disease.id,
                         DirectImageUpload.lab_unit_id == lab_unit.id,
+                        classical_scope,
                         ~exists(select(1).where(
                             and_(
                                 DirectImageVerify.image_upload_id == DirectImageUpload.id,
@@ -606,17 +764,11 @@ def anonymize_image(uuid: UUID):
         )
 
         # Load the image by UUID
-        upload = db_session.execute(
-            select(DirectImageUpload).where(DirectImageUpload.uuid == uuid_val)
-        ).scalar_one_or_none()
+        upload = _classical_upload(db_session, uuid_val)
 
         if not upload:
             editing_logger.warning("Anonymize image: Upload with UUID %s not found.", uuid_val)
             flash("Image not found.", "danger")
-            return redirect(url_for("preprocess.anonymization_dashboard"))
-
-        if upload.lab_unit_id not in allowed_lab_unit_ids:
-            flash("You do not have permission to anonymize this image.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
 
         editing_locked = False
@@ -949,16 +1101,10 @@ def pii_override(uuid: UUID):
             return redirect(url_for("home.index"))
 
         uuid_val = _uuid_str(uuid)
-        upload = db_session.execute(
-            select(DirectImageUpload).where(DirectImageUpload.uuid == uuid_val)
-        ).scalar_one_or_none()
+        upload = _classical_upload(db_session, uuid_val)
         if not upload:
             flash("Image not found.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
-        if upload.lab_unit_id not in allowed_lab_unit_ids:
-            flash("You do not have permission to update PII status for this image.", "danger")
-            return redirect(url_for("preprocess.anonymization_dashboard"))
-
         pii_status = request.form.get("pii_status")
         if pii_status not in {"clear", "detected"}:
             flash("Invalid PII status.", "danger")
@@ -1052,16 +1198,10 @@ def restore_original_anonymized_image(uuid: UUID):
 
         uuid_val = str(uuid)
 
-        upload = db_session.execute(
-            select(DirectImageUpload).where(DirectImageUpload.uuid == uuid_val)
-        ).scalar_one_or_none()
+        upload = _classical_upload(db_session, uuid_val)
 
         if not upload:
             return jsonify({"error": "Image not found"}), 404
-
-        # Access control
-        if upload.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"error": "You do not have permission to restore this image."}), 403
 
         task_states = db_session.execute(
             select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)

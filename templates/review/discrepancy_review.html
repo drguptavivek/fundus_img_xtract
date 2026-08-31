@@ -1232,4 +1232,5 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
 <script
   src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
+<script src="{{ url_for('static', filename='js/regrade-api.js', v=config.get('ASSETS_VERSION', '')) }}"></script>
 {% endblock %}

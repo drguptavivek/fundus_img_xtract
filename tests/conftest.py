@@ -52,8 +52,13 @@ from contextlib import contextmanager
 def _mock_get_db_session():
     global _test_db_session
     if _test_db_session:
-        print(f"DEBUG: Entering GLOBAL MOCK get_db_session (session id: {id(_test_db_session)})")
+        # No try/except here: an exception thrown into the generator must
+        # propagate (route aborts stay aborts). Success falls through to the
+        # commit; the shared session is never rolled back because sibling
+        # state and the outer test transaction depend on it. The
+        # function-scoped teardown rolls the outer transaction back.
         yield _test_db_session
+        _test_db_session.commit()
     else:
         # Fallback to original if not set (should not happen during request)
         from models import Session as DbSession
@@ -89,6 +94,11 @@ class _TestSessionWrapper:
         # Allow rollback but log it
         # print("DEBUG: session.rollback() called in test wrapper")
         self._session.rollback()
+
+# Alias the package-path module name onto this module so imports like
+# ``from tests.conftest import create_authenticated_client`` never create a
+# second conftest module instance with its own (unset) patched globals.
+sys.modules.setdefault("tests.conftest", sys.modules[__name__])
 
 # Monkeypatch db_transaction_manager BEFORE any other imports that might use it
 import db_transaction_manager
@@ -130,44 +140,62 @@ def test_engine():
         poolclass=NullPool,  # No connection pooling for tests
         echo=False,  # Set to True for SQL debugging
     )
+    # Every pytest process targets the same dedicated database by default.
+    # Hold a PostgreSQL session lock for this fixture's complete lifecycle so
+    # another process cannot reset or tear down ``public`` during this run.
+    lock_connection = engine.connect()
+    lock_connection.execute(
+        text(
+            "SELECT pg_advisory_lock("
+            "hashtext('fundus_img_xtract_pytest'), hashtext(current_database()))"
+        )
+    )
 
-    # Drop and recreate schema for a clean slate at session start.
-    # Using raw SQL with CASCADE to handle materialized views and dependencies.
-    # This ensures idempotent test runs even if previous session crashed.
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
-
-    # Run Alembic migrations to create schema and seed core data
-    alembic_cfg = Config()
-    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
-    alembic_cfg.set_main_option("script_location", str(project_root / "migrations"))
-
-    from alembic import command
     try:
-        # Force Alembic env.py to target the test database
-        os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-        # Run all migrations from scratch (schema was just recreated)
-        # Use "heads" to support multiple heads in test-only context.
-        command.upgrade(alembic_cfg, "heads")
+        # Drop and recreate schema for a clean slate at session start.
+        # Using raw SQL with CASCADE handles materialized views and dependencies.
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
 
-        print("✅ Test database migrations applied successfully")
-    except Exception as e:
-        print(f"❌ Error running migrations: {e}")
-        # Fallback to metadata.create_all if migrations fail
-        # NOTE: This creates empty tables without seed data - tests may fail
-        Base.metadata.create_all(bind=engine)
-        print("⚠️  Fell back to metadata.create_all() - seed data NOT available!")
+        # Run Alembic migrations to create schema and seed core data.
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+        alembic_cfg.set_main_option("script_location", str(project_root / "migrations"))
 
-    yield engine
+        from alembic import command
+        try:
+            # Force Alembic env.py to target the test database.
+            os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+            command.upgrade(alembic_cfg, "heads")
+            print("✅ Test database migrations applied successfully")
+        except Exception as e:
+            print(f"❌ Error running migrations: {e}")
+            # Fallback creates empty tables without migration seed data.
+            Base.metadata.create_all(bind=engine)
+            print("⚠️  Fell back to metadata.create_all() - seed data NOT available!")
 
-    # Cleanup: Drop schema with CASCADE to handle materialized views
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
-    engine.dispose()
+        yield engine
+    finally:
+        try:
+            # Reset only while the same cross-process lock remains held.
+            with engine.connect() as conn:
+                conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+                conn.execute(text("CREATE SCHEMA public"))
+                conn.commit()
+        finally:
+            try:
+                lock_connection.execute(
+                    text(
+                        "SELECT pg_advisory_unlock("
+                        "hashtext('fundus_img_xtract_pytest'), "
+                        "hashtext(current_database()))"
+                    )
+                )
+            finally:
+                lock_connection.close()
+                engine.dispose()
 
 
 # ==============================================================================
@@ -197,6 +225,55 @@ def db_session(test_engine):
     session.close()
     transaction.rollback()
     connection.close()
+
+
+class _FlaskSqlAlchemyLikeDB:
+    """Expose flask-sqlalchemy style access for legacy test modules.
+
+    Some test modules were written against ``db.session.add(...)`` and
+    ``db.query(...)`` idioms. Everything delegates to the function-scoped
+    transactional ``db_session``, so the usual isolation (rollback at
+    teardown) still applies.
+    """
+
+    def __init__(self, session):
+        self.session = session
+
+    def query(self, *entities, **kwargs):
+        return self.session.query(*entities, **kwargs)
+
+    def get(self, *args, **kwargs):
+        return self.session.get(*args, **kwargs)
+
+    def add(self, *args, **kwargs):
+        return self.session.add(*args, **kwargs)
+
+    def add_all(self, *args, **kwargs):
+        return self.session.add_all(*args, **kwargs)
+
+    def flush(self, *args, **kwargs):
+        return self.session.flush(*args, **kwargs)
+
+    def commit(self, *args, **kwargs):
+        return self.session.commit(*args, **kwargs)
+
+    def rollback(self, *args, **kwargs):
+        return self.session.rollback(*args, **kwargs)
+
+    def refresh(self, *args, **kwargs):
+        return self.session.refresh(*args, **kwargs)
+
+    def merge(self, *args, **kwargs):
+        return self.session.merge(*args, **kwargs)
+
+    def execute(self, *args, **kwargs):
+        return self.session.execute(*args, **kwargs)
+
+
+@pytest.fixture(scope="function")
+def db(db_session):
+    """flask-sqlalchemy style handle around the function-scoped session."""
+    return _FlaskSqlAlchemyLikeDB(db_session)
 
 
 @pytest.fixture(scope="function")
@@ -367,10 +444,20 @@ def create_authenticated_client(app, user, db_session=None):
 
 @pytest.fixture
 def admin_user(db_session, core_test_data):
-    """Create an admin user for testing"""
+    """Return an admin user for testing.
+
+    ``seed_test_database`` commits a ``test_admin`` row for the whole pytest
+    session, so reuse it when present instead of violating the username
+    unique constraint (same pattern as the ``test_users`` fixture).
+    """
+    from models import User
     from tests.helpers.factories import UserFactory
-    
-    user = UserFactory.create_admin(db_session)
+
+    existing = db_session.query(User).filter_by(username='test_admin').first()
+    if existing:
+        user = db_session.merge(existing)
+    else:
+        user = UserFactory.create_admin(db_session)
     db_session.flush()
     return user
 
@@ -480,8 +567,6 @@ def test_users(db_session, core_test_data):
 
     db_session.flush()
     return users
-
-
 @pytest.fixture
 def authenticated_client(client, admin_user):
     """
@@ -489,7 +574,9 @@ def authenticated_client(client, admin_user):
     Useful for integration tests that need authenticated requests.
     """
     with client.session_transaction() as sess:
-        sess['user_id'] = admin_user.id
+        # Flask-Login resolves the user from the '_user_id' key; setting only
+        # 'user_id' leaves the client silently anonymous.
+        sess['_user_id'] = str(admin_user.id)
         sess['_fresh'] = True
     return client
 

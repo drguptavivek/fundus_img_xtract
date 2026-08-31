@@ -1,26 +1,39 @@
 import re
-import pandas as pd
+from datetime import date as _date
+from datetime import datetime
+
 import numpy as np
-from flask import render_template, request, current_app, url_for, redirect, flash
+import pandas as pd
+from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload, joinedload
-from datetime import datetime, date as _date
+from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
-from . import bp
-
-from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, LabUnit, Disease
 from auth.utils import utcnow
-from utils.log_sanitize import sanitize_log_value
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from models import (
+    Disease,
+    EncounterFile,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
+    LabUnit,
+    PatientEncounters,
+    Session,
+)
 from process_pdfs import GLAUCOMA_PDF_DIR
 
 # Import task creation services
 from services.taskCreationServices import ensure_task
+from utils.log_sanitize import sanitize_log_value
+from verify_remedio.access import (
+    classical_verification_files,
+    classical_verification_rows,
+    consistent_verification_files,
+)
+
+from . import bp
 
 # Import current_app for logging
-from flask import current_app
 
 
 @bp.route("/results", methods=["GET"])
@@ -28,23 +41,16 @@ from flask import current_app
 def glaucoma_results():
     db = Session()
     try:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
         # Totals (use cleaned table)
         total_reports = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .scalar()
             or 0
         )
         total_with_pdf = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
             .filter(GlaucomaResultsCleaned.report_file_name != "")
             .scalar()
@@ -53,13 +59,12 @@ def glaucoma_results():
 
         # Unique patients with at least one cleaned glaucoma record
         unique_patients = (
-            db.query(func.count(func.distinct(PatientEncounters.patient_id)))
+            classical_verification_rows(db, db.query(func.count(func.distinct(PatientEncounters.patient_id))), current_user)
             .select_from(GlaucomaResultsCleaned)
             .join(
                 PatientEncounters,
                 GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
             )
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .scalar()
             or 0
         )
@@ -68,7 +73,14 @@ def glaucoma_results():
         present_on_disk = 0
         if total_with_pdf:
             for (fname,) in (
-                db.query(GlaucomaResultsCleaned.report_file_name)
+                classical_verification_rows(
+                    db,
+                    db.query(GlaucomaResultsCleaned.report_file_name).join(
+                        PatientEncounters,
+                        GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                    ),
+                    current_user,
+                )
                 .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
                 .filter(GlaucomaResultsCleaned.report_file_name != "")
                 .all()
@@ -78,17 +90,15 @@ def glaucoma_results():
 
         # Grouped KPIs from cleaned snapshot
         result_counts = (
-            db.query(GlaucomaResultsCleaned.result, func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(GlaucomaResultsCleaned.result, func.count(GlaucomaResultsCleaned.id)), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .group_by(GlaucomaResultsCleaned.result)
             .order_by(func.count(GlaucomaResultsCleaned.id).desc())
             .all()
         )
         qualitative_counts = (
-            db.query(GlaucomaResultsCleaned.qualitative_result, func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(GlaucomaResultsCleaned.qualitative_result, func.count(GlaucomaResultsCleaned.id)), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.qualitative_result.isnot(None))
             .group_by(GlaucomaResultsCleaned.qualitative_result)
             .order_by(func.count(GlaucomaResultsCleaned.id).desc())
@@ -98,17 +108,15 @@ def glaucoma_results():
         # Numeric VCDR values directly from cleaned table
         raw_right_vals = [
             float(r[0])
-            for r in db.query(GlaucomaResultsCleaned.vcdr_right_num)
+            for r in classical_verification_rows(db, db.query(GlaucomaResultsCleaned.vcdr_right_num), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.vcdr_right_num.isnot(None))
             .all()
         ]
         raw_left_vals = [
             float(r[0])
-            for r in db.query(GlaucomaResultsCleaned.vcdr_left_num)
+            for r in classical_verification_rows(db, db.query(GlaucomaResultsCleaned.vcdr_left_num), current_user)
             .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.vcdr_left_num.isnot(None))
             .all()
         ]
@@ -192,16 +200,10 @@ def glaucoma_list():
 
     db = Session()
     try:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
         # Build ordered list of distinct dates with data
         date_rows = (
-            db.query(PatientEncounters.capture_date_dt)
+            classical_verification_rows(db, db.query(PatientEncounters.capture_date_dt), current_user)
               .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(PatientEncounters.capture_date_dt.isnot(None))
               .distinct()
               .order_by(PatientEncounters.capture_date_dt.desc())
@@ -211,9 +213,8 @@ def glaucoma_list():
 
         # Find most recent date that has at least one unverified encounter
         unv_rows = (
-            db.query(PatientEncounters.capture_date_dt)
+            classical_verification_rows(db, db.query(PatientEncounters.capture_date_dt), current_user)
               .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(PatientEncounters.capture_date_dt.isnot(None))
               .filter(
                   (PatientEncounters.glaucoma_verified_status.is_(None)) |
@@ -254,10 +255,16 @@ def glaucoma_list():
         # Pull all reports for the focused date
         if focus_date is not None:
             items = (
-                db.query(GlaucomaResultsCleaned)
+                classical_verification_rows(
+                    db,
+                    db.query(GlaucomaResultsCleaned).join(
+                        PatientEncounters,
+                        GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                    ),
+                    current_user,
+                )
                   .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
                   .filter(PatientEncounters.capture_date_dt == focus_date)
-                  .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
                   .order_by(GlaucomaResultsCleaned.id.desc())
                   .options(selectinload(GlaucomaResultsCleaned.patient_encounter))
                   .all()
@@ -277,9 +284,15 @@ def glaucoma_list():
             uname = getattr(cu, 'username', None)
             if uname:
                 my_recent_verified = (
-                    db.query(GlaucomaResultsCleaned)
+                    classical_verification_rows(
+                        db,
+                        db.query(GlaucomaResultsCleaned).join(
+                            PatientEncounters,
+                            GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                        ),
+                        current_user,
+                    )
                       .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-                      .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
                       .filter(PatientEncounters.glaucoma_verified_status == 'verified')
                       .filter(PatientEncounters.glaucoma_verified_by == uname)
                       .order_by(PatientEncounters.glaucoma_verified_at.desc(), GlaucomaResultsCleaned.id.desc())
@@ -342,36 +355,27 @@ def glaucoma_clean_workflow():
     before = {}
     after = {}
     try:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
         current_app.logger.info("Starting glaucoma clean workflow")
         # --- BEFORE metrics ---
         total_src_reports = (
-            db.query(func.count(GlaucomaReport.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaReport.id)), current_user)
               .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .scalar() or 0
         )
         cleaned_total_before = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .scalar() or 0
         )
         cleaned_missing_num_before = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
               .scalar() or 0
         )
         cleaned_with_pdf_before = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
               .filter(GlaucomaResultsCleaned.report_file_name != "")
               .scalar() or 0
@@ -390,9 +394,15 @@ def glaucoma_clean_workflow():
 
         # --- Upsert cleaned rows ---
         reports = (
-            db.query(GlaucomaReport)
+            classical_verification_rows(
+                db,
+                db.query(GlaucomaReport).join(
+                    PatientEncounters,
+                    GlaucomaReport.patient_encounter_id == PatientEncounters.id,
+                ),
+                current_user,
+            )
               .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .order_by(GlaucomaReport.id.asc())
               .all()
         )
@@ -443,22 +453,19 @@ def glaucoma_clean_workflow():
 
         # --- AFTER metrics ---
         cleaned_total_after = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .scalar() or 0
         )
         cleaned_missing_num_after = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
               .scalar() or 0
         )
         cleaned_with_pdf_after = (
-            db.query(func.count(GlaucomaResultsCleaned.id))
+            classical_verification_rows(db, db.query(func.count(GlaucomaResultsCleaned.id)), current_user)
               .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
               .filter(GlaucomaResultsCleaned.report_file_name != "")
               .scalar() or 0
@@ -498,7 +505,14 @@ def glaucoma_detail(clean_id: int):
     db = Session()
     try:
         row = (
-            db.query(GlaucomaResultsCleaned)
+            classical_verification_rows(
+                db,
+                db.query(GlaucomaResultsCleaned).join(
+                    PatientEncounters,
+                    GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                ),
+                current_user,
+            )
             .options(
                 joinedload(GlaucomaResultsCleaned.patient_encounter).joinedload(PatientEncounters.zip_file),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.encounter_files),
@@ -514,21 +528,22 @@ def glaucoma_detail(clean_id: int):
             from flask import abort
             abort(404)
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if row.patient_encounter.lab_unit_id not in allowed_lab_units:
-            from flask import abort
-            abort(404)
-
         enc = row.patient_encounter
+        consistent_verification_files(enc)
 
         # Compute prev/next by global glaucoma ordering
         d = enc.capture_date_dt
         cur_id = row.id
 
         prev_row = (
-            db.query(GlaucomaResultsCleaned)
-            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+            classical_verification_rows(
+                db,
+                db.query(GlaucomaResultsCleaned).join(
+                    PatientEncounters,
+                    GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                ),
+                current_user,
+            )
             .filter(
                 (
                     PatientEncounters.capture_date_dt > d
@@ -543,9 +558,14 @@ def glaucoma_detail(clean_id: int):
         )
 
         next_row = (
-            db.query(GlaucomaResultsCleaned)
-            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+            classical_verification_rows(
+                db,
+                db.query(GlaucomaResultsCleaned).join(
+                    PatientEncounters,
+                    GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                ),
+                current_user,
+            )
             .filter(
                 (
                     PatientEncounters.capture_date_dt < d
@@ -564,7 +584,7 @@ def glaucoma_detail(clean_id: int):
 
         # Build images list from encounter files
         images = []
-        for ef in (enc.encounter_files or []):
+        for ef in consistent_verification_files(enc):
             ft = (ef.file_type or "").lower().strip()
             ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
             if ft.startswith("image/") or ext in IMAGE_EXTS or ft == 'image':
@@ -583,7 +603,11 @@ def glaucoma_detail(clean_id: int):
     if enc.capture_date_dt is not None:
         with Session() as db2:
             date_rows = (
-                db2.query(PatientEncounters.capture_date_dt)
+                classical_verification_rows(
+                    db2,
+                    db2.query(PatientEncounters.capture_date_dt),
+                    current_user,
+                )
                    .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
                    .filter(PatientEncounters.capture_date_dt.isnot(None))
                    .distinct()
@@ -623,7 +647,14 @@ def glaucoma_edit(clean_id: int):
     db = Session()
     try:
         row = (
-            db.query(GlaucomaResultsCleaned)
+            classical_verification_rows(
+                db,
+                db.query(GlaucomaResultsCleaned).join(
+                    PatientEncounters,
+                    GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                ),
+                current_user,
+            )
               .options(
                   joinedload(GlaucomaResultsCleaned.patient_encounter)
                     .selectinload(PatientEncounters.encounter_files)
@@ -636,12 +667,9 @@ def glaucoma_edit(clean_id: int):
             abort(404)
 
         encounter = row.patient_encounter
-        lab_unit_id = getattr(encounter, "lab_unit_id", None) if encounter else None
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        # Compare unconditionally. lab_unit_id is nullable and the report may be
-        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
-        # encounter-less row be edited by any role holder in any hospital.
-        if lab_unit_id not in allowed_lab_units:
+        if encounter is not None:
+            consistent_verification_files(encounter)
+        if encounter is None:
             flash("You don't have permission to access this encounter.", "danger")
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_list"))
 
@@ -684,7 +712,7 @@ def glaucoma_edit(clean_id: int):
 
             # Verify that all images for this encounter have laterality set
             missing = (
-                db.query(EncounterFile)
+                classical_verification_files(db, db.query(EncounterFile), current_user)
                   .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
                   .filter(EncounterFile.file_type == 'image')
                   .filter(
@@ -712,8 +740,14 @@ def glaucoma_edit(clean_id: int):
         next_row = None
         if d is not None:
             prev_row = (
-                db.query(GlaucomaResultsCleaned)
-                .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                classical_verification_rows(
+                    db,
+                    db.query(GlaucomaResultsCleaned).join(
+                        PatientEncounters,
+                        GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                    ),
+                    current_user,
+                )
                 .filter(
                     (PatientEncounters.capture_date_dt > d)
                     | ((PatientEncounters.capture_date_dt == d) & (GlaucomaResultsCleaned.id > cur_id))
@@ -722,9 +756,14 @@ def glaucoma_edit(clean_id: int):
                 .first()
             )
             next_row = (
-                db.query(GlaucomaResultsCleaned)
-                .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-                .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+                classical_verification_rows(
+                    db,
+                    db.query(GlaucomaResultsCleaned).join(
+                        PatientEncounters,
+                        GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                    ),
+                    current_user,
+                )
                 .filter(
                     (PatientEncounters.capture_date_dt < d)
                     | ((PatientEncounters.capture_date_dt == d) & (GlaucomaResultsCleaned.id < cur_id))
@@ -738,9 +777,14 @@ def glaucoma_edit(clean_id: int):
         back_url = None
         if enc and enc.capture_date_dt is not None:
             date_rows = (
-                db.query(PatientEncounters.capture_date_dt)
-                  .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
-                  .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+                classical_verification_rows(
+                    db,
+                    db.query(PatientEncounters.capture_date_dt).join(
+                        GlaucomaResultsCleaned,
+                        GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+                    ),
+                    current_user,
+                )
                   .filter(PatientEncounters.capture_date_dt.isnot(None))
                   .distinct()
                   .order_by(PatientEncounters.capture_date_dt.desc())
@@ -761,16 +805,19 @@ def glaucoma_edit(clean_id: int):
 def glaucoma_verify(clean_id: int):
     db = Session()
     try:
-        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        row = classical_verification_rows(
+            db,
+            db.query(GlaucomaResultsCleaned).join(
+                PatientEncounters,
+                GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+            ),
+            current_user,
+        ).filter(GlaucomaResultsCleaned.id == clean_id).first()
         if not row:
             from flask import abort
             abort(404)
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        # Compare unconditionally. lab_unit_id is nullable and the report may be
-        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
-        # encounter-less row be edited by any role holder in any hospital.
-        if not encounter or encounter.lab_unit_id not in allowed_lab_units:
+        encounter = row.patient_encounter
+        if not encounter:
             flash("You don't have permission to verify this encounter.", "danger")
             return redirect(url_for('verify_remedio_glaucoma.glaucoma_list'))
         # Save incoming form data (same fields as edit save)
@@ -807,7 +854,7 @@ def glaucoma_verify(clean_id: int):
         db.commit()
         # Ensure all images are tagged before verification (laterality + centering)
         missing = (
-            db.query(EncounterFile)
+            classical_verification_files(db, db.query(EncounterFile), current_user)
               .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
               .filter(EncounterFile.file_type == 'image')
               .filter(
@@ -838,7 +885,7 @@ def glaucoma_verify(clean_id: int):
             # Create grading tasks for all images in the encounter for glaucoma
             try:
                 # Get all images in this encounter
-                images = db.query(EncounterFile).filter(
+                images = classical_verification_files(db, db.query(EncounterFile), current_user).filter(
                     EncounterFile.patient_encounter_id == enc.id
                 ).all()
                 
@@ -885,22 +932,31 @@ def glaucoma_verify(clean_id: int):
 def glaucoma_unverify(clean_id: int):
     db = Session()
     try:
-        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        row = classical_verification_rows(
+            db,
+            db.query(GlaucomaResultsCleaned).join(
+                PatientEncounters,
+                GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+            ),
+            current_user,
+        ).filter(GlaucomaResultsCleaned.id == clean_id).first()
         if not row:
             from flask import abort
             abort(404)
-        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not enc or enc.lab_unit_id not in allowed_lab_units:
+        enc = row.patient_encounter
+        if not enc:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "forbidden", "message": "You don't have permission to unverify this encounter."}, 403
             flash("You don't have permission to unverify this encounter.", "danger")
             return redirect(url_for('verify_remedio_glaucoma.glaucoma_list'))
         if enc:
             # Check if we can unverify the encounter (all tasks must be pending)
-            from services.taskCreationServices import can_unverify_image, remove_pending_tasks
+            from services.taskCreationServices import (
+                can_unverify_image,
+                remove_pending_tasks,
+            )
             can_unverify = True
-            images = db.query(EncounterFile).filter(
+            images = classical_verification_files(db, db.query(EncounterFile), current_user).filter(
                 EncounterFile.patient_encounter_id == enc.id
             ).all()
             
@@ -1004,20 +1060,25 @@ def glaucoma_mark_eye(clean_id: int):
 
     db = Session()
     try:
-        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        row = classical_verification_rows(
+            db,
+            db.query(GlaucomaResultsCleaned).join(
+                PatientEncounters,
+                GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
+            ),
+            current_user,
+        ).filter(GlaucomaResultsCleaned.id == clean_id).first()
         if not row:
             from flask import abort
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        # Compare unconditionally. lab_unit_id is nullable and the report may be
-        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
-        # encounter-less row be edited by any role holder in any hospital.
-        if not row.patient_encounter or row.patient_encounter.lab_unit_id not in allowed_lab_units:
+        if not row.patient_encounter:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "forbidden"}, 403
             flash("You don't have permission to modify this encounter.", "danger")
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
-        ef = db.query(EncounterFile).filter(EncounterFile.id == ef_id_int).first()
+        ef = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.id == ef_id_int).first()
         if not ef or ef.patient_encounter_id != row.patient_encounter_id:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "not_found"}, 404

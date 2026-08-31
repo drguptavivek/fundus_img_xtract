@@ -1,12 +1,10 @@
 from datetime import timedelta
-
-from auth.utils import utcnow
 from uuid import uuid4
 
+from auth.utils import utcnow
 from grading.dashboard_service import grader_eligibility_dto, grading_history_page
 from grading_allocation.models import (
     ProjectGraderAllocation,
-    ProjectGradingAllocationPolicy,
 )
 from models import (
     DiseaseGrading,
@@ -36,13 +34,7 @@ def test_eligibility_separates_legacy_permissions_and_project_allocations(
     )
     db_session.add(project)
     db_session.flush()
-    db_session.add_all([
-        ProjectGradingAllocationPolicy(
-            project_id=project.id,
-            enforcement_enabled=True,
-            created_by_user_id=user.id,
-            updated_by_user_id=user.id,
-        ),
+    db_session.add(
         ProjectGraderAllocation(
             project_id=project.id,
             user_id=user.id,
@@ -53,8 +45,8 @@ def test_eligibility_separates_legacy_permissions_and_project_allocations(
             active=True,
             created_by_user_id=user.id,
             updated_by_user_id=user.id,
-        ),
-    ])
+        )
+    )
     db_session.flush()
 
     eligibility = grader_eligibility_dto(db_session, user_id=user.id)
@@ -72,8 +64,6 @@ def test_eligibility_separates_legacy_permissions_and_project_allocations(
         "capacity": "resident",
         "disease": {"id": disease.id, "name": disease.name},
         "encounter_set_type": None,
-        "enforcement_enabled": True,
-        "effective": True,
     }]
 
 

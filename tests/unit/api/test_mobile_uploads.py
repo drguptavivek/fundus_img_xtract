@@ -29,6 +29,7 @@ from models import (
     User,
 )
 from encounter_set_types.models import EncounterSetType
+from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -111,6 +112,10 @@ def mobile_upload_data(db_session, core_test_data):
     project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
     db_session.add(project_profile)
     db_session.flush()
+    # The profile lookup joins an active ProjectLabUnit for the assignment's
+    # lab unit; without it the profile is invisible to the uploader.
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
+    db_session.flush()
     db_session.add(
         ProjectUploadProfileAssignment(
             project_upload_profile_id=project_profile.id,
@@ -187,7 +192,13 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     assert payload["duplicate_count"] == 0
     assert payload["upload_token"]
 
-    upload = db_session.query(DirectImageUpload).one()
+    # Scope to this request's file: earlier suite files may have leaked
+    # committed DirectImageUpload rows into the shared database.
+    upload = (
+        db_session.query(DirectImageUpload)
+        .filter_by(original_filename="direct-eye.png")
+        .one()
+    )
     assert upload.remarks == "patient reported blurred vision"
 
     status_response = client.get(
@@ -240,8 +251,20 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     assert replay_payload["upload_token"] == payload["upload_token"]
     assert replay_payload["uploaded_count"] == 1
     assert replay_payload["duplicate_count"] == 0
-    assert db_session.query(Job).count() == 1
-    assert db_session.query(DirectImageUpload).count() == 1
+    # Scope to this request's idempotency key: earlier suite files may have
+    # leaked committed Job/DirectImageUpload rows into the shared database.
+    assert (
+        db_session.query(Job)
+        .filter_by(idempotency_key="direct-idempotency-key")
+        .count()
+        == 1
+    )
+    assert (
+        db_session.query(DirectImageUpload)
+        .filter_by(original_filename="direct-eye.png")
+        .count()
+        == 1
+    )
 
     lookup_response = client.get(
         "/api/mobile/v1/uploads/by-idempotency-key/direct-idempotency-key",

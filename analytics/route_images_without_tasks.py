@@ -27,7 +27,8 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from authz import scope
+from authz.behaviors import analytics_hospitals, analytics_lab_units, analytics_rows
+from services.uploads.access import encounter_file_columns, upload_columns
 
 
 @bp.route("/images-without-tasks", methods=["GET", "POST"])
@@ -64,7 +65,9 @@ def images_without_tasks() -> str:
             )
             
             # Apply hospital scoping for zip images
-            encounter_query = scope(db, encounter_query, EncounterFile, current_user, 'analytics.encounters.view')
+            encounter_query = analytics_rows(
+                db, encounter_query, current_user, encounter_file_columns(EncounterFile)
+            )
             
             encounter_query = encounter_query.options(
                 selectinload(EncounterFile.lab_unit).selectinload(LabUnit.hospital),
@@ -113,7 +116,9 @@ def images_without_tasks() -> str:
             )
             
             # Apply hospital scoping for direct uploads
-            direct_query = scope(db, direct_query, DirectImageUpload, current_user, 'analytics.encounters.view')
+            direct_query = analytics_rows(
+                db, direct_query, current_user, upload_columns(DirectImageUpload)
+            )
             
             direct_query = direct_query.options(selectinload(DirectImageUpload.lab_unit).selectinload(LabUnit.hospital))
             
@@ -170,7 +175,7 @@ def images_without_tasks() -> str:
 
         # Filter hospitals and lab units to only those the user has access to
         lab_units_query = db.query(LabUnit)
-        lab_units_query = scope(db, lab_units_query, LabUnit, current_user, 'analytics.encounters.view')
+        lab_units_query = analytics_lab_units(db, lab_units_query, current_user)
         lab_units = (
             lab_units_query
             .options(selectinload(LabUnit.hospital))
@@ -179,7 +184,7 @@ def images_without_tasks() -> str:
         )
         
         hospitals_query = db.query(Hospital)
-        hospitals_query = scope(db, hospitals_query, Hospital, current_user, 'analytics.encounters.view')
+        hospitals_query = analytics_hospitals(db, hospitals_query, current_user)
         hospitals = (
             hospitals_query
             .order_by(Hospital.name)

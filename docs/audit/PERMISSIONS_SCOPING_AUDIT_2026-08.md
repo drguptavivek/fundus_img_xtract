@@ -1,5 +1,10 @@
 # Permissions & Scoping Audit — Functionality-wise (2026-08-23)
 
+> **Historical snapshot.** References below to an authorization engine, action
+> registry, TOML actions, or `authorize(action, ...)` describe a design that has
+> since been removed. Current authorization is deliberately lean: routes select
+> a reusable behaviour and supply persisted record lineage; missing facts deny.
+
 Read-only code audit of every route surface against `docs/policy/authorizations.md`,
 `docs/policy/admin_access_policy.md`, `docs/policy/upload_policy.md`, and
 `docs/10-DEVELOP/PII_Exposure_Control_Policy.md`. Nothing was modified. Every finding below
@@ -88,7 +93,7 @@ Routes: `grading/`, `grading_workbench/`, `grading_allocation/`, `review/`, `tas
 | MEDIUM | `apply_scoping(LabUnit,"view")` → all labs in hospital: grader statistics, inter-rater, Wadhwani inference page, regrade list | `utils/hospital_scoping.py:195-199`; `grading/grader_statistics.py:223`; `grading/wadhwani_glaucoma_inference.py:185-189` | Intersect with `user.lab_units` unless local_admin |
 | LOW | `_fetch_regrade_task` drops lab filter when allowed set empty | `grading/regrade_tasks.py:78` | Return None on empty |
 | LOW | Role gates narrower than `authz/policies.py` (review.task.view, review.discrepancy.view, intra_rater.task.submit, admin.grading_eligibility.manage) | see files | Decide source of truth |
-| LOW | Allocation service allows local_admin/data_manager but API is admin-only; `set_project_enforcement` has no lab-scope check | `grading_allocation/service.py:32,206` | Add scope check before widening |
+| RESOLVED | The former project-allocation enforcement switch created a second eligibility mode | Removed: project allocation is always enforced, and the toggle API/service/UI no longer exists | No configurable enforcement state remains |
 | LOW | Eligibility snapshot cache (5 min) not invalidated on user deactivation / UserRole change | `grading_allocation/eligibility.py:62-105` | Bump on those paths |
 
 Solid: the consolidated workbench (per-target eligibility at acquire/load/heartbeat/submit, owner+token sessions, fingerprinting, own-grade-only builder, records masked until final); allocation enforcement consistently via `is_user_eligible_for_task`; legacy form endpoints route through `legacy_transport`; intra-rater strictly self-scoped; regrade creation/bulk reassign validated.

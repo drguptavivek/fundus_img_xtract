@@ -214,7 +214,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSetType Policy and Direction](docs/01-Adding_Images/encounter_set_types.md) - Encounter-set schema, custody persistence, metadata contracts, and phased delivery model
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
 - [Project Referral Diseases API](docs/API/referral-diseases/README.md) - Project-owned referral-only disease choices extending grading-scheme defaults
-- [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project, hospital, or lab-unit scope
+- [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project-wide or exact Project-Lab Unit scope
 - [Patient Media API](docs/API/media/README.md) - Central object authorization for images, thumbnails, PDFs, metadata, OCR, and signed delivery
 - [Encounter Evidence Viewer API](docs/API/encounter-viewer/README.md) - Shared JSON DTO and HTMX partial for authorized non-PII legacy, EncounterSet, and direct-image evidence
 - [Project Review API](docs/API/project-review/README.md) - Scoped non-PII project summary, upload inventory, and grading aggregates
@@ -233,6 +233,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Comprehensive Clinical Search Deep-Module Plan](docs/15-DEVELOPMENT/clinical_search_deep_module_plan.md) - Shared task-boundary search, canonical grading and signal semantics, project-configured referral diseases, immutable selections, discrepancy integration, and test plan
 - [Grader Responsiveness and Performance Plan](docs/15-DEVELOPMENT/grader_responsiveness_performance_plan.md) - Plan and implementation record for keeping grader-facing latency flat as data grows. Delivered: denormalised task project ownership with guard triggers, allocation eligibility in SQL, index-driven queue acquisition and pending counts, per-disease dashboard hydration, and throttled session writes. Outstanding: server process model, image payload sizing under an authenticate-every-image constraint, and non-blocking materialized view refresh
 - [Grading Workbench API](docs/API/grading-workbench/README.md) - Durable acquisition, resumption, normalized workbench DTO, annotation, submission, and rapid next-work contracts
+- [Regrade API](docs/API/regrade/README.md) - Shared HTMX/mobile API for fail-closed regrade queue creation and assigned adjudication submission
 - [Discrepancy Review API](docs/API/discrepancy-review/README.md) - Project-aware task filters, permission-scoped study CSV queues, idempotent submissions, and MV-independent Save & Next ordering
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping
@@ -287,6 +288,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 ### Task Creation
 - [Scoping](docs/03-Tasks/Scoping.md) - ABAC - Attribute-Based Access Control & RBAC for Uplaoding and HGrading  and access to app features
+- [Ad-hoc Task Creation](docs/03-Tasks/ad_hoc_task_creation.md) - Classical-only, global data-manager workflow for additional root-disease image targets
 - [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
 - [Comprehensive Task Management System](docs/03-Tasks/comprehensive_task_management_system.md) - Complete task creation, assignment, and management documentation
 - [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for retrieving and managing task information with proper scoping
@@ -336,11 +338,11 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
-- [Authorization Rules](docs/policy/authorizations.md) - Human-readable source of truth for action-level authorization rules before route wiring
-- [RBAC/ABAC Route Policy](docs/RBAC_ABAC_Route_Policy.md) - Route, data-service, media-layer, project-grant, cache, and telemetry enforcement boundaries
-- [Upload Policy](docs/policy/upload_policy.md) - Dashboard access vs upload-form access and fileUploader-only eligibility rules
-- [Admin Access Policy](docs/policy/admin_access_policy.md) - Admin vs local_admin hospital/lab-unit scope rules
-- [ReBAC Authorization Policy](docs/policy/rebac_authorization_policy.md) - Central action-policy model for roles, upload profiles, grading slots, lab-unit grants, and hospital-scope grants
+- [Authorization Rules](docs/policy/authorizations.md) - Plain-language role, relationship, delegation, and fail-closed rules
+- [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Current frozen policy in readable form; the older HTML rendering is marked as an archived snapshot.
+- [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Current role/action/scope matrix; the older HTML rendering is marked as an archived snapshot.
+- [Route Permissions & Roles Audit](docs/policy/route_permissions_audit.md) - Code-derived snapshot (2026-08-28): which role, in classical vs project context, can perform which action at which scope, organized by workflow from configuration through exports, with a divergences list.
+- [Lean Authorization Cutover](docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md) - Named role-scope behaviours, lineage, delegation, worker reauthorization, and one-migration cutover contract
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation
 
 #### Master Data Utilities

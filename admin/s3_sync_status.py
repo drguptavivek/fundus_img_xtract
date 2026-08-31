@@ -6,59 +6,66 @@ Shows per-hospital sync counts, recent failures, and provides retry functionalit
 """
 
 import logging
-from flask import render_template, jsonify, request, redirect, url_for, flash
-from flask_login import login_required, current_user
-from sqlalchemy import select, and_, desc
+
+from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user
+from sqlalchemy import and_, desc, select
 
 from auth.roles import roles_required
-from models import S3Config, S3SyncStatus, Hospital
+from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
+from models import Hospital, S3Config, S3SyncStatus
 from utils.s3_sync_status import (
-    get_sync_counts_by_hospital,
-    get_recent_sync_activity,
     get_failed_syncs,
     get_file_by_sync,
-    mark_sync_in_progress,
+    get_recent_sync_activity,
+    get_sync_counts_by_hospital,
 )
-from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
 
-def _get_user_hospitals():
-    """Get list of hospital IDs the current user can access."""
-    if not current_user or not current_user.is_authenticated:
-        return []
-
-    user_roles = {r.name for r in (current_user.roles or [])}
-    if "admin" in user_roles:
-        with transaction_scope() as db:
-            return [h.id for h in db.execute(select(Hospital).order_by(Hospital.id)).scalars().all()]
-
-    # Non-admins see their lab unit hospitals
-    if current_user.lab_units:
-        return [lab_unit.id for lab_unit in current_user.lab_units]
-
-    return []
+def _get_all_hospital_ids() -> list[int]:
+    """Return every hospital for the admin-only S3 administration surface."""
+    with transaction_scope() as db:
+        return list(db.execute(select(Hospital.id).order_by(Hospital.id)).scalars().all())
 
 
-@login_required
-@roles_required("admin", "local_admin")
+def _positive_query_int(
+    name: str, *, default: int | None = None, maximum: int | None = None
+) -> int | None:
+    """Parse a positive integer query value without ignoring malformed input."""
+    raw = request.args.get(name)
+    if raw is None:
+        return default
+    if raw == "":
+        raise ValueError(f"{name} must be a positive integer")
+    if not raw.isdigit():
+        raise ValueError(f"{name} must be a positive integer")
+    value = int(raw)
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name} must be between 1 and {maximum}")
+    return value
+
+
+@roles_required("admin")
 def s3_sync_dashboard():
     """
     Main S3 sync status dashboard.
 
     Shows per-hospital sync status overview with counts and recent activity.
     """
-    user_hospitals = _get_user_hospitals()
+    hospital_ids = _get_all_hospital_ids()
 
     with transaction_scope() as db:
-        if not user_hospitals:
+        if not hospital_ids:
             hospitals_data = []
         else:
             # Get hospitals with their S3 configs
             hospitals = db.execute(
-                select(Hospital).where(Hospital.id.in_(user_hospitals)).order_by(Hospital.name)
+                select(Hospital).where(Hospital.id.in_(hospital_ids)).order_by(Hospital.name)
             ).scalars().all()
 
             hospitals_data = []
@@ -90,16 +97,15 @@ def s3_sync_dashboard():
     return render_template("admin/s3_sync_dashboard.html", hospitals=hospitals_data)
 
 
-@login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def s3_sync_hospital_detail(hospital_id: int):
     """
     Detailed view for a single hospital's S3 sync status.
 
     Shows recent sync activity, failures, and provides retry options.
     """
-    user_hospitals = _get_user_hospitals()
-    if hospital_id not in user_hospitals:
+    hospital_ids = _get_all_hospital_ids()
+    if hospital_id not in hospital_ids:
         flash("Access denied", "error")
         return redirect(url_for("admin.s3_sync_dashboard"))
 
@@ -156,8 +162,7 @@ def s3_sync_hospital_detail(hospital_id: int):
     )
 
 
-@login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def s3_sync_status_api():
     """
     API endpoint for S3 sync status (used by dashboard JS).
@@ -167,18 +172,23 @@ def s3_sync_status_api():
         - status: Filter by status (pending, success, failed, in_progress)
         - limit: Max records (default 50)
     """
-    hospital_id = request.args.get("hospital_id", type=int)
+    try:
+        hospital_id = _positive_query_int("hospital_id")
+        limit = _positive_query_int("limit", default=50, maximum=500)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     status_filter = request.args.get("status")
-    limit = request.args.get("limit", 50, type=int)
+    if status_filter and status_filter not in {"pending", "success", "failed", "in_progress"}:
+        return jsonify({"error": "Invalid status filter"}), 400
 
-    user_hospitals = _get_user_hospitals()
+    hospital_ids = _get_all_hospital_ids()
 
     with transaction_scope() as db:
         query = select(S3SyncStatus)
 
         # Filter by hospital
         if hospital_id:
-            if hospital_id not in user_hospitals:
+            if hospital_id not in hospital_ids:
                 return jsonify({"error": "Access denied"}), 403
 
             # Get S3 config for hospital
@@ -226,8 +236,7 @@ def s3_sync_status_api():
         })
 
 
-@login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def s3_sync_retry(sync_id: int):
     """
     Retry a failed S3 sync.
@@ -236,7 +245,9 @@ def s3_sync_retry(sync_id: int):
     """
     with transaction_scope() as db:
         sync = db.execute(
-            select(S3SyncStatus).where(S3SyncStatus.id == sync_id)
+            select(S3SyncStatus)
+            .where(S3SyncStatus.id == sync_id)
+            .with_for_update()
         ).scalar_one_or_none()
 
         if not sync:
@@ -250,10 +261,6 @@ def s3_sync_retry(sync_id: int):
         if not s3_config:
             return jsonify({"success": False, "message": "S3 config not found"}), 404
 
-        user_hospitals = _get_user_hospitals()
-        if s3_config.hospital_id not in user_hospitals:
-            return jsonify({"success": False, "message": "Access denied"}), 403
-
         # Only failed syncs can be retried
         if sync.status != "failed":
             return jsonify({
@@ -261,8 +268,11 @@ def s3_sync_retry(sync_id: int):
                 "message": f"Only failed syncs can be retried (current: {sync.status})"
             }), 400
 
-        # Mark as in_progress
-        mark_sync_in_progress(sync_id)
+        # The row lock keeps the state check and transition atomic.
+        sync.status = "in_progress"
+        sync.attempt_count += 1
+        sync.last_attempt_at = utcnow()
+        sync.updated_at = utcnow()
 
         logger.info(
             "S3 sync retry requested for sync_id=%d (file_type=%s, file_id=%s, variant=%s) by user=%s",
@@ -276,19 +286,18 @@ def s3_sync_retry(sync_id: int):
         })
 
 
-@login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def s3_sync_stats_api():
     """
     API endpoint for S3 sync statistics (used by dashboard).
 
     Returns aggregate stats for all accessible hospitals.
     """
-    user_hospitals = _get_user_hospitals()
+    hospital_ids = _get_all_hospital_ids()
 
     stats = []
     with transaction_scope() as db:
-        for hospital_id in user_hospitals:
+        for hospital_id in hospital_ids:
             counts = get_sync_counts_by_hospital(hospital_id)
             hospital = db.execute(
                 select(Hospital).where(Hospital.id == hospital_id)

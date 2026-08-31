@@ -16,6 +16,7 @@ def test_build_encounter_result_payload_always_masks_pii(app):
                 self.glaucoma_results_cleaned = []
                 self.dr_reports = []
                 self.encounter_files = []
+                self.encounter_set_images = []
                 self.lab_unit = None
  
         encounters = [MockEncounter()]
@@ -47,14 +48,21 @@ def test_get_encounter_summary_always_masks_pii(db_session, app):
         u_same, u_cross = users[0], users[1]
         u_same.hospital_id = h1.id
         u_cross.hospital_id = h2.id
-        
-        # Assign lab units so apply_scoping doesn't block access
+
+        # Assign lab units so hospital scoping can match on them
         u_same.lab_units = [lu1]
-        
-        # u_same is a regular hospital user
-        u_same.is_master_admin = False
-        # u_cross is a Global Admin (cross-hospital viewer)
-        u_cross.is_master_admin = True
+
+        # Roles decide access under lean authorization; give u_same the
+        # data_manager analytics role rather than relying on whichever seed
+        # users this query happens to return.
+        dm_role = db_session.query(Role).filter_by(name='data_manager').one()
+        if dm_role not in u_same.roles:
+            u_same.roles.append(dm_role)
+        # u_cross is a global admin (cross-hospital viewer). The lean
+        # authorization contract grants access via roles, not the dead
+        admin_role = db_session.query(Role).filter_by(name='admin').one()
+        if admin_role not in u_cross.roles:
+            u_cross.roles.append(admin_role)
         
         db_session.flush()
 

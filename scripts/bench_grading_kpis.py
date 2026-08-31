@@ -78,7 +78,7 @@ def bench(db, user_id, *, exclude_enforced):
         data = get_user_kpi_pending_task_count_data(
             db,
             user_id,
-            exclude_enforced_project_encounter_sets=exclude_enforced,
+            exclude_project_encounter_sets=exclude_enforced,
         )
         wall = time.perf_counter() - began
     return wall, qc, data, _sum_ints(data)

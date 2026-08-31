@@ -21,13 +21,12 @@ from models import (
     User,
     UserDiseaseUnitRole,
 )
-from grading_allocation.models import ProjectGradingAllocationPolicy
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
 from grading_allocation.constants import capacity_for_role_slot
 from grading_allocation.dashboard import (
-    exclude_enforced_project_encounter_set_tasks,
+    exclude_project_encounter_set_tasks,
     exclude_unallocated_project_tasks,
     filter_to_exact_allocation,
 )
@@ -102,7 +101,6 @@ def _pending_count(
     *,
     user_id: int,
     role_slot: str,
-    enforced_project_ids: set[int],
 ) -> int:
     """Count a pending queue without materialising it.
 
@@ -111,8 +109,6 @@ def _pending_count(
     now a SQL predicate, so this stays a COUNT and its cost tracks the filtered
     rows rather than the size of the queue.
     """
-    if not enforced_project_ids:
-        return query.distinct().count()
     capacity = capacity_for_role_slot(role_slot)
     if capacity is None:
         return 0
@@ -212,7 +208,7 @@ def get_user_kpi_pending_task_count_data(
     db,
     user_id: int,
     *,
-    exclude_enforced_project_encounter_sets: bool = False,
+    exclude_project_encounter_sets: bool = False,
     disease_ids: set[int] | None = None,
 ) -> Dict[str, Dict[str, int]]:
     """
@@ -241,18 +237,6 @@ def get_user_kpi_pending_task_count_data(
         return {}
     user, disease_names, disease_lab_units = resolved
 
-    enforced_project_ids = (
-        set(
-            db.execute(
-                select(ProjectGradingAllocationPolicy.project_id).where(
-                    ProjectGradingAllocationPolicy.enforcement_enabled.is_(True)
-                )
-            ).scalars()
-        )
-        if exclude_enforced_project_encounter_sets
-        else set()
-    )
-
     # Calculate task counts for each disease
     kpi_data = {}
 
@@ -274,7 +258,7 @@ def get_user_kpi_pending_task_count_data(
         }
         
         # Check if user has the required roles
-        has_resident2_role = user.has_role('ophthalmologist')
+        has_resident2_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
         
         # Count resident pending tasks (skip linked diseases: graded with primary)
         if has_resident2_role and info['can_grade_resident']:
@@ -298,8 +282,8 @@ def get_user_kpi_pending_task_count_data(
                 ~resident_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
-            if exclude_enforced_project_encounter_sets:
-                q = exclude_enforced_project_encounter_set_tasks(q)
+            if exclude_project_encounter_sets:
+                q = exclude_project_encounter_set_tasks(q)
             q = exclude_unallocated_project_tasks(
                 q, user_id=user_id, capacity="resident", disease_id=disease_id
             )
@@ -308,7 +292,6 @@ def get_user_kpi_pending_task_count_data(
                 q,
                 user_id=user_id,
                 role_slot="resident",
-                enforced_project_ids=enforced_project_ids,
             )
 
             # Include inconsistent resident tasks that are assignable by resident slot
@@ -327,8 +310,8 @@ def get_user_kpi_pending_task_count_data(
                 ~resident_tracker_exists.exists(),
                 ~resident_conflict_exists.exists(),
             )
-            if exclude_enforced_project_encounter_sets:
-                inconsistent_q = exclude_enforced_project_encounter_set_tasks(
+            if exclude_project_encounter_sets:
+                inconsistent_q = exclude_project_encounter_set_tasks(
                     inconsistent_q
                 )
             inconsistent_q = exclude_unallocated_project_tasks(
@@ -339,7 +322,6 @@ def get_user_kpi_pending_task_count_data(
                 inconsistent_q,
                 user_id=user_id,
                 role_slot="resident",
-                enforced_project_ids=enforced_project_ids,
             )
 
             counts['resident_pending'] = resident_pending_count + inconsistent_count
@@ -365,8 +347,8 @@ def get_user_kpi_pending_task_count_data(
                 ~resident2_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
-            if exclude_enforced_project_encounter_sets:
-                q = exclude_enforced_project_encounter_set_tasks(q)
+            if exclude_project_encounter_sets:
+                q = exclude_project_encounter_set_tasks(q)
             q = exclude_unallocated_project_tasks(
                 q, user_id=user_id, capacity="resident", disease_id=disease_id
             )
@@ -375,7 +357,6 @@ def get_user_kpi_pending_task_count_data(
                 q,
                 user_id=user_id,
                 role_slot="resident2",
-                enforced_project_ids=enforced_project_ids,
             )
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
@@ -422,19 +403,15 @@ def get_user_kpi_pending_task_count_data(
             else:
                 base_q = base_q.filter(GradingTask.state == 'arbitration')
 
-            if exclude_enforced_project_encounter_sets:
-                base_q = exclude_enforced_project_encounter_set_tasks(base_q)
+            if exclude_project_encounter_sets:
+                base_q = exclude_project_encounter_set_tasks(base_q)
             q = exclude_unallocated_project_tasks(
                 base_q, user_id=user_id, capacity="arbitrator", disease_id=disease_id
             )
             
-            # Allocation eligibility is a SQL predicate now, so the enforced and
-            # unenforced paths differ only by that filter. Both project the four
-            # columns the count and linked-disease breakdown actually read.
-            if enforced_project_ids:
-                q = filter_to_exact_allocation(
-                    q, user_id=user_id, capacity="arbitrator"
-                )
+            q = filter_to_exact_allocation(
+                q, user_id=user_id, capacity="arbitrator"
+            )
             # Use distinct because the join might produce multiple rows per primary task
             eligible_arbitration_rows = (
                 q.with_entities(
@@ -521,8 +498,8 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
     disease_names = {disease.id: disease.name for disease in diseases}
     
     # Check if user has the required roles
-    has_resident_role = user.has_role('resident')
-    has_resident2_role = user.has_role('ophthalmologist')
+    has_resident_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
+    has_resident2_role = has_resident_role
     
     # Get diseases where user has actually completed gradings
     user_graded_diseases = db.query(GradingTask.disease_id).join(Grade, Grade.task_id == GradingTask.id).filter(
@@ -666,7 +643,7 @@ def get_user_kpi_linked_followup_counts(
     db,
     user_id: int,
     *,
-    exclude_enforced_project_encounter_sets: bool = False,
+    exclude_project_encounter_sets: bool = False,
     disease_ids: set[int] | None = None,
 ) -> Dict[str, List[Dict[str, int | str]]]:
     """
@@ -677,8 +654,8 @@ def get_user_kpi_linked_followup_counts(
     if not user:
         return {}
 
-    has_resident_role = user.has_role('resident')
-    has_resident2_role = user.has_role('ophthalmologist')
+    has_resident_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
+    has_resident2_role = has_resident_role
     if not (has_resident_role or has_resident2_role):
         return {}
 
@@ -782,9 +759,9 @@ def get_user_kpi_linked_followup_counts(
             q, user_id=user_id, capacity="resident", disease_id=disease_id,
             task_entity=PrimaryTask,
         )
-        if exclude_enforced_project_encounter_sets:
-            q = exclude_enforced_project_encounter_set_tasks(q, PrimaryTask)
-            q = exclude_enforced_project_encounter_set_tasks(q, LinkedTask)
+        if exclude_project_encounter_sets:
+            q = exclude_project_encounter_set_tasks(q, PrimaryTask)
+            q = exclude_project_encounter_set_tasks(q, LinkedTask)
         rows = q.all()
         if rows:
             results[disease_name] = [

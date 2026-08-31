@@ -15,7 +15,6 @@ from sqlalchemy.orm import aliased
 from grading_allocation.constants import capacity_for_role_slot
 from grading_allocation.dashboard import (
     exact_allocation_predicate,
-    project_enforces_allocation,
 )
 from grading_allocation.eligibility import (
     eligible_lab_unit_ids,
@@ -31,6 +30,7 @@ from models import (
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import reconcile_active_packages
 from .linked_tasks import get_linked_disease_ids
+from tasks.lineage import valid_task_lineage
 from auth.utils import utcnow
 
 
@@ -72,6 +72,7 @@ def _build_candidate_query(
         GradingTask.lab_unit_id.in_(labs),
         GradingTask.disease_id == disease_id,
         GradingTask.state.in_(states),
+        valid_task_lineage(),
         ~active_lease.exists(),
     )
     if role_slot in {"resident", "resident2"}:
@@ -168,10 +169,10 @@ def _apply_sql_eligibility(
 
     * a conflicting grade by this user disqualifies the task, whatever the
       owning project;
-    * a task owned by an enforcing project needs an exact allocation match;
-    * anything else falls back to legacy disease/lab eligibility.
+    * every project-owned task needs an exact allocation match;
+    * only classical tasks fall back to disease/lab eligibility.
 
-    ``eligible_lab_unit_ids`` returns the union of legacy labs and enforced
+    ``eligible_lab_unit_ids`` returns the union of legacy labs and project
     project-allocation labs, so a lab in ``labs`` does not by itself imply
     legacy eligibility. The legacy branch is therefore re-narrowed to the
     legacy subset here.
@@ -201,17 +202,21 @@ def _apply_sql_eligibility(
     query = query.outerjoin(
         package, package.id == GradingTask.encounter_set_package_id
     )
-    enforcing = project_enforces_allocation(GradingTask)
     exact = exact_allocation_predicate(
         GradingTask, package, user_id=user_id, capacity=capacity.value
     )
 
     legacy_branch = (
-        and_(~enforcing, GradingTask.lab_unit_id.in_(legacy_labs))
+        and_(
+            GradingTask.project_id.is_(None),
+            GradingTask.lab_unit_id.in_(legacy_labs),
+        )
         if legacy_labs
         else sa_false()
     )
-    return query.filter(or_(legacy_branch, and_(enforcing, exact)))
+    return query.filter(
+        or_(legacy_branch, and_(GradingTask.project_id.is_not(None), exact))
+    )
 
 
 def _lock_available_candidate(db, task_id: int, role_slot: str):
@@ -228,7 +233,7 @@ def _lock_available_candidate(db, task_id: int, role_slot: str):
     )
     return (
         db.query(GradingTask)
-        .filter(GradingTask.id == task_id, ~active_lease.exists())
+        .filter(GradingTask.id == task_id, valid_task_lineage(), ~active_lease.exists())
         .with_for_update(skip_locked=True)
         .first()
     )
@@ -294,6 +299,8 @@ def select_linked_followup_task(
             primary_task.disease_id == primary_disease_id,
             linked_task.disease_id == linked_disease_id,
             primary_task.lab_unit_id.in_(labs),
+            valid_task_lineage(primary_task),
+            valid_task_lineage(linked_task),
             mismatch,
             ~conflicting_grade.exists(),
             ~active_lease.exists(),
@@ -332,6 +339,7 @@ def _exclude_linked_state_mismatches(db, query, disease_id: int):
             LinkedDiseaseGrading.linked_disease_id == linked_task.disease_id,
             LinkedDiseaseGrading.is_active.is_(True),
             mismatch,
+            valid_task_lineage(linked_task),
         )
     )
     return query.filter(~mismatch_exists)

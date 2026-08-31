@@ -1,24 +1,28 @@
 import pytest
 from sqlalchemy import select
-from models import DirectImageUpload, User, Camera, Disease, Area, LabUnit
-from utils.hospital_scoping import apply_scoping
+from models import DirectImageUpload
+from authz.behaviors import upload_rows
+from services.uploads.access import upload_columns
+from tests.helpers.factories import UserFactory
 
 @pytest.mark.security
-def test_apply_scoping_site_admin_no_lab_units(db_session, seed_test_database):
+def test_apply_scoping_site_admin_no_lab_units(db_session, core_test_data):
     """Test that apply_scoping allows Site Admins without lab units to see all hospital data."""
     from datetime import datetime, timezone
     
-    # Get fresh instances from current session to avoid DetachedInstanceError
-    user = db_session.query(User).filter_by(username='site_admin_a').first()
-    assert user is not None, "Site admin user should exist"
-    
-    camera = db_session.query(Camera).filter_by(name="Test Camera").first()
-    disease = db_session.query(Disease).filter_by(name="Test Disease").first()
-    area = db_session.query(Area).filter_by(name="Test Area").first()
-    
-    # Get fresh lab unit instances
-    lab_a = db_session.query(LabUnit).filter_by(name='Lab A1').first()
-    lab_b = db_session.query(LabUnit).filter_by(name='Lab B1').first()
+    hospital_a = db_session.merge(core_test_data["hospital_a"])
+    lab_a = db_session.merge(core_test_data["lab_a1"])
+    lab_b = db_session.merge(core_test_data["lab_b1"])
+    camera = db_session.merge(core_test_data["camera"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    area = db_session.merge(core_test_data["area"])
+    user = UserFactory.create_with_hospital(
+        db_session,
+        "local_admin",
+        hospital_a.id,
+        [],
+        username="lean_site_admin_without_labs",
+    )
     
     # Create images in both hospitals
     img_a = DirectImageUpload(
@@ -51,13 +55,13 @@ def test_apply_scoping_site_admin_no_lab_units(db_session, seed_test_database):
     db_session.commit()
     
     # Verify user setup
-    assert user.hospital_id == 1, "Site admin should have hospital_id=1"
+    assert user.hospital_id == hospital_a.id
     assert user.has_role('local_admin'), "Site admin should have local_admin role"
     assert len(list(user.lab_units)) == 0, "Site admin should have no lab units"
     
-    # Test apply_scoping
+    # Test the named upload behaviour.
     q = select(DirectImageUpload)
-    q = apply_scoping(q, DirectImageUpload, user, 'upload')
+    q = upload_rows(db_session, q, user, upload_columns(DirectImageUpload))
     results = db_session.execute(q).scalars().all()
     
     filenames = [img.filename for img in results]

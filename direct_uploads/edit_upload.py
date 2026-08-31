@@ -7,15 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from flask import request, render_template, redirect, url_for, flash, current_app
 from flask_login import current_user
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import selectinload
 
 from utils.fileUtils import abs_from_parts
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
+from authz.behaviors import upload_lab_units, upload_rows
+from services.uploads.access import upload_columns
 from models import (
     DirectImageUpload,
     Hospital,
@@ -122,10 +123,28 @@ def _require_entity(db, model, pk: int | None, label: str):
 
 
 @bp.route("/direct/upload/edit/<int:upload_id>", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required(
+    "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+    "project_pi", "site_pi", "project_admin",
+)
 def edit_upload(upload_id):
     with get_db_session() as db:
-        upload = db.get(DirectImageUpload, upload_id)
+        scoped_uploads = upload_rows(
+            db,
+            select(DirectImageUpload).where(DirectImageUpload.id == upload_id),
+            current_user,
+            upload_columns(DirectImageUpload),
+        ).where(
+            DirectImageUpload.hospital_id.is_not(None),
+            DirectImageUpload.lab_unit_id.is_not(None),
+            exists(
+                select(LabUnit.id).where(
+                    LabUnit.id == DirectImageUpload.lab_unit_id,
+                    LabUnit.hospital_id == DirectImageUpload.hospital_id,
+                )
+            ),
+        )
+        upload = db.scalars(scoped_uploads).one_or_none()
         if not upload:
             flash("Upload not found.", "danger")
             return redirect(url_for("direct_uploads.dashboard"))
@@ -136,26 +155,14 @@ def edit_upload(upload_id):
         except Exception:
             file_path = None
 
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        destination_lab_units = db.scalars(
+            upload_lab_units(db, select(LabUnit), current_user)
+        ).all()
+        allowed_lab_unit_ids = {lab.id for lab in destination_lab_units}
         allowed_hospital_ids = {
-            hid for hid, in db.execute(
-                select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids))
-            )
-            if hid is not None
+            lab.hospital_id for lab in destination_lab_units if lab.hospital_id is not None
         }
-        can_manage_others = current_user.has_role(
-            "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
-        )
         can_choose_any = current_user.has_role("admin", "data_manager", "local_admin")
-
-        # Require lab unit eligibility and either ownership or elevated edit permission
-        if upload.lab_unit_id not in allowed_lab_unit_ids:
-            flash("You don't have permission to edit this upload.", "danger")
-            return redirect(url_for("direct_uploads.dashboard"))
-
-        if not (can_manage_others or upload.uploader_id == current_user.id):
-            flash("You don't have permission to edit this upload.", "danger")
-            return redirect(url_for("direct_uploads.dashboard"))
 
         task_rows = db.execute(
             select(GradingTask).where(GradingTask.direct_image_upload_id == upload.id)
@@ -193,7 +200,8 @@ def edit_upload(upload_id):
                 flash("All fields are required.", "danger")
                 return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)
 
-            # RBAC: all users must stay within their own assignments
+            # Source access does not grant permission to relabel into an
+            # unauthorized destination Lab Unit or hospital.
             if lid not in allowed_lab_unit_ids or hid not in allowed_hospital_ids:
                 flash("You cannot assign this hospital or lab unit.", "danger")
                 return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)

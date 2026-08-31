@@ -13,7 +13,7 @@ import json
 from job_store import db_create_job
 from worker import queue_job
 from . import bp
-from auth.roles import global_uploader_or_project_assignment_required
+from auth.roles import roles_required
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UPLOAD_KIND_REMIDIO,
@@ -118,7 +118,7 @@ def get_daily_upload_dir():
     return upload_daily
 
 @bp.route("/upload_files", methods=["GET"])
-@global_uploader_or_project_assignment_required(UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET)
+@roles_required("fileUploader")
 def upload_form():
     from db_transaction_manager import transaction_scope
 
@@ -229,7 +229,7 @@ def upload_form():
     )
 
 @bp.route("/upload", methods=["POST"])
-@global_uploader_or_project_assignment_required(UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET)
+@roles_required("fileUploader")
 def upload_files():
     per_file_default = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
     max_files_default = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))

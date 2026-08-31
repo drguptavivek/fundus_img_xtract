@@ -28,6 +28,12 @@ class TestErrorSanitization:
         """
         caplog.set_level(logging.ERROR)
 
+        logging.getLogger("runtime_error").propagate = True  # keep caplog attached after create_app
+        # App logging config sets propagate=False on the runtime_error
+        # logger once create_app has run; re-enable it so caplog's root
+        # handler sees the records in any test order.
+        logging.getLogger("runtime_error").propagate = True
+
         # Create an exception that will have a stack trace
         try:
             # Trigger an exception to get a stack trace
@@ -55,6 +61,8 @@ class TestErrorSanitization:
         to prevent exposure of credentials.
         """
         caplog.set_level(logging.ERROR)
+
+        logging.getLogger("runtime_error").propagate = True  # keep caplog attached after create_app
 
         # Simulate a database connection error with connection string
         try:
@@ -88,6 +96,8 @@ class TestErrorSanitization:
         """
         caplog.set_level(logging.ERROR)
 
+        logging.getLogger("runtime_error").propagate = True  # keep caplog attached after create_app
+
         # Create an exception that might have environment context
         try:
             import os
@@ -120,6 +130,8 @@ class TestErrorSanitization:
         """
         caplog.set_level(logging.ERROR)
 
+        logging.getLogger("runtime_error").propagate = True  # keep caplog attached after create_app
+
         try:
             # Create an exception that will include library info in stack trace
             import sqlalchemy
@@ -146,6 +158,8 @@ class TestErrorSanitization:
         are properly handled.
         """
         caplog.set_level(logging.ERROR)
+
+        logging.getLogger("runtime_error").propagate = True  # keep caplog attached after create_app
 
         # Create an exception with log injection attempt
         try:

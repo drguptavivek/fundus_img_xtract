@@ -5,7 +5,7 @@ import uuid
 
 import yaml
 
-from models import EncounterSetImage, Hospital, LabUnit, PatientEncounters, Project, ProjectInvestigator, Role, User
+from models import EncounterSetImage, Hospital, LabUnit, PatientEncounters, Project, Role, User
 from data_authorization.models import ProjectRoleGrant
 from remidio_api_integration import service
 from project_configuration.models import ProjectLabUnit
@@ -51,6 +51,17 @@ def _project_encounter(db_session, *, code: str, patient_id: str, patient_name: 
     return project, encounter
 
 
+def _grant_collaborator(db_session, *, user: User, project: Project) -> ProjectRoleGrant:
+    role = db_session.query(Role).filter_by(name="collaborator").one()
+    return ProjectRoleGrant(
+        project_id=project.id,
+        user_id=user.id,
+        role_id=role.id,
+        scope_type="project",
+        active=True,
+    )
+
+
 def test_no_pii_browser_only_lists_active_collaborator_projects(db_session):
     user = _collaborator(db_session)
     allowed_project, _ = _project_encounter(
@@ -66,12 +77,7 @@ def test_no_pii_browser_only_lists_active_collaborator_projects(db_session):
         patient_name="Other Patient",
     )
     db_session.add(
-        ProjectInvestigator(
-            project_id=allowed_project.id,
-            user_id=user.id,
-            role="collaborator",
-            active=True,
-        )
+        _grant_collaborator(db_session, user=user, project=allowed_project)
     )
     db_session.commit()
 
@@ -141,7 +147,7 @@ def test_no_pii_browser_redacts_patient_identifiers(db_session):
         patient_id="MRN-SECRET",
         patient_name="Secret Patient",
     )
-    db_session.add(ProjectInvestigator(project_id=project.id, user_id=user.id, role="collaborator", active=True))
+    db_session.add(_grant_collaborator(db_session, user=user, project=project))
     db_session.commit()
 
     context = service.list_encounter_set_browser(
@@ -196,7 +202,7 @@ def test_no_pii_export_zip_uses_encounter_uuid_not_mrn(db_session, monkeypatch, 
     )
     db_session.add_all(
         [
-            ProjectInvestigator(project_id=project.id, user_id=user.id, role="collaborator", active=True),
+            _grant_collaborator(db_session, user=user, project=project),
             image,
         ]
     )

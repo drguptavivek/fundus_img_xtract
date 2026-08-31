@@ -81,13 +81,13 @@ class TestAnalyticsUtils:
         
         grouped = group_task_details_by_image(details)
         assert len(grouped) == 2
-        assert len(grouped[101]) == 2
-        assert len(grouped[102]) == 1
-        
+        assert len(grouped["encounter_file:101"]) == 2
+        assert len(grouped["encounter_file:102"]) == 1
+
         # Verify sorting (by disease name)
         # DR comes before Glaucoma alphabetically
-        assert grouped[101][0]["disease_name"] == "DR"
-        assert grouped[101][1]["disease_name"] == "Glaucoma"
+        assert grouped["encounter_file:101"][0]["disease_name"] == "DR"
+        assert grouped["encounter_file:101"][1]["disease_name"] == "Glaucoma"
 
     def test_build_pagination_params(self):
         """Test building pagination parameters."""

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import DateTime, case, cast, exists, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, selectinload
 
-from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
+from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
 from iitk_api_integration.models import IITKApiProjectConfig, IITKApiSessionLink
 from models import (
     DirectImageUpload,
@@ -25,19 +25,17 @@ from models import (
     LabUnit,
     PatientEncounters,
     Project,
-    ProjectInvestigator,
+    Role,
     User,
 )
 from remidio_api_integration.models import RemidioApiExamEncounter
 from upload_profiles.models import (
     ProjectUploadProfile,
-    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
 )
 from project_configuration.service import configured_project_lab_unit_ids
-from project_configuration.models import ProjectLabUnit
 
 from .dto import (
     ProjectChoiceDTO,
@@ -52,6 +50,8 @@ from .dto import (
 )
 from .exceptions import ProjectReviewNotFound
 from .configuration import effective_configuration
+from authz.project_access import can_manage_project_access
+from authz.project_roles import PROJECT_ASSIGNABLE_ROLES
 
 
 @dataclass(frozen=True)
@@ -77,26 +77,10 @@ def list_projects(db: Session, *, user: User) -> tuple[ProjectChoiceDTO, ...]:
             ProjectRoleGrant.project_id == Project.id,
             ProjectRoleGrant.user_id == user.id,
             ProjectRoleGrant.active.is_(True),
+            ProjectRoleGrant.role_id == Role.id,
+            Role.name.in_(PROJECT_ASSIGNABLE_ROLES),
         )
-        upload_membership = exists().where(
-            ProjectUploadProfile.project_id == Project.id,
-            ProjectUploadProfile.active.is_(True),
-            UploadProfile.id == ProjectUploadProfile.upload_profile_id,
-            UploadProfile.active.is_(True),
-            UploadProfile.automated_remidio_populated.is_(False),
-            ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id,
-            ProjectUploadProfileAssignment.user_id == user.id,
-            ProjectUploadProfileAssignment.active.is_(True),
-            ProjectLabUnit.project_id == Project.id,
-            ProjectLabUnit.lab_unit_id == ProjectUploadProfileAssignment.lab_unit_id,
-            ProjectLabUnit.active.is_(True),
-        )
-        legacy_membership = exists().where(
-            ProjectInvestigator.project_id == Project.id,
-            ProjectInvestigator.user_id == user.id,
-            ProjectInvestigator.active.is_(True),
-        )
-        statement = statement.where(or_(role_membership, upload_membership, legacy_membership))
+        statement = statement.where(role_membership)
     return tuple(_project_dto(row) for row in db.execute(statement).scalars())
 
 
@@ -147,7 +131,12 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
     )
     allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
-        db, project_id=project.id, allowed_lab_ids=allowed_labs
+        db,
+        project_id=project.id,
+        allowed_lab_ids=allowed_labs,
+        include_people=can_manage_project_access(
+            db, user, project_id=project.id
+        ),
     )
     return ProjectSummaryDTO(
         project=_project_dto(project),
@@ -234,43 +223,25 @@ def _project_and_scope(db: Session, *, user: User, project_id: int) -> tuple[Pro
     configured_labs = configured_project_lab_unit_ids(db, project_id=project_id)
     if user.has_role("admin"):
         return project, _ResolvedScope(True, frozenset(), configured_labs)
-    grants = db.execute(select(ProjectRoleGrant).where(
-        ProjectRoleGrant.project_id == project_id,
-        ProjectRoleGrant.user_id == user.id,
-        ProjectRoleGrant.active.is_(True),
-    )).scalars().all()
-    assignment_lab_ids = frozenset(db.execute(
-        select(ProjectUploadProfileAssignment.lab_unit_id)
-        .join(ProjectUploadProfile, ProjectUploadProfile.id == ProjectUploadProfileAssignment.project_upload_profile_id)
+    grants = db.execute(
+        select(ProjectRoleGrant)
+        .join(Role, Role.id == ProjectRoleGrant.role_id)
         .where(
-            ProjectUploadProfile.project_id == project_id,
-            ProjectUploadProfile.active.is_(True),
-            ProjectUploadProfileAssignment.user_id == user.id,
-            ProjectUploadProfileAssignment.active.is_(True),
+            ProjectRoleGrant.project_id == project_id,
+            ProjectRoleGrant.user_id == user.id,
+            ProjectRoleGrant.active.is_(True),
+            Role.name.in_(PROJECT_ASSIGNABLE_ROLES),
         )
-    ).scalars())
-    legacy = db.execute(select(ProjectInvestigator.id).where(
-        ProjectInvestigator.project_id == project_id,
-        ProjectInvestigator.user_id == user.id,
-        ProjectInvestigator.active.is_(True),
-    ).limit(1)).scalar_one_or_none()
-    if legacy is not None or any(grant.scope_type == PROJECT_SCOPE for grant in grants):
+    ).scalars().all()
+    if any(grant.scope_type == PROJECT_SCOPE for grant in grants):
         return project, _ResolvedScope(True, frozenset(), configured_labs)
-    if not grants and not assignment_lab_ids:
+    if not grants:
         raise ProjectReviewNotFound("Project not found.")
-    hospital_ids = frozenset(
-        grant.hospital_id for grant in grants if grant.scope_type == HOSPITAL_SCOPE
-    )
-    hospital_lab_ids = frozenset(db.execute(
-        select(LabUnit.id).where(LabUnit.hospital_id.in_(hospital_ids or {-1}))
-    ).scalars()).intersection(configured_labs)
     return project, _ResolvedScope(
         False,
-        hospital_ids,
+        frozenset(),
         (
             frozenset(grant.lab_unit_id for grant in grants if grant.scope_type == LAB_UNIT_SCOPE)
-            | assignment_lab_ids
-            | hospital_lab_ids
         ).intersection(configured_labs),
     )
 

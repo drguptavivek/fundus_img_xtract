@@ -12,7 +12,6 @@ from grading.dashboard_service import grader_eligibility_dto, grading_history_pa
 from grading.workbench.service import list_active_sessions
 from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from grading.queue_cards import (
-    QUEUE_CARD_CACHE_TTL_SECONDS,
     disease_queue_card,
     gradable_disease_cards,
     project_encounter_set_cards,
@@ -71,7 +70,7 @@ def _build_history_panel_context(
     }
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     with transaction_scope() as db:
@@ -155,8 +154,8 @@ def index():
                 break
         
         # is_resident means user has permission to do resident-level grading
-        is_resident = has_resident_eligibility and (current_user.has_role('resident') or current_user.has_role('ophthalmologist'))
-        is_resident2 = current_user.has_role('ophthalmologist')
+        is_resident = has_resident_eligibility and current_user.has_role('ophthalmologist', 'field_ophthalmologist')
+        is_resident2 = current_user.has_role('ophthalmologist', 'field_ophthalmologist')
         
         # Which queue cards exist is answered from role rows alone. Their
         # contents are fetched per disease afterwards, so rendering this page
@@ -170,7 +169,6 @@ def index():
         "grading/index.html",
         is_resident=is_resident,
         is_resident2=is_resident2,
-        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
         refresh=False,
         oob=False,
         user_eligibility=user_eligibility,
@@ -181,7 +179,7 @@ def index():
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def disease_queue_fragment(disease_id: int):
     """HTMX fragment for one disease queue card.
 
@@ -189,7 +187,7 @@ def disease_queue_fragment(disease_id: int):
     disease delays only its own card instead of the whole page. Mirrors
     ``GET /api/grading/me/queues/<disease_id>`` from the same service call.
 
-    ``?refresh=1`` bypasses the cached count and re-stores a fresh one.
+    ``?refresh=1`` is retained for the existing HTMX refresh contract.
     """
     refresh = request.args.get("refresh") == "1"
     with transaction_scope() as db:
@@ -204,7 +202,7 @@ def disease_queue_fragment(disease_id: int):
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def disease_queues_fragment():
     """The Legacy & Image Grading panel of self-loading placeholders.
 
@@ -231,11 +229,10 @@ def disease_queues_fragment():
         "grading/_disease_queues.html",
         queue_cards=queue_cards,
         refresh=refresh,
-        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def project_queues_fragment():
     """The Project EncounterSet Grading panel on its own, for in-place refresh."""
     refresh = request.args.get("refresh") == "1"
@@ -249,7 +246,7 @@ def project_queues_fragment():
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def refresh_queues_trigger():
     """Fire the panel-wide refresh event; the panels re-fetch themselves.
 

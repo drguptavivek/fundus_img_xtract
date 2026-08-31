@@ -48,7 +48,7 @@ class TestThumbnailBasic:
 
         # Verify thumbnail properties
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Default size
+            assert thumb.size == (180, 135)  # Aspect ratio preserved within the 180px box
             assert thumb.format == 'JPEG'
 
     def test_get_image_info(self, sample_image):
@@ -101,7 +101,7 @@ class TestThumbnailBasic:
         assert os.path.exists(output_path)
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (100, 100)
+            assert thumb.size == (100, 75)  # Aspect ratio preserved within the 100px box
 
     def test_thumbnail_custom_quality(self, sample_image, temp_dir):
         """Test thumbnail generation with custom quality."""
@@ -147,9 +147,9 @@ class TestThumbnailBasic:
             assert result is True, f"Failed to generate thumbnail from {format_name}"
             assert os.path.exists(output_path)
 
-            # Verify output is always JPEG
+            # Verify output is always JPEG, aspect preserved
             with Image.open(output_path) as thumb:
-                assert thumb.size == (180, 180)
+                assert thumb.size == (180, 135)
                 assert thumb.format == 'JPEG'
 
     def test_error_handling(self, temp_dir):
@@ -167,7 +167,7 @@ class TestThumbnailBasic:
         assert result is False
 
     def test_aspect_ratio_handling(self, temp_dir):
-        """Test that aspect ratio is properly handled with center cropping."""
+        """Test that the aspect ratio is preserved within the size box."""
         # Test portrait image
         portrait = Image.new('RGB', (400, 800), color='purple')
         portrait_path = os.path.join(temp_dir, 'portrait.jpg')
@@ -178,7 +178,7 @@ class TestThumbnailBasic:
 
         assert result is True
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Should be square
+            assert thumb.size == (90, 180)  # Aspect preserved within the 180px box
 
         # Test landscape image
         landscape = Image.new('RGB', (1200, 600), color='orange')
@@ -190,7 +190,7 @@ class TestThumbnailBasic:
 
         assert result is True
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Should be square
+            assert thumb.size == (180, 90)  # Aspect preserved within the 180px box
 
 
 if __name__ == '__main__':

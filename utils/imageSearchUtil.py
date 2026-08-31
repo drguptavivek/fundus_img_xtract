@@ -178,7 +178,8 @@ def build_direct_query(
     db_session: Session,
     filters: Dict[str, Any],
     user_lab_unit_ids: Set[int],
-    is_admin: bool
+    is_admin: bool,
+    classical_only: bool = False,
 ):
     """Build query for direct images with all applicable filters.
     
@@ -208,8 +209,10 @@ def build_direct_query(
     )
     
     # Apply user scoping
-    if not is_admin and user_lab_unit_ids:
-        query = query.filter(DirectImageUpload.lab_unit_id.in_(user_lab_unit_ids))
+    if not is_admin:
+        query = query.filter(DirectImageUpload.lab_unit_id.in_(user_lab_unit_ids or {-1}))
+    if classical_only:
+        query = query.filter(DirectImageUpload.project_id.is_(None))
     
     # Apply global filters
     if filters.get('hospital_id'):
@@ -255,7 +258,8 @@ def build_zip_query(
     db_session: Session,
     filters: Dict[str, Any],
     user_lab_unit_ids: Set[int],
-    is_admin: bool
+    is_admin: bool,
+    classical_only: bool = False,
 ):
     """Build query for ZIP images with all applicable filters.
     
@@ -279,8 +283,13 @@ def build_zip_query(
     )
     
     # Apply user scoping
-    if not is_admin and user_lab_unit_ids:
-        query = query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids))
+    if not is_admin:
+        query = query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids or {-1}))
+    if classical_only:
+        query = query.filter(
+            EncounterFile.project_id.is_(None),
+            PatientEncounters.project_id.is_(None),
+        )
     
     # Apply global filters
     if filters.get('hospital_id'):
@@ -619,7 +628,8 @@ def search_images_strict(
     # Additional options
     search_query: Optional[str] = None,
     user_id: Optional[int] = None,  # For scoping, defaults to current_user
-    image_type: Optional[str] = None  # 'direct', 'zip', or None for both
+    image_type: Optional[str] = None,  # 'direct', 'zip', or None for both
+    classical_only: bool = False,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Search images with strict filter separation and UUID-based returns.
     
@@ -715,7 +725,13 @@ def search_images_strict(
 
         if search_scope in ['direct_only', 'both']:
             # Build and execute direct image query
-            direct_query = build_direct_query(db_session, filters, user_lab_unit_ids, is_admin)
+            direct_query = build_direct_query(
+                db_session,
+                filters,
+                user_lab_unit_ids,
+                is_admin,
+                classical_only=classical_only,
+            )
             direct_count = direct_query.count()
             total_count += direct_count
             
@@ -737,7 +753,13 @@ def search_images_strict(
         
         if search_scope in ['zip_only', 'both']:
             # Build and execute ZIP image query
-            zip_query = build_zip_query(db_session, filters, user_lab_unit_ids, is_admin)
+            zip_query = build_zip_query(
+                db_session,
+                filters,
+                user_lab_unit_ids,
+                is_admin,
+                classical_only=classical_only,
+            )
             zip_count = zip_query.count()
             total_count += zip_count
             

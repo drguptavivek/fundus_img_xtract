@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from flask import render_template, redirect, url_for, flash
 from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from flask_login import current_user
+from db_transaction_manager import get_db_session
+from models import LabUnit
+from authz.behaviors import clinical_lab_units
 
 from . import bp
 
@@ -18,10 +20,20 @@ from . import bp
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def index() -> str:
     """Main tasks page."""
-    user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+    with get_db_session() as db:
+        user_lab_unit_ids = [
+            lab_unit.id
+            for lab_unit in clinical_lab_units(
+                db, db.query(LabUnit), current_user
+            ).all()
+        ]
     if not user_lab_unit_ids:
         flash("No lab unit access.", "warning")
         return redirect(url_for("home.index"))

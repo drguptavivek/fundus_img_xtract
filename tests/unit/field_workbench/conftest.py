@@ -15,6 +15,7 @@ from models import (
     Project,
     Role,
 )
+from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import UserFactory, approve_mobile_device
 
 JWT_SECRET = "test-mobile-jwt-secret-32-chars-long"
@@ -43,6 +44,14 @@ def field_data(db_session):
     project = Project(title=f"Field Project {suffix}", code=f"FIELD_{suffix}", active=True)
     db_session.add_all([lab, other_lab, project])
     db_session.flush()
+    db_session.add_all(
+        [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
+            ProjectLabUnit(
+                project_id=project.id, lab_unit_id=other_lab.id, active=True
+            ),
+        ]
+    )
 
     for name in ("DR", "DME", "Glaucoma"):
         if db_session.query(Disease).filter_by(name=name).first() is None:
@@ -65,6 +74,17 @@ def field_data(db_session):
             role_id=_role(db_session, "field_optometrist").id,
             scope_type="lab_unit",
             lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    # An unrelated project-wide role must not widen the field role's Lab scope.
+    db_session.add(
+        ProjectRoleGrant(
+            project_id=project.id,
+            user_id=user.id,
+            role_id=_role(db_session, "project_admin").id,
+            scope_type="project",
+            lab_unit_id=None,
             active=True,
         )
     )

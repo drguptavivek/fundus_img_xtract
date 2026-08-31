@@ -9,10 +9,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
+from authz import access_context
 from db_transaction_manager import get_db_session
-from app_cache import cache
 from models import Consensus, Disease, DiseaseGrading, Grade, GradingTask, LabUnit, ImageMetadata
-from authz import scope
+from grading.access import inter_rater_grade_rows, scope_inter_rater_grades
 
 
 def register_routes(bp):
@@ -29,7 +29,7 @@ def _parse_date(value: str | None) -> Optional[_date]:
         return None
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def inter_rater_compare():
     """Compare user's own grades against other graders for the same tasks."""
     page = max(1, request.args.get("page", default=1, type=int) or 1)
@@ -51,14 +51,7 @@ def inter_rater_compare():
             flash("No diseases configured.", "warning")
             return render_template("grading/inter_rater_compare.html", rows=[], diseases=[], grade_options=[])
 
-        # Get allowed lab units via scoping
-        lu_query = db.query(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'tasks.view')
-        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
-        
-        if not allowed_lab_unit_ids:
-            flash("No lab unit access.", "warning")
-            return render_template("grading/inter_rater_compare.html", rows=[], diseases=diseases, grade_options=[])
+        context = access_context(db, current_user)
 
         grade_options: List[DiseaseGrading] = []
         disease_grade_map: Dict[int, List[str]] = {}
@@ -103,7 +96,6 @@ def inter_rater_compare():
             .filter(
                 Grade.grader_user_id == current_user.id,
                 GradingTask.disease_id == disease_id,
-                GradingTask.lab_unit_id.in_(allowed_lab_unit_ids),
             )
             .options(
                 joinedload(GradingTask.lab_unit),
@@ -111,6 +103,7 @@ def inter_rater_compare():
                 joinedload(GradingTask.direct_image),
             )
         )
+        base_query = scope_inter_rater_grades(base_query, context)
 
         if own_grades_filter:
             base_query = base_query.filter(Grade.grade_name.in_(own_grades_filter))
@@ -120,33 +113,11 @@ def inter_rater_compare():
         if date_before:
             base_query = base_query.filter(Grade.created_at < datetime.combine(date_before, datetime.max.time()))
 
-        cache_key = None
-        if disease_id:
-            key_parts = {
-                "user_id": current_user.id,
-                "disease_id": disease_id,
-                "own": tuple(sorted(own_grades_filter)),
-                "res": tuple(sorted(resident_grades_filter)),
-                "arb": tuple(sorted(arbitrator_grades_filter)),
-                "final": tuple(sorted(final_grades_filter)),
-                "review": tuple(sorted(review_grades_filter)),
-                "after": str(date_after) if date_after else "",
-                "before": str(date_before) if date_before else "",
-            }
-            cache_key = f"inter_rater:{hash(frozenset(key_parts.items()))}"
-
-        cached_rows = cache.get(cache_key) if cache_key else None
-
         filtered_rows: List[Dict[str, Any]] = []
+        self_rows: List[Tuple[Grade, GradingTask, LabUnit]] = base_query.order_by(Grade.created_at.desc()).all()
+        task_ids = [row.GradingTask.id for row in self_rows]
 
-        if cached_rows is not None:
-            filtered_rows = cached_rows
-            task_ids = [row["task_id"] for row in filtered_rows]
-        else:
-            self_rows: List[Tuple[Grade, GradingTask, LabUnit]] = base_query.order_by(Grade.created_at.desc()).all()
-            task_ids = [row.GradingTask.id for row in self_rows]
-
-        if cached_rows is None and task_ids:
+        if task_ids:
             # Fetch other roles for these tasks
             other_grades_map: Dict[int, List[Grade]] = {}
             review_grades_map: Dict[int, List[Grade]] = {}
@@ -221,9 +192,6 @@ def inter_rater_compare():
                     }
                 )
 
-            if cache_key:
-                cache.set(cache_key, filtered_rows, timeout=600)  # 10 minutes
-
         total = len(filtered_rows)
         total_pages = max(1, (total + per_page - 1) // per_page)
         start = (page - 1) * per_page
@@ -296,27 +264,21 @@ def inter_rater_compare():
         )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def inter_rater_viewer(image_uuid: str):
     """Serve just the viewer card for HTMX swaps."""
     with get_db_session() as db:
-        # Get allowed lab units via scoping
-        lu_query = db.query(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'tasks.view')
-        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
-        
-        if not allowed_lab_unit_ids:
-            return ("", 403)
-
+        context = access_context(db, current_user)
         task = (
             db.query(GradingTask)
+            .join(Grade, Grade.task_id == GradingTask.id)
             .filter(
                 and_(
-                    GradingTask.lab_unit_id.in_(allowed_lab_unit_ids),
                     or_(
                         GradingTask.encounter_file.has(uuid=image_uuid),
                         GradingTask.direct_image.has(uuid=image_uuid),
                     ),
+                    inter_rater_grade_rows(context),
                 )
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))

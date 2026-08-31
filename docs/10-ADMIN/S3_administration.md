@@ -4,11 +4,15 @@
 
 Administering S3 storage configurations for hospitals. This guide covers creating, managing, and monitoring S3 configurations through the admin interface.
 
+All configuration, credential, sync-status, and retry routes require the global
+`admin` role. Hospital selection is a filter for administrators; it does not
+delegate access to `local_admin`, Lab Unit, or project roles.
+
 ## S3 Configuration Management
 
 ### Creating a New S3 Configuration
 
-**Route:** `GET /admin/s3-configs/create`
+**Route:** `GET /admin/s3-configs/new`
 
 **Required Fields:**
 
@@ -119,7 +123,7 @@ Displays all S3 configurations with:
 
 ### Hospital-Level Dashboard
 
-**Route:** `GET /admin/s3-sync-hospital/<hospital_id>`
+**Route:** `GET /admin/s3-sync-dashboard/hospital/<hospital_id>`
 
 **Displays:**
 
@@ -186,7 +190,7 @@ Displays all S3 configurations with:
 
 ### Manual Rotation
 
-**Route:** `GET /admin/s3-configs/<id>/rotate-credentials`
+**Route:** `POST /admin/s3-configs/<id>/rotate-pepper`
 
 **Process:**
 1. User enters new access key and secret key
@@ -221,7 +225,7 @@ The `url_signing_pepper` field is used to generate HMAC-signed URLs for secure m
 
 ### Test Connection
 
-**Route:** `POST /admin/s3-configs/<id>/test`
+**Route:** `POST /admin/s3-configs/<id>/test-connection`
 
 **Tests:**
 1. Decrypt credentials
@@ -300,7 +304,8 @@ S3_SYNC_STATUS_UPDATE | sync_id=123 | status=success | attempt_count=1
 
 ### Health Check
 
-**Route:** `GET /admin/api/s3-health/<config_id>`
+Operational status is available from `GET /admin/api/s3-sync-status` and
+`GET /admin/api/s3-sync-stats`.
 
 **Response:**
 ```json

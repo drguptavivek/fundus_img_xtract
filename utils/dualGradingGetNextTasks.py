@@ -13,6 +13,7 @@ from utils.env_loader import load_environment
 from db_transaction_manager import transaction_scope
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from encounter_sets.grading_records import reconcile_active_packages
+from tasks.lineage import valid_task_lineage
 
 load_environment()
 
@@ -128,6 +129,7 @@ def _exclude_linked_state_mismatches(db, query, disease_id: int):
             )
         )
         .where(mismatch_filter)
+        .where(valid_task_lineage(LinkedTask))
     )
 
     return query.filter(~mismatch_exists)
@@ -151,7 +153,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         reconcile_active_packages(db)
 
     # Build query for tasks
-    query = db.query(GradingTask)
+    query = db.query(GradingTask).filter(valid_task_lineage())
     
     # Filter by eligible lab units
     query = query.filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
@@ -182,6 +184,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
                      or_(
                          and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
                          and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id),
+                         and_(GradingTask.patient_encounter_id != None, GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id),
                          and_(GradingTask.encounter_set_image_id != None, GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id),
                      ),
                      LinkedTask.disease_id.in_(linked_ids)
@@ -262,6 +265,7 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
         db.query(GradingTask)
         .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
         .filter(GradingTask.disease_id == disease_id)
+        .filter(valid_task_lineage())
         .filter(GradingTask.state == "resident2_done")
         .filter(resident_missing)
         .filter(resident2_exists.exists())
@@ -492,7 +496,8 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     # Build the base query
     query = db.query(GradingTask).filter(
         GradingTask.lab_unit_id.in_(eligible_lab_unit_ids),
-        GradingTask.disease_id == disease_id
+        GradingTask.disease_id == disease_id,
+        valid_task_lineage(),
     )
     
     # Filter by role-specific states and TaskTracker
@@ -515,9 +520,10 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
              query = query.outerjoin(
                  LinkedTask,
                  and_(
-                     or_(
+                 or_(
                          and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
                          and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id),
+                         and_(GradingTask.patient_encounter_id != None, GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id),
                          and_(GradingTask.encounter_set_image_id != None, GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id),
                      ),
                      LinkedTask.disease_id.in_(linked_ids)
@@ -705,6 +711,8 @@ def _atomically_get_and_lock_linked_followup_task(
         .filter(PrimaryTask.disease_id == primary_disease_id)
         .filter(LinkedTask.disease_id == linked_disease_id)
         .filter(PrimaryTask.lab_unit_id.in_(eligible_lab_unit_ids))
+        .filter(valid_task_lineage(PrimaryTask))
+        .filter(valid_task_lineage(LinkedTask))
         .filter(mismatch_filter)
         .filter(~linked_tracker_exists)
         .filter(~conflict_exists.exists())
@@ -751,6 +759,7 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
         .filter(GradingTask.disease_id == disease_id)
         .filter(GradingTask.state == "resident2_done")
+        .filter(valid_task_lineage())
         .filter(resident_missing)
         .filter(resident2_exists.exists())
         .filter(~conflict_exists.exists())

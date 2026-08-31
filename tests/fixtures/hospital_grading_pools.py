@@ -21,8 +21,8 @@ def hospital_a_grading_pool(db_session, test_lab_units, core_test_data):
     """
     pool = UserFactory.create_grader_pool(
         db_session,
-        hospital_id=1,
-        lab_unit_id=1,  # Community Ophthalmology
+        hospital_id=100,
+        lab_unit_id=100,  # Lab A1 (Hospital A)
         glaucoma_id=core_test_data['glaucoma'].id,
         dr_id=core_test_data['dr'].id
     )
@@ -39,8 +39,8 @@ def hospital_b_grading_pool(db_session, test_lab_units, core_test_data):
     """
     pool = UserFactory.create_grader_pool(
         db_session,
-        hospital_id=2,
-        lab_unit_id=4,  # Corena Lab
+        hospital_id=101,
+        lab_unit_id=103,  # Lab B1 (Hospital B)
         glaucoma_id=core_test_data['glaucoma'].id,
         dr_id=core_test_data['dr'].id
     )
@@ -126,8 +126,8 @@ def cross_grader_a_to_b(db_session, test_lab_units, core_test_data):
     Cross-hospital grader: Belongs to Hospital A, can grade Hospital B tasks.
     
     Attributes:
-        hospital_id=1 (Hospital A)
-        Can grade in lab_unit_id=4 (Hospital B)
+        hospital_id=100 (Hospital A)
+        Can grade in lab_unit_id=103 (Hospital B)
     """
     from models import UserDiseaseUnitRole
     
@@ -135,8 +135,8 @@ def cross_grader_a_to_b(db_session, test_lab_units, core_test_data):
     user = UserFactory.create_with_hospital(
         db_session,
         role_name='ophthalmologist',
-        hospital_id=1,
-        lab_unit_ids=[1],  # Hospital A lab for uploads
+        hospital_id=100,
+        lab_unit_ids=[100],  # Hospital A lab for uploads
         username='cross_grader_a_to_b'
     )
     
@@ -145,7 +145,7 @@ def cross_grader_a_to_b(db_session, test_lab_units, core_test_data):
         perm = UserDiseaseUnitRole(
             user_id=user.id,
             disease_id=disease_id,
-            lab_unit_id=4,  # Hospital B lab unit!
+            lab_unit_id=103,  # Hospital B lab unit!
             can_grade_resident=True,
             can_grade_resident2=True,
             can_arbitrate=False
@@ -162,8 +162,8 @@ def cross_grader_b_to_a(db_session, test_lab_units, core_test_data):
     Cross-hospital grader: Belongs to Hospital B, can grade Hospital A tasks.
     
     Attributes:
-        hospital_id=2 (Hospital B)
-        Can grade in lab_unit_id=1 (Hospital A)
+        hospital_id=101 (Hospital B)
+        Can grade in lab_unit_id=100 (Hospital A)
     """
     from models import UserDiseaseUnitRole
     
@@ -171,8 +171,8 @@ def cross_grader_b_to_a(db_session, test_lab_units, core_test_data):
     user = UserFactory.create_with_hospital(
         db_session,
         role_name='ophthalmologist',
-        hospital_id=2,
-        lab_unit_ids=[4],  # Hospital B lab for uploads
+        hospital_id=101,
+        lab_unit_ids=[103],  # Hospital B lab for uploads
         username='cross_grader_b_to_a'
     )
     
@@ -181,7 +181,7 @@ def cross_grader_b_to_a(db_session, test_lab_units, core_test_data):
         perm = UserDiseaseUnitRole(
             user_id=user.id,
             disease_id=disease_id,
-            lab_unit_id=1,  # Hospital A lab unit!
+            lab_unit_id=100,  # Hospital A lab unit!
             can_grade_resident=True,
             can_grade_resident2=True,
             can_arbitrate=False

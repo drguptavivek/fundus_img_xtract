@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import get_db_session
 from review.my_discrepancy_reviews import my_discrepancy_review_page
 
@@ -12,7 +11,7 @@ from . import api_bp
 
 
 @api_bp.route("/review/me/discrepancy-reviews", methods=["GET"])
-@roles_or_project_grant_required("discrepancy_reviewer")
+@login_required
 def get_my_discrepancy_reviews():
     """Return the signed-in reviewer's scoped discrepancy-review history."""
     page = max(1, request.args.get("page", 1, type=int) or 1)

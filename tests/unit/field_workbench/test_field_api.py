@@ -1,7 +1,6 @@
 """Field surface: scoping, queue, status rollup, projection, and fetch."""
 import pytest
 
-from field_workbench import cache as field_cache
 from tests.helpers.factories import UserFactory, approve_mobile_device
 
 from tests.unit.field_workbench.conftest import CAPTURE_DATE, JWT_SECRET

@@ -21,10 +21,17 @@ from models import (
     ImagePiiVerification,
     LabUnit,
     PatientEncounters,
+    User,
     ZipFile,
 )
 from utils.fileUtils import abs_from_parts
 from utils.log_sanitize import sanitize_log_value
+from utils.hospital_scoping import get_user_lab_units_in_hospital
+from utils.backfill_scope import (
+    strict_direct_condition,
+    strict_direct_scope,
+    strict_encounter_scope,
+)
 from utils.upload_processing import process_file_data_pipeline
 
 _LOGGER = logging.getLogger("image_metadata_backfill")
@@ -32,6 +39,28 @@ _METADATA_LOGGER = logging.getLogger("image_metadata")
 _PII_SLEEP_SECONDS = 3
 _ITEM_SLEEP_SECONDS = 3
 _STOP_KEY = "image_metadata_backfill_stop:global"
+
+
+def _current_job_lab_units(db, job: ImageMetadataBackfillJob) -> set[int]:
+    """Intersect queued scope with the creator's live Admin authority."""
+    try:
+        queued = json.loads(job.allowed_lab_unit_ids or "")
+        if not isinstance(queued, list) or any(type(value) is not int for value in queued):
+            return set()
+        queued_ids = set(queued)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return set()
+
+    # The scheduled system maintenance job has no human authority to revoke.
+    if job.created_by_id is None and job.created_by_username == "system":
+        return queued_ids
+    if job.created_by_id is None:
+        return set()
+    creator = db.get(User, job.created_by_id)
+    if creator is None or not creator.is_active or not creator.has_role("admin"):
+        return set()
+    current_ids = get_user_lab_units_in_hospital(creator.id, hospital_id=job.hospital_id, db=db)
+    return queued_ids & current_ids
 
 
 def _stop_requested() -> bool:
@@ -130,12 +159,7 @@ def _needs_pii(db, image_uuid: str, image_variant: str) -> bool:
 
 
 def _apply_lab_unit_scope(query, allowed_lab_unit_ids: set[int]):
-    if not allowed_lab_unit_ids:
-        return query.filter(False)
-    return query.filter(
-        (EncounterFile.lab_unit_id.in_(allowed_lab_unit_ids))
-        | (PatientEncounters.lab_unit_id.in_(allowed_lab_unit_ids))
-    )
+    return strict_encounter_scope(query, allowed_lab_unit_ids)
 
 
 def _iter_encounter_items(db, *, allowed_lab_unit_ids: set[int]) -> Iterable[ImageWorkItem]:
@@ -162,12 +186,11 @@ def _iter_encounter_items(db, *, allowed_lab_unit_ids: set[int]) -> Iterable[Ima
 def _iter_direct_items(db, *, allowed_lab_unit_ids: set[int]) -> Iterable[ImageWorkItem]:
     if not allowed_lab_unit_ids:
         return []
-    rows = (
+    query = (
         db.query(DirectImageUpload.id, DirectImageUpload.uuid, DirectImageUpload.folder_rel, DirectImageUpload.filename, DirectImageUpload.edited_filename)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
         .order_by(DirectImageUpload.id.asc())
-        .all()
     )
+    rows = strict_direct_scope(query, allowed_lab_unit_ids).all()
     for upload_id, image_uuid, folder_rel, filename, edited_filename in rows:
         if not image_uuid or not folder_rel or not filename:
             continue
@@ -242,7 +265,7 @@ def _count_missing_candidates(
 
     direct_base = (
         db.query(DirectImageUpload.id, DirectImageUpload.uuid, DirectImageUpload.edited_filename)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
     )
 
     direct_missing = (
@@ -306,13 +329,13 @@ def get_total_image_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[str, i
 
     direct_total = (
         db.query(DirectImageUpload.id)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .count()
     )
 
     edited_total = (
         db.query(DirectImageUpload.id)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .filter(DirectImageUpload.edited_filename.isnot(None))
         .count()
     )
@@ -354,7 +377,7 @@ def get_present_metadata_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[s
     direct_present = (
         db.query(ImageMetadata.id)
         .join(DirectImageUpload, ImageMetadata.image_uuid == DirectImageUpload.uuid)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .filter(ImageMetadata.image_variant == "orig")
         .count()
     )
@@ -362,7 +385,7 @@ def get_present_metadata_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[s
     edited_present = (
         db.query(ImageMetadata.id)
         .join(DirectImageUpload, ImageMetadata.image_uuid == DirectImageUpload.uuid)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .filter(DirectImageUpload.edited_filename.isnot(None))
         .filter(ImageMetadata.image_variant == "edited")
         .count()
@@ -392,7 +415,7 @@ def get_present_pii_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[str, i
     direct_present = (
         db.query(ImagePiiVerification.id)
         .join(DirectImageUpload, ImagePiiVerification.image_uuid == DirectImageUpload.uuid)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .filter(ImagePiiVerification.image_variant == "orig")
         .count()
     )
@@ -400,7 +423,7 @@ def get_present_pii_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[str, i
     edited_present = (
         db.query(ImagePiiVerification.id)
         .join(DirectImageUpload, ImagePiiVerification.image_uuid == DirectImageUpload.uuid)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
         .filter(DirectImageUpload.edited_filename.isnot(None))
         .filter(ImagePiiVerification.image_variant == "edited")
         .count()
@@ -433,7 +456,7 @@ def get_pii_assessed_counts(db, *, allowed_lab_unit_ids: set[int]) -> dict[str, 
     direct_base = (
         db.query(ImagePiiVerification.source, func.count(ImagePiiVerification.id))
         .join(DirectImageUpload, ImagePiiVerification.image_uuid == DirectImageUpload.uuid)
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        .filter(strict_direct_condition(allowed_lab_unit_ids))
     )
     for source, total in direct_base.filter(ImagePiiVerification.image_variant == "orig").group_by(ImagePiiVerification.source).all():
         if source in counts:
@@ -457,8 +480,13 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
         pass
 
     with get_db_session() as db:
-        job = db.get(ImageMetadataBackfillJob, job_id)
-        if not job or job.status not in {"queued", "running"}:
+        job = (
+            db.query(ImageMetadataBackfillJob)
+            .filter(ImageMetadataBackfillJob.id == job_id)
+            .with_for_update(skip_locked=True)
+            .one_or_none()
+        )
+        if not job or job.status != "queued":
             return
         if _stop_requested():
             job.status = "failed"
@@ -468,12 +496,14 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
             db.commit()
             return
 
-        allowed_lab_unit_ids: set[int] = set()
-        if job.allowed_lab_unit_ids:
-            try:
-                allowed_lab_unit_ids = set(json.loads(job.allowed_lab_unit_ids))
-            except (TypeError, json.JSONDecodeError):
-                allowed_lab_unit_ids = set()
+        allowed_lab_unit_ids = _current_job_lab_units(db, job)
+        if not allowed_lab_unit_ids:
+            job.status = "failed"
+            job.error_message = "Creator authorization is missing or no longer active"
+            job.finished_at = utcnow()
+            db.add(job)
+            db.commit()
+            return
 
         job.status = "running"
         job.started_at = utcnow()
@@ -497,6 +527,8 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
         nonlocal processed_since_commit
         processed_since_commit += 1
         if processed_since_commit >= 10:
+            if _current_job_lab_units(db, job_obj) != allowed_lab_unit_ids:
+                raise PermissionError("Creator authorization changed during backfill")
             db.add(job_obj)
             db.commit()
             processed_since_commit = 0
@@ -506,17 +538,21 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
             job = db.get(ImageMetadataBackfillJob, job_id)
             if not job:
                 return
-            allowed_lab_unit_ids: set[int] = set()
-            if job.allowed_lab_unit_ids:
-                try:
-                    allowed_lab_unit_ids = set(json.loads(job.allowed_lab_unit_ids))
-                except (TypeError, json.JSONDecodeError):
-                    allowed_lab_unit_ids = set()
+            allowed_lab_unit_ids = _current_job_lab_units(db, job)
+            if not allowed_lab_unit_ids:
+                job.status = "failed"
+                job.error_message = "Creator authorization is missing or no longer active"
+                job.finished_at = utcnow()
+                db.add(job)
+                db.commit()
+                return
 
             items = list(_iter_encounter_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids)) + list(
                 _iter_direct_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids)
             )
             for item in items:
+                if _current_job_lab_units(db, job) != allowed_lab_unit_ids:
+                    raise PermissionError("Creator authorization changed during backfill")
                 if _stop_requested():
                     job.status = "failed"
                     job.error_message = "Stopped by admin"
@@ -591,6 +627,8 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
                 _maybe_commit(db, job)
                 time.sleep(_ITEM_SLEEP_SECONDS)
 
+            if _current_job_lab_units(db, job) != allowed_lab_unit_ids:
+                raise PermissionError("Creator authorization changed during backfill")
             job.status = "completed"
             job.finished_at = utcnow()
             db.add(job)

@@ -86,14 +86,14 @@ def main(argv):
 
         # Warm caches so steady-state is measured.
         get_user_kpi_pending_task_count_data(
-            db, user_id, exclude_enforced_project_encounter_sets=True
+            db, user_id, exclude_project_encounter_sets=True
         )
         db.expire_all()
 
         with Recorder(db) as rec:
             t0 = time.perf_counter()
             get_user_kpi_pending_task_count_data(
-                db, user_id, exclude_enforced_project_encounter_sets=True
+                db, user_id, exclude_project_encounter_sets=True
             )
             wall = time.perf_counter() - t0
 

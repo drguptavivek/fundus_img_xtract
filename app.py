@@ -184,11 +184,28 @@ def _configure_executors(app: Flask) -> None:
 
 
 def _register_csrf_protection(app: Flask) -> None:
+    from flask_login import current_user
+
+    # Run CSRF from this single hook so bearer-authenticated hybrid APIs can be
+    # exempted without exempting the same endpoint when used by a web session.
+    app.config["WTF_CSRF_CHECK_DEFAULT"] = False
+
     def csrf_protect():
+        if not app.config.get("WTF_CSRF_ENABLED", True):
+            return
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
-            if view_func and getattr(view_func, '_token_auth_applied', False):
+            if view_func and (
+                getattr(view_func, '_token_auth_applied', False)
+                or getattr(view_func, '_credential_auth_applied', False)
+                or (
+                    getattr(view_func, '_session_or_token_auth_applied', False)
+                    and not current_user.is_authenticated
+                    and request.headers.get("Authorization", "").startswith("Bearer ")
+                )
+            ):
                 return None
+        csrf.protect()
         auth_logger = logging.getLogger("auth")
         if not auth_logger.isEnabledFor(logging.DEBUG):
             return None
@@ -202,21 +219,10 @@ def _register_csrf_protection(app: Flask) -> None:
             auth_logger.debug(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
 
             try:
-                session_keys = list(session.keys()) if session else []
                 auth_logger.debug(
-                    "CSRF Check - Session keys: %s",
-                    sanitize_log_value(session_keys),
+                    "CSRF Check - Session CSRF token exists: %s",
+                    "csrf_token" in session,
                 )
-                if 'csrf_token' in session:
-                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: True")
-                else:
-                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: False")
-
-                if hasattr(session, 'session_id'):
-                    auth_logger.debug(
-                        "CSRF Check - Session ID: %s",
-                        sanitize_log_value(session.session_id),
-                    )
 
                 cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
                 session_cookie = request.cookies.get(cookie_name)
@@ -224,11 +230,6 @@ def _register_csrf_protection(app: Flask) -> None:
                     "CSRF Check - Session cookie exists: %s",
                     sanitize_log_value(session_cookie is not None),
                 )
-                if session_cookie:
-                    auth_logger.debug(
-                        "CSRF Check - Session cookie value: %s",
-                        sanitize_log_value(session_cookie[:50]),
-                    )
 
             except Exception as e:
                 auth_logger.error(
@@ -240,17 +241,6 @@ def _register_csrf_protection(app: Flask) -> None:
                 auth_logger.debug(
                     "CSRF Check - Form keys: %s",
                     sanitize_log_value(list(request.form.keys())),
-                )
-                if 'csrf_token' in request.form:
-                    auth_logger.debug(
-                        "CSRF Check - Form CSRF token value: %s",
-                        sanitize_log_value(request.form["csrf_token"][:50]),
-                    )
-            if request.headers:
-                csrf_headers = {k: v for k, v in request.headers.items() if 'csrf' in k.lower()}
-                auth_logger.debug(
-                    "CSRF Check - CSRF Headers: %s",
-                    sanitize_log_value(csrf_headers),
                 )
 
     app.before_request(csrf_protect)
@@ -376,23 +366,20 @@ def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> N
         forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
         client_ip = forwarded_for or request.remote_addr or "-"
         ua = request.headers.get("User-Agent", "-")
-        full_url = request.url
+        endpoint = request.endpoint or "unmatched"
 
         if request.path == "/login" and response.status_code == 200:
             if hasattr(response, 'headers'):
-                set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
+                sets_cookie = any(
+                    key.lower() == "set-cookie"
+                    for key, _value in response.headers.items()
+                )
                 auth_logger = logging.getLogger("auth")
-                if set_cookie_headers:
-                    auth_logger.info(
-                        "Login response - Setting cookies: %s",
-                        sanitize_log_value(set_cookie_headers),
-                    )
-                else:
-                    auth_logger.info("Login response - No cookies being set")
+                auth_logger.info("Login response - sets_cookie=%s", sets_cookie)
 
         line = (
             f"{sanitize_log_value(client_ip)} {sanitize_log_value(request.method)} "
-            f"{sanitize_log_value(full_url)} {sanitize_log_value(response.status_code)} "
+            f"endpoint={sanitize_log_value(endpoint)} {sanitize_log_value(response.status_code)} "
             f"UA={sanitize_log_value(ua)} duration={sanitize_log_value(duration_ms if duration_ms is not None else '-')}ms"
         )
 
@@ -589,16 +576,51 @@ def _register_auth(app: Flask) -> None:
     login_manager.login_view = "auth.login"
 
 
+PUBLIC_SESSION_PATHS = frozenset(
+    {
+        "/",
+        "/login",
+        "/favicon.ico",
+        "/robots.txt",
+        "/mobile",
+        "/style_guide",
+        "/forgot-password",
+        "/reset-password",
+        "/healthz",
+        "/check-email-status",
+        "/email-sse",
+        "/test-rate-limit",
+        "/refresh-captcha",
+        "/captcha-audio",
+        "/analytics",
+        "/sitemap.xml",
+    }
+)
+PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
+
+
 def _register_login_guard(app: Flask) -> None:
     @app.before_request
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
         path = request.path or "/"
 
+        # Unmatched URLs contain no callable application surface; preserve a
+        # real 404 instead of disguising it as an authentication redirect.
+        if request.endpoint is None:
+            return
+
         # Allow routes that handle their own authentication (e.g. via JWT)
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
-            if view_func and getattr(view_func, '_token_auth_applied', False):
+            if view_func and (
+                getattr(view_func, "_token_auth_applied", False)
+                or getattr(view_func, "_credential_auth_applied", False)
+                or (
+                    getattr(view_func, "_session_or_token_auth_applied", False)
+                    and request.headers.get("Authorization", "").startswith("Bearer ")
+                )
+            ):
                 return
 
         try:
@@ -614,30 +636,7 @@ def _register_login_guard(app: Flask) -> None:
             session.modified = True
             mark_session_ended(prior_session_id)
 
-        if (
-            path == "/"
-            or path == "/login"
-            or path.startswith("/static/")
-            or path == "/favicon.ico"
-            or path == "/robots.txt"
-            or path == "/mobile"
-            or path.startswith("/mobile/")
-            or path == "/style_guide"
-            or path == "/forgot-password"
-            or path == "/reset-password"
-            or path == "/healthz"
-            or path == "/check-email-status"
-            or path == "/email-sse"
-            or path == "/test-rate-limit"
-            or path == "/refresh-captcha"
-            or path == "/captcha-audio"
-            or path.startswith("/help")
-            or path == "/analytics"
-            or path == "/sitemap.xml"
-            or path.startswith("/api/analytics/")
-            or path.startswith("/api/mobile/v1/auth/")
-            or path.startswith("/datasets/download")
-        ):
+        if path in PUBLIC_SESSION_PATHS or path.startswith(PUBLIC_SESSION_PREFIXES):
             return
         if not current_user.is_authenticated:
             prior_session_id = getattr(session, "session_id", None)
@@ -668,7 +667,10 @@ def _register_stack_trace_handlers(app: Flask) -> None:
         runtime_logger = logging.getLogger("runtime_error")
         if runtime_logger.isEnabledFor(logging.DEBUG):
             from utils.stack_trace_handler import log_current_stack
-            log_current_stack(f"Processing request: {request.method} {request.url}")
+            log_current_stack(
+                f"Processing request: {request.method} "
+                f"endpoint={request.endpoint or 'unmatched'}"
+            )
 
     @app.after_request
     def _global_stack_trace_after_handler(response):
@@ -681,7 +683,7 @@ def _register_stack_trace_handlers(app: Flask) -> None:
             runtime_logger.debug(
                 "Request completed: %s %s Status: %s Duration: %.3fs",
                 sanitize_log_value(request.method),
-                sanitize_log_value(request.url),
+                sanitize_log_value(request.endpoint or "unmatched"),
                 sanitize_log_value(response.status_code),
                 duration or 0.0,
             )
@@ -709,16 +711,13 @@ def _register_error_handlers(app: Flask) -> None:
         auth_logger.error(
             "CSRF Error - Request: %s %s",
             sanitize_log_value(request.method),
-            sanitize_log_value(request.url),
+            sanitize_log_value(request.endpoint or "unmatched"),
         )
         auth_logger.error(
             "CSRF Error - User-Agent: %s",
             sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
         )
-        auth_logger.error(
-            "CSRF Error - Referer: %s",
-            sanitize_log_value(request.headers.get("Referer", "None")),
-        )
+        auth_logger.error("CSRF Error - Referer present: %s", "Referer" in request.headers)
         auth_logger.error(
             "CSRF Error - Form data keys: %s",
             sanitize_log_value(list(request.form.keys()) if request.form else "None"),

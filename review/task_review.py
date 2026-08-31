@@ -1,5 +1,5 @@
 from flask import render_template, request, flash, redirect, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy.orm import joinedload
 import logging
 import json
@@ -7,7 +7,6 @@ from json import JSONDecodeError
 import re
 from urllib.parse import parse_qs, urlsplit
 
-from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus, ImageMetadata
 
@@ -17,11 +16,11 @@ from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.review_navigation import get_next_review_tasks
 from encounter_sets.permissions import (
-    CAPABILITY_DISCREPANCY_REVIEW,
     apply_task_capability_scope,
     capability_lab_unit_ids,
     user_has_task_capability,
 )
+DISCREPANCY_ROLES = frozenset({"discrepancy_reviewer"})
 from review_history import (
     InvalidReviewSubmissionToken,
     StaleReviewSubmissionError,
@@ -245,7 +244,7 @@ def _review_action_redirect(
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
-@roles_or_project_grant_required("discrepancy_reviewer")
+@login_required
 def review_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
@@ -264,7 +263,7 @@ def review_task_details(task_id: int):
             query,
             GradingTask,
             current_user,
-            CAPABILITY_DISCREPANCY_REVIEW,
+            DISCREPANCY_ROLES,
         )
         task = query.first()
         
@@ -275,7 +274,7 @@ def review_task_details(task_id: int):
             db,
             user=current_user,
             task_id=task.id,
-            capability=CAPABILITY_DISCREPANCY_REVIEW,
+            roles=DISCREPANCY_ROLES,
         ):
             from flask import abort
             abort(404, description="Task not found or access denied")
@@ -299,7 +298,7 @@ def review_task_details(task_id: int):
         user_lab_unit_ids = sorted(capability_lab_unit_ids(
             db,
             user=current_user,
-            capability=CAPABILITY_DISCREPANCY_REVIEW,
+            roles=DISCREPANCY_ROLES,
         ))
         
         # The grades table permits one review row per task/user. Use the
@@ -916,7 +915,7 @@ def review_task_details(task_id: int):
 
 
 @bp.route("/my-discrepancy-reviews", methods=["GET"])
-@roles_or_project_grant_required("discrepancy_reviewer")
+@login_required
 def my_discrepancy_reviews():
     """Render discrepancy-review history owned by the signed-in reviewer."""
     page = max(1, request.args.get("page", 1, type=int) or 1)

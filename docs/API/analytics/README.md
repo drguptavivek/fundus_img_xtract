@@ -10,8 +10,6 @@ This folder documents the analytics pages and JSON endpoints.
 
 ## Media and KPI pages
 
-- `GET /analytics/encounter-files`
-- `GET /analytics/direct-uploads/kpi`
 - `GET /analytics/images`
 - `GET /analytics/encounters`
 - `GET /analytics/encounter/view/<int:encounter_id>`
@@ -88,13 +86,22 @@ required.
 - `POST /analytics/dataset-curation/<dataset_uuid>/toggle-item`
 - `POST /analytics/dataset-curation/<dataset_uuid>/add-more`
 - `POST /analytics/dataset-export/<dataset_uuid>`
-- `POST /analytics/dataset-curation/<dataset_uuid>/share`
+- Dataset sharing is managed by the canonical `POST /datasets/share` endpoint.
 - `POST /analytics/dataset-curation/<dataset_uuid>/finalize`
 - `POST /analytics/dataset-curation/<dataset_uuid>/unfinalize`
 - `GET /analytics/dataset-export/<job_token>/<path:filename>`
 - `POST /analytics/dataset-curation/<dataset_uuid>/delete`
 
 The dataset-curation routes are page workflows and are documented elsewhere only at a high level.
+
+Dataset visibility or curation does not authorize export. A masked classical
+export requires `data_exporter` over every included task; a project export
+requires `data_exporter` or the direct `pii_exporter` grant over every included
+task. Admin is break-glass for role scope only: missing, mixed, wrong-disease,
+wrong-Lab-Unit, or wrong-project task lineage still denies. Queueing, worker
+execution, regeneration, and private artifact download re-evaluate current
+authority. Public signed-share downloads retain their separate exact
+share/token/OTP contract.
 
 ## Contract Notes
 

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app_cache import cache
 from utils.dualGradingKPIs import (
     get_user_gradable_diseases,
     get_user_kpi_linked_followup_counts,
@@ -27,31 +26,7 @@ from utils.dualGradingKPIs import (
 
 # Project-allocated EncounterSet packages are presented in their own dashboard
 # panel, so every count here excludes them to avoid showing the same work twice.
-EXCLUDE_ENFORCED_PROJECT_ENCOUNTER_SETS = True
-
-# A queue card is a workload indicator, not an entitlement: it says roughly how
-# much work is waiting, and opening any task still runs the full per-task
-# eligibility check. A short TTL is therefore safe, and it keeps a burst of
-# dashboard reloads from recounting the same queues. Stale-by-at-most-30s is
-# also why the panel offers an explicit refresh.
-QUEUE_CARD_CACHE_TTL_SECONDS = 30
-
-
-def _card_cache_key(user_id: int, disease_id: int) -> str:
-    return f"grading:queue_card:{user_id}:{disease_id}"
-
-
-def _project_queues_cache_key(user_id: int) -> str:
-    return f"grading:project_queues:{user_id}"
-
-
-def invalidate_disease_queue_card(user_id: int, disease_id: int) -> None:
-    """Drop one grader's cached card for a disease."""
-    try:
-        cache.delete(_card_cache_key(user_id, disease_id))
-    except Exception:  # Cache is an optimisation; never fail a request for it.
-        pass
-
+EXCLUDE_PROJECT_ENCOUNTER_SETS = True
 
 def gradable_disease_cards(db, *, user_id: int) -> list[dict[str, Any]]:
     """The disease cards this grader should see, uncounted."""
@@ -84,20 +59,10 @@ def disease_queue_card(
     Returns ``None`` when the user holds no active eligibility for the disease,
     which the callers turn into a 404 rather than an empty card.
 
-    Results are cached per grader and disease for
-    ``QUEUE_CARD_CACHE_TTL_SECONDS``. Pass ``refresh=True`` to bypass the cached
-    value and re-store a freshly computed one; that is what the panel's refresh
-    control does. A cache failure falls through to a live count rather than
-    surfacing an error.
+    ``refresh`` remains a transport hint for existing HTMX callers; all
+    eligibility and counts are evaluated live.
     """
-    cache_key = _card_cache_key(user_id, disease_id)
-    if not refresh:
-        try:
-            cached = cache.get(cache_key)
-        except Exception:  # Cache is an optimisation, never a dependency.
-            cached = None
-        if isinstance(cached, dict):
-            return cached
+    _ = refresh
 
     diseases = get_user_gradable_diseases(db, user_id)
     disease = next((row for row in diseases if row["id"] == disease_id), None)
@@ -107,14 +72,14 @@ def disease_queue_card(
     pending = get_user_kpi_pending_task_count_data(
         db,
         user_id,
-        exclude_enforced_project_encounter_sets=EXCLUDE_ENFORCED_PROJECT_ENCOUNTER_SETS,
+        exclude_project_encounter_sets=EXCLUDE_PROJECT_ENCOUNTER_SETS,
         disease_ids={disease_id},
     ).get(disease["name"], {})
 
     linked_followups = get_user_kpi_linked_followup_counts(
         db,
         user_id,
-        exclude_enforced_project_encounter_sets=EXCLUDE_ENFORCED_PROJECT_ENCOUNTER_SETS,
+        exclude_project_encounter_sets=EXCLUDE_PROJECT_ENCOUNTER_SETS,
         disease_ids={disease_id},
     ).get(disease["name"], [])
 
@@ -143,10 +108,6 @@ def disease_queue_card(
             resident_pending or resident2_pending or arbitration_pending or linked_total
         ),
     }
-    try:
-        cache.set(cache_key, card, timeout=QUEUE_CARD_CACHE_TTL_SECONDS)
-    except Exception:  # Cache is an optimisation, never a dependency.
-        pass
     return card
 
 
@@ -158,25 +119,15 @@ def project_encounter_set_cards(
 ) -> list[dict[str, Any]]:
     """The Project EncounterSet Grading panel, as serialisable dicts.
 
-    Package reconciliation always runs, even on a cache hit: it is a write that
-    advances packages past their post-Resident2 waiting period, and other
-    request paths depend on it having happened. Only the read that follows is
-    cached, which is where the cost is - reconciliation is roughly 6% of this
-    call, the projection the rest.
+    Package reconciliation and the following authorized projection both run
+    live so revoked allocations cannot leave queue data in a shared cache.
     """
     from grading.workbench.package_workflow import reconcile_active_packages
     from grading_allocation.dashboard import list_project_encounter_set_queues
 
     reconcile_active_packages(db)
 
-    cache_key = _project_queues_cache_key(user_id)
-    if not refresh:
-        try:
-            cached = cache.get(cache_key)
-        except Exception:  # Cache is an optimisation, never a dependency.
-            cached = None
-        if isinstance(cached, list):
-            return cached
+    _ = refresh
 
     queues = [
         queue.to_dict()
@@ -184,8 +135,4 @@ def project_encounter_set_cards(
             db, user_id=user_id, reconcile=False
         )
     ]
-    try:
-        cache.set(cache_key, queues, timeout=QUEUE_CARD_CACHE_TTL_SECONDS)
-    except Exception:  # Cache is an optimisation, never a dependency.
-        pass
     return queues

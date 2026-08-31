@@ -26,7 +26,9 @@ from models import (
 from models import User
 from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
-from authz import scope
+from authz.behaviors import analytics_rows
+from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 
 @get_db_session()
@@ -54,7 +56,8 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
         
         # Apply hospital scoping if user provided
         if user:
-            tasks_query = scope(db, tasks_query, GradingTask, user, 'analytics.encounters.view')
+            tasks_query = analytics_rows(db, tasks_query, user, task_columns(GradingTask))
+        tasks_query = tasks_query.filter(valid_task_lineage())
             
         tasks_query = tasks_query.options(
             # Core relationships
@@ -225,7 +228,8 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
         
         # Apply hospital scoping if user provided
         if user:
-            tasks_query = scope(db, tasks_query, GradingTask, user, 'analytics.encounters.view')
+            tasks_query = analytics_rows(db, tasks_query, user, task_columns(GradingTask))
+        tasks_query = tasks_query.filter(valid_task_lineage())
             
         tasks_query = tasks_query.options(
             joinedload(GradingTask.disease),
@@ -688,7 +692,7 @@ def get_filtered_tasks_dataframe(db, params: Dict, user: Any, approach: int = 2)
             if 'lab_unit_id' in df.columns:
                 df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
         
-        # The database queries are already scoped by apply_scoping/manual logic.
+        # The database queries are already constrained by named authorization scopes.
         # We can still apply further local filters from params if provided.
         
         # Apply disease filter if provided

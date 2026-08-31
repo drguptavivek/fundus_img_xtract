@@ -2,6 +2,9 @@
 
 This page documents the S3 sync dashboard and its JSON controls.
 
+Every route in this surface requires the global `admin` role. Hospital selection
+is an administrative filter, not a delegated hospital or project permission.
+
 ## Routes
 
 - `GET /admin/s3-sync-dashboard`
@@ -15,7 +18,7 @@ This page documents the S3 sync dashboard and its JSON controls.
 HTML dashboard.
 
 Auth:
-- `@roles_required("admin", "local_admin")`
+- `@roles_required("admin")`
 
 Response:
 - `200 OK` HTML rendered from `templates/admin/s3_sync_dashboard.html`
@@ -25,11 +28,11 @@ Response:
 HTML detail page for one hospital.
 
 Auth:
-- `@roles_required("admin", "local_admin")`
+- `@roles_required("admin")`
 
 Response:
 - `200 OK` HTML rendered from `templates/admin/s3_sync_hospital_detail.html`
-- `302` redirect with flash if the caller cannot access the hospital or the hospital/config does not exist
+- `302` redirect with flash if the hospital/config does not exist
 
 ## `GET /admin/api/s3-sync-status`
 
@@ -39,7 +42,7 @@ Query params:
 - `limit` optional integer, default `50`
 
 Auth:
-- `@roles_required("admin", "local_admin")`
+- `@roles_required("admin")`
 
 Response `200`:
 ```json
@@ -71,7 +74,7 @@ Error responses:
 Marks a failed sync as `in_progress`.
 
 Auth:
-- `@roles_required("admin", "local_admin")`
+- `@roles_required("admin")`
 
 CSRF:
 - Required if called from browser JS. The dashboard JS sends `X-CSRFToken`.

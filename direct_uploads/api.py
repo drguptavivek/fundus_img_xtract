@@ -5,12 +5,12 @@ from . import bp
 from db_transaction_manager import get_db_session
 from utils.rate_limiter import api_rate_limit
 from models import User, LabUnit
-from auth.roles import global_uploader_or_project_assignment_required
+from auth.roles import roles_required
 from upload_profiles.service import get_user_upload_options_for_kind
 
 @bp.route("/api/lab-units/<int:user_id>", methods=["GET"])
 @login_required
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 @api_rate_limit("120 per minute")
 def get_lab_units(user_id):
     with get_db_session() as db:
@@ -26,7 +26,7 @@ def get_lab_units(user_id):
 
 @bp.route("/api/hospital/<int:lab_unit_id>", methods=["GET"])
 @login_required
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 @api_rate_limit("120 per minute")
 def get_hospital(lab_unit_id):
     with get_db_session() as db:

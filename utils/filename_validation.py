@@ -24,6 +24,8 @@ PATH_TRAVERSAL_PATTERNS = [
     r'\.\.[/\\]',  # Parent directory with separator (illegal)
     r'~/',  # Home directory
     r'%2e%2e',  # URL-encoded parent directory (case-insensitive)
+    r'%2f|%5c',  # URL-encoded separators (case-insensitive)
+    r'[/\\]\.',  # Absolute or traversal path starting with a separator
     r'\x00',  # Null byte
 ]
 
@@ -102,7 +104,9 @@ def validate_upload_filename(filename: str) -> tuple[bool, str]:
         return False, "Filename contains invalid control characters"
 
     # Check 7: Allowed characters (Unicode alnum + safe separators)
-    allowed_punct = {".", "_", "-", " ", "(", ")", "[", "]", ",", "/", "\\", ":"}
+    # Path separators and drive colons are never valid inside a bare
+    # filename: they enable traversal (./x, a/b, C:\x) and are rejected.
+    allowed_punct = {".", "_", "-", " ", "(", ")", "[", "]", ","}
     if any(not (ch.isalnum() or ch in allowed_punct) for ch in filename):
         logger.warning("Invalid characters in filename: %r", filename)
         return False, "Filename contains invalid characters"

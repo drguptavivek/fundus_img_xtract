@@ -381,8 +381,9 @@
         <div class="small">Expires at: {{ share_display.expires_at }}</div>
       </div>
       {% endif %}
-      <form method="POST" action="{{ url_for('analytics.dataset_share_create', dataset_uuid=dataset.uuid) }}">
+      <form method="POST" action="{{ url_for('datasets.share_dataset') }}">
         {{ csrf_field() }}
+        <input type="hidden" name="dataset_uuid" value="{{ dataset.uuid }}">
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label small text-muted" for="share_purpose">Purpose</label>

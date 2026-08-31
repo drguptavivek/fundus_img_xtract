@@ -1,14 +1,53 @@
-from io import BytesIO
 import json
+from io import BytesIO
+from types import SimpleNamespace
 
 from models import Camera
 
 
-def _unwrap_view(view_func):
-    current = view_func
-    while hasattr(current, "__wrapped__"):
-        current = current.__wrapped__
-    return current
+def _grant_file_uploader(db_session):
+    from models import Role, User
+
+    user = db_session.query(User).filter_by(username="test_admin").one()
+    role = db_session.query(Role).filter_by(name="fileUploader").one()
+    if role not in user.roles:
+        user.roles.append(role)
+        db_session.commit()
+    return user
+
+
+def _auth_client(app, db_session):
+    from tests.conftest import create_authenticated_client
+
+    user = _grant_file_uploader(db_session)
+    return create_authenticated_client(app, user, db_session)
+
+
+def _stub_upload_options(monkeypatch, *, camera_ids, lab_unit_id):
+    options = SimpleNamespace(
+        profiles=[
+            {
+                "upload_kinds": ["remidio", "encounter_set"],
+                "allow_remidio_zip_encounter_set": True,
+                "allow_iitk_zip_encounter_set": False,
+                "camera_ids": list(camera_ids),
+            }
+        ],
+        lab_units=[{"id": lab_unit_id}],
+        projects=[],
+    )
+    monkeypatch.setattr(
+        "remedio_zip_uploads.routes.get_user_upload_options_for_kinds",
+        lambda db, user_id, kinds: options,
+    )
+
+
+def _stub_remedio_scope(monkeypatch):
+    profile = SimpleNamespace(project_id=999, profile_id=1, default_disease_id=7)
+    monkeypatch.setattr(
+        "remedio_zip_uploads.routes.validate_remedio_upload_scope",
+        lambda db, user_id, project_id, lab_unit_id, camera_id: profile,
+    )
 
 
 def test_create_camera_with_zip_upload_flag(client, login_user, db_session):
@@ -32,14 +71,14 @@ def test_create_camera_with_zip_upload_flag(client, login_user, db_session):
 def test_edit_camera_updates_zip_upload_flag(client, login_user, db_session):
     login_user("test_admin", "Test@2026")
 
-    camera = Camera(name="Test Camera", is_zip_upload_enabled=False)
+    camera = Camera(name="Edit Zip Camera", is_zip_upload_enabled=False)
     db_session.add(camera)
     db_session.flush()
 
     response = client.post(
         f"/admin/camera/{camera.id}/edit",
         data={
-            "name": "Test Camera",
+            "name": "Edit Zip Camera",
             "is_zip_upload_enabled": "on",
         },
         follow_redirects=True,
@@ -51,18 +90,20 @@ def test_edit_camera_updates_zip_upload_flag(client, login_user, db_session):
     assert camera.is_zip_upload_enabled is True
 
 
-def test_zip_upload_form_lists_only_zip_enabled_cameras(client, login_user, db_session, monkeypatch):
-    login_user("test_admin", "Test@2026")
+def test_zip_upload_form_lists_only_zip_enabled_cameras(app, db_session, monkeypatch):
+    client = _auth_client(app, db_session)
 
+    from tests.helpers.factories import CoreEntityFactory
+
+    hospital = CoreEntityFactory.create_hospital(db_session, name="Zip Form Hospital")
+    lab_unit = CoreEntityFactory.create_lab_unit(db_session, name="Zip Form Lab", hospital_id=hospital.id)
     zip_camera = Camera(name="ZIP Camera", is_zip_upload_enabled=True)
     blocked_camera = Camera(name="Blocked Camera", is_zip_upload_enabled=False)
     db_session.add_all([zip_camera, blocked_camera])
-    db_session.flush()
+    db_session.commit()
 
-    monkeypatch.setattr("remedio_zip_uploads.routes.get_user_lab_unit_ids_no_admin_override", lambda user_id: [100])
-    client.application.view_functions["remedio_zip_uploads.upload_form"] = _unwrap_view(
-        client.application.view_functions["remedio_zip_uploads.upload_form"]
-    )
+    _stub_upload_options(monkeypatch, camera_ids=[zip_camera.id], lab_unit_id=lab_unit.id)
+
     response = client.get(
         "/remedio_zip_uploads/upload_files",
         environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
@@ -73,12 +114,16 @@ def test_zip_upload_form_lists_only_zip_enabled_cameras(client, login_user, db_s
     assert b"Blocked Camera" not in response.data
 
 
-def test_zip_upload_rejects_non_zip_enabled_camera(client, login_user, db_session, monkeypatch, tmp_path):
-    login_user("test_admin", "Test@2026")
+def test_zip_upload_rejects_non_zip_enabled_camera(app, db_session, monkeypatch, tmp_path):
+    client = _auth_client(app, db_session)
 
-    camera = Camera(name="Blocked Camera", is_zip_upload_enabled=False)
+    from tests.helpers.factories import CoreEntityFactory
+
+    hospital = CoreEntityFactory.create_hospital(db_session, name="Zip Reject Hospital")
+    lab_unit = CoreEntityFactory.create_lab_unit(db_session, name="Zip Reject Lab", hospital_id=hospital.id)
+    camera = Camera(name="Blocked Upload Camera", is_zip_upload_enabled=False)
     db_session.add(camera)
-    db_session.flush()
+    db_session.commit()
 
     upload_root = tmp_path / "uploads"
     upload_root.mkdir(parents=True, exist_ok=True)
@@ -86,33 +131,37 @@ def test_zip_upload_rejects_non_zip_enabled_camera(client, login_user, db_sessio
     monkeypatch.setattr("remedio_zip_uploads.routes.get_daily_upload_dir", lambda: upload_root)
     monkeypatch.setattr("remedio_zip_uploads.routes.db_create_job", lambda *args, **kwargs: "job-token")
     monkeypatch.setattr("remedio_zip_uploads.routes.queue_job", lambda *args, **kwargs: None)
-    monkeypatch.setattr("remedio_zip_uploads.routes.get_user_lab_unit_ids_no_admin_override", lambda user_id: [100])
-    client.application.view_functions["remedio_zip_uploads.upload_files"] = _unwrap_view(
-        client.application.view_functions["remedio_zip_uploads.upload_files"]
-    )
 
     response = client.post(
         "/remedio_zip_uploads/upload",
         data={
-            "hospital_id": "100",
-            "lab_unit_id": "100",
+            "hospital_id": str(hospital.id),
+            "project_id": "999",
+            "lab_unit_id": str(lab_unit.id),
+            "ingest_mode": "legacy_remidio",
             "camera_id": str(camera.id),
             "files": (BytesIO(b"PK\x03\x04fakezip"), "case.zip"),
         },
         content_type="multipart/form-data",
-        follow_redirects=True,
+        follow_redirects=False,
     )
 
-    assert response.status_code == 200
-    assert b"ZIP-enabled camera" in response.data
+    assert response.status_code == 302
+    with client.session_transaction() as sess:
+        flashes = [message for _, message in sess.get("_flashes", [])]
+    assert any("ZIP-enabled camera" in message for message in flashes)
 
 
-def test_zip_upload_persists_camera_id_in_sidecar_metadata(client, login_user, db_session, monkeypatch, tmp_path):
-    login_user("test_admin", "Test@2026")
+def test_zip_upload_persists_camera_id_in_sidecar_metadata(app, db_session, monkeypatch, tmp_path):
+    client = _auth_client(app, db_session)
 
-    camera = Camera(name="ZIP Camera", is_zip_upload_enabled=True)
+    from tests.helpers.factories import CoreEntityFactory
+
+    hospital = CoreEntityFactory.create_hospital(db_session, name="Zip Meta Hospital")
+    lab_unit = CoreEntityFactory.create_lab_unit(db_session, name="Zip Meta Lab", hospital_id=hospital.id)
+    camera = Camera(name="ZIP Meta Camera", is_zip_upload_enabled=True)
     db_session.add(camera)
-    db_session.flush()
+    db_session.commit()
 
     daily_upload_dir = tmp_path / "files" / "uploads" / "2026_04_18"
     daily_upload_dir.mkdir(parents=True, exist_ok=True)
@@ -129,16 +178,15 @@ def test_zip_upload_persists_camera_id_in_sidecar_metadata(client, login_user, d
     monkeypatch.setattr("remedio_zip_uploads.routes.get_daily_upload_dir", lambda: daily_upload_dir)
     monkeypatch.setattr("remedio_zip_uploads.routes.db_create_job", fake_create_job)
     monkeypatch.setattr("remedio_zip_uploads.routes.queue_job", fake_queue_job)
-    monkeypatch.setattr("remedio_zip_uploads.routes.get_user_lab_unit_ids_no_admin_override", lambda user_id: [100])
-    client.application.view_functions["remedio_zip_uploads.upload_files"] = _unwrap_view(
-        client.application.view_functions["remedio_zip_uploads.upload_files"]
-    )
+    _stub_remedio_scope(monkeypatch)
 
     response = client.post(
         "/remedio_zip_uploads/upload",
         data={
-            "hospital_id": "100",
-            "lab_unit_id": "100",
+            "hospital_id": str(hospital.id),
+            "project_id": "999",
+            "lab_unit_id": str(lab_unit.id),
+            "ingest_mode": "legacy_remidio",
             "camera_id": str(camera.id),
             "files": (BytesIO(b"PK\x03\x04fakezip"), "case.zip"),
         },

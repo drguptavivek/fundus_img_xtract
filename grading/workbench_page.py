@@ -115,7 +115,7 @@ def open_package_workbench(package_uuid: str, role_slot: str):
         return redirect(url_for("grading.index"))
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def workbench_page(session_uuid: str):
     stored = flask_session.get(f"grading_workbench:{session_uuid}") or {}
     try:

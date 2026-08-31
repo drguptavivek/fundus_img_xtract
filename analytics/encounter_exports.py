@@ -23,7 +23,23 @@ from models import (
     PatientEncounters,
     User,
 )
-from authz import scope
+from authz.behaviors import (
+    export_lab_units,
+    export_rows,
+    identifier_release_lab_units,
+    identifier_release_rows,
+)
+from authz.exceptions import AuthorizationDenied
+from authz.context import access_context
+from authz.scopes import (
+    RecordScope,
+    admin_scope,
+    project_scope,
+    project_wide_scope,
+    require_any,
+)
+from project_configuration.service import project_site_feature_allows
+from services.uploads.access import encounter_columns
 
 
 @dataclass(frozen=True)
@@ -90,9 +106,19 @@ def _workbook_bytes(wb: Workbook) -> bytes:
     return buffer.getvalue()
 
 
-def _scoped_lab_unit_ids(db: SASession, user: User, filters: EncounterExportFilters) -> list[int]:
+def _scoped_lab_unit_ids(
+    db: SASession,
+    user: User,
+    filters: EncounterExportFilters,
+    *,
+    include_identifiers: bool = False,
+) -> list[int]:
     query = db.query(LabUnit.id)
-    query = scope(db, query, LabUnit, user, 'analytics.encounters.view')
+    query = (
+        identifier_release_lab_units(db, query, user)
+        if include_identifiers
+        else export_lab_units(db, query, user)
+    )
     if filters.hospital_id is not None:
         query = query.filter(LabUnit.hospital_id == filters.hospital_id)
     if filters.lab_unit_id is not None:
@@ -116,7 +142,7 @@ def encounter_ids(
     # on its own it lets a project grant on lab L export everything in L --
     # other projects' encounters and classical ones alike. The row-level rule
     # is what separates them.
-    query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
+    query = export_rows(db, query, user, encounter_columns(PatientEncounters))
     if filters.capture_date is not None:
         query = query.filter(PatientEncounters.capture_date_dt == filters.capture_date)
     if filters.start_date is not None:
@@ -140,12 +166,67 @@ def encounter_ids(
     ]
 
 
+def identifier_release_encounter_ids(
+    db: SASession,
+    user: User,
+    filters: EncounterExportFilters,
+) -> list[int]:
+    """Return rows directly covered by project PII authority or Admin."""
+
+    context = access_context(db, user)
+    for project_id in filters.project_ids:
+        requested_scope = RecordScope.project(
+            project_id=project_id,
+            lab_unit_id=filters.lab_unit_id,
+        )
+        require_any(
+            admin_scope(context),
+            project_scope(context, {"pii_exporter"}, requested_scope),
+        )
+
+    if filters.include_classical and not context.has_any_global_role(frozenset({"admin"})):
+        raise AuthorizationDenied("classical_pii_export_requires_admin")
+
+    lab_unit_ids = _scoped_lab_unit_ids(
+        db, user, filters, include_identifiers=True
+    )
+    if not lab_unit_ids:
+        raise AuthorizationDenied("export_scope_missing")
+
+    query = db.query(PatientEncounters.id).filter(
+        PatientEncounters.lab_unit_id.in_(lab_unit_ids)
+    )
+    query = identifier_release_rows(
+        db, query, user, encounter_columns(PatientEncounters)
+    )
+    if filters.capture_date is not None:
+        query = query.filter(PatientEncounters.capture_date_dt == filters.capture_date)
+    if filters.start_date is not None:
+        query = query.filter(PatientEncounters.capture_date_dt >= filters.start_date)
+    if filters.end_date is not None:
+        query = query.filter(PatientEncounters.capture_date_dt <= filters.end_date)
+    if filters.project_ids or filters.include_classical is not None:
+        conditions = []
+        if filters.project_ids:
+            conditions.append(PatientEncounters.project_id.in_(filters.project_ids))
+        if filters.include_classical:
+            conditions.append(PatientEncounters.project_id.is_(None))
+        query = query.filter(sa.or_(*conditions)) if conditions else query.filter(PatientEncounters.id.is_(None))
+    return [int(row[0]) for row in query.order_by(PatientEncounters.id).all()]
+
+
 def _load_encounters(
     db: SASession,
     user: User,
     filters: EncounterExportFilters,
+    *,
+    include_identifiers: bool,
 ) -> list[PatientEncounters]:
-    ids = encounter_ids(db, user, filters)
+    ids = (
+        identifier_release_encounter_ids(db, user, filters)
+        if include_identifiers
+        else encounter_ids(db, user, filters)
+    )
     if not ids:
         return []
     encounters = (
@@ -270,7 +351,9 @@ def export_encounter_data_xlsx(
 ) -> bytes:
     """Build one flat encounter-level sheet with OCR report columns."""
 
-    encounters = _load_encounters(db, user, filters)
+    encounters = _load_encounters(
+        db, user, filters, include_identifiers=False
+    )
     max_dr = max((len(encounter.dr_reports) for encounter in encounters), default=0)
     max_glaucoma = max((len(encounter.glaucoma_results_cleaned) for encounter in encounters), default=0)
     wb = Workbook()
@@ -458,13 +541,25 @@ def _task_result_rows(
     db: SASession,
     user: User,
     filters: EncounterExportFilters,
+    *,
+    include_identifiers: bool,
 ) -> list[dict[str, Any]]:
-    lab_unit_ids = _scoped_lab_unit_ids(db, user, filters)
-    if not lab_unit_ids:
+    authorized_encounter_ids = (
+        identifier_release_encounter_ids(db, user, filters)
+        if include_identifiers
+        else encounter_ids(db, user, filters)
+    )
+    if not authorized_encounter_ids:
         return []
+    _require_grade_export_site_flags(
+        db,
+        user,
+        authorized_encounter_ids,
+        include_identifiers=include_identifiers,
+    )
 
     params: dict[str, Any] = {
-        "lab_unit_ids": lab_unit_ids,
+        "encounter_ids": authorized_encounter_ids,
         "hospital_id": filters.hospital_id,
         "lab_unit_id": filters.lab_unit_id,
         "capture_date": filters.capture_date,
@@ -524,7 +619,7 @@ def _task_result_rows(
         JOIN patient_encounters pe ON pe.id = base.patient_encounter_id
         LEFT JOIN projects p ON p.id = pe.project_id
         LEFT JOIN regrade_adj r ON r.task_id = base.task_id
-        WHERE pe.lab_unit_id IN :lab_unit_ids
+        WHERE pe.id IN :encounter_ids
           AND (:hospital_id IS NULL OR pe.lab_unit_id IN (SELECT id FROM lab_units WHERE hospital_id = :hospital_id))
           AND (:lab_unit_id IS NULL OR pe.lab_unit_id = :lab_unit_id)
           AND (:capture_date IS NULL OR pe.capture_date_dt = :capture_date)
@@ -538,25 +633,77 @@ def _task_result_rows(
         ORDER BY pe.capture_date_dt DESC NULLS LAST, pe.id DESC, base.image_uuid, base.task_id, base.source_view
         """
     ).bindparams(
-        sa.bindparam("lab_unit_ids", expanding=True),
+        sa.bindparam("encounter_ids", expanding=True),
         sa.bindparam("project_ids", expanding=True),
     )
     rows = db.execute(sql, params).mappings().all()
-    return [dict(row) for row in rows]
+    result = [dict(row) for row in rows]
+    if not include_identifiers:
+        for row in result:
+            row["patient_encounter_name"] = "Anonymous"
+            row["patient_identifier"] = "P***"
+            row["filename"] = "masked"
+    return result
+
+
+def _require_grade_export_site_flags(
+    db: SASession,
+    user: User,
+    encounter_ids: list[int],
+    *,
+    include_identifiers: bool,
+) -> None:
+    """Require the owning site's grade-export switch for site authority."""
+    context = access_context(db, user)
+    if context.has_any_global_role(frozenset({"admin"})):
+        return
+    roles = {"pii_exporter"} if include_identifiers else {"data_exporter", "pii_exporter"}
+    project_sites = db.execute(
+        sa.select(PatientEncounters.project_id, PatientEncounters.lab_unit_id)
+        .where(
+            PatientEncounters.id.in_(encounter_ids),
+            PatientEncounters.project_id.is_not(None),
+        )
+        .distinct()
+    ).all()
+    for project_id, lab_unit_id in project_sites:
+        authority_scope_type = (
+            "project"
+            if project_wide_scope(context, roles, project_id).allowed
+            else "lab_unit"
+        )
+        if not project_site_feature_allows(
+            db,
+            project_id=project_id,
+            lab_unit_id=lab_unit_id,
+            authority_scope_type=authority_scope_type,
+            feature="sites_can_export_grades",
+        ):
+            raise AuthorizationDenied("site_grade_export_disabled")
 
 
 def export_encounter_task_results_xlsx(
     db: SASession,
     user: User,
     filters: EncounterExportFilters,
+    *,
+    include_identifiers: bool = False,
 ) -> bytes:
-    """Build data-only encounter export with task results and full OCR identifiers."""
+    """Build a masked export unless the caller selected the PII action."""
 
     wb = Workbook(write_only=True)
     task_ws = wb.create_sheet("Image Task Results")
-    _write_sheet(task_ws, _TASK_RESULT_HEADERS, _task_result_rows(db, user, filters))
+    _write_sheet(
+        task_ws,
+        _TASK_RESULT_HEADERS,
+        _task_result_rows(
+            db, user, filters, include_identifiers=include_identifiers
+        ),
+    )
 
-    encounters = _load_encounters(db, user, filters)
+    encounters = _load_encounters(
+        db, user, filters, include_identifiers=include_identifiers
+    )
     max_dr = max((len(encounter.dr_reports) for encounter in encounters), default=0)
     max_glaucoma = max((len(encounter.glaucoma_results_cleaned) for encounter in encounters), default=0)
     ocr_headers = [
@@ -635,6 +782,15 @@ def export_encounter_task_results_xlsx(
     for encounter in encounters:
         row = _encounter_row(encounter)
         _flatten_ocr_columns(encounter, row, max_dr, max_glaucoma)
+        if not include_identifiers:
+            row["patient_name"] = "Anonymous"
+            row["patient_id"] = "P***"
+            row["zip_filename"] = "masked"
+            row["remarks"] = ""
+            row["metadata_json"] = ""
+            for key in tuple(row):
+                if key.endswith("_report_file_name"):
+                    row[key] = "masked"
         ocr_rows.append(row)
     ocr_ws = wb.create_sheet("Encounter OCR Data")
     _write_sheet(ocr_ws, ocr_headers, ocr_rows)

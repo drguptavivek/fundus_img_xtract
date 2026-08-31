@@ -11,7 +11,8 @@ from sqlalchemy import func
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Disease, Grade, GradingTask, LabUnit, User
-from authz import scope
+from authz.behaviors import clinical_lab_units
+from tasks.lineage import valid_task_lineage
 
 
 ROLE_LABELS = {
@@ -50,7 +51,10 @@ def _fetch_grade_counts(
         .join(Disease, GradingTask.disease_id == Disease.id)
         .join(LabUnit, GradingTask.lab_unit_id == LabUnit.id)
         .join(User, Grade.grader_user_id == User.id)
-        .filter(GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        .filter(
+            GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)),
+            valid_task_lineage(GradingTask),
+        )
         .group_by(
             Disease.id,
             Disease.name,
@@ -171,7 +175,10 @@ def _fetch_grader_totals(
         .join(GradingTask, Grade.task_id == GradingTask.id)
         .join(User, Grade.grader_user_id == User.id)
         .filter(Grade.role_slot != "ai")
-        .filter(GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        .filter(
+            GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)),
+            valid_task_lineage(GradingTask),
+        )
         .group_by(User.id, User.username, User.full_name)
     )
     if start_dt:
@@ -214,13 +221,15 @@ def _merge_grader_totals(
     )
 
 
-@roles_required("ophthalmologist", "local_admin", "data_manager", "admin")
+@roles_required(
+    "ophthalmologist", "field_ophthalmologist", "local_admin", "data_manager", "admin"
+)
 def grader_statistics():
     """Show per-grader grade counts by disease and lab unit (monthly + cumulative)."""
     with get_db_session() as db:
         # Get allowed lab units via scoping
         lu_query = db.query(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'tasks.view')
+        lu_query = clinical_lab_units(db, lu_query, current_user)
         allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
         
         if not allowed_lab_unit_ids:

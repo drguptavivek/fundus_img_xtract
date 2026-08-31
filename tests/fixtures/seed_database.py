@@ -234,17 +234,43 @@ def seed_test_database(test_engine):
                 session.add(user)
                 session.flush()
 
-                if 'lab_units' in user_data:
-                    for lab_name in user_data['lab_units']:
-                        lab_unit = test_lab_units.get(lab_name)
-                        if lab_unit:
-                            user.lab_units.append(lab_unit)
-                    session.flush()
+            # The migration may already have created a named account. Seed
+            # fixtures must reconcile its declared authority instead of
+            # silently retaining stale legacy roles.
+            existing_role_names = {role.name for role in user.roles}
+            for role_name in user_data['roles']:
+                if role_name not in existing_role_names:
+                    user.roles.append(roles[role_name])
+            if 'lab_units' in user_data:
+                existing_lab_ids = {lab.id for lab in user.lab_units}
+                for lab_name in user_data['lab_units']:
+                    lab_unit = test_lab_units.get(lab_name)
+                    if lab_unit and lab_unit.id not in existing_lab_ids:
+                        user.lab_units.append(lab_unit)
+            session.flush()
 
             users[user_data['username']] = user
 
+        # ===== GENERIC TEST METADATA =====
+        # Security/analytics tests look these up by name; create them once so
+        # tests that query the rows directly (without the test_metadata
+        # fixture) still find them.
+        if not session.query(Camera).filter_by(name='Test Camera').first():
+            session.add(Camera(name='Test Camera'))
+        if not session.query(Disease).filter_by(name='Test Disease').first():
+            session.add(Disease(name='Test Disease'))
+        if not session.query(Area).filter_by(name='Test Area').first():
+            session.add(Area(name='Test Area'))
+        session.flush()
+
         # ===== SYNC SEQUENCES FOR TEST TABLES =====
+        # Seed rows use explicit high IDs (100+). PostgreSQL sequences are
+        # non-transactional: every rolled-back test still burns values, so
+        # without these setvals the sequences eventually reach the seeded
+        # IDs and cause duplicate-key errors mid-suite.
         session.execute(text("SELECT setval('ai_models_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ai_models))"))
+        session.execute(text("SELECT setval('hospitals_id_seq', (SELECT COALESCE(MAX(id), 1) FROM hospitals))"))
+        session.execute(text("SELECT setval('lab_units_id_seq', (SELECT COALESCE(MAX(id), 1) FROM lab_units))"))
 
         session.commit()
 

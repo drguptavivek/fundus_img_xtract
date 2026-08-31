@@ -127,17 +127,19 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
     if workflow is None:
         return CandidatePage((), 0, 0, filters.page, filters.page_size, filters.page > 1, False)
 
-    from data_authorization.policy import (
-        ACTION_WAI_RESULTS,
-        ACTION_WAI_RUN,
-        allowed_lab_unit_ids_for_action,
-    )
+    from authz.project_access import allowed_project_lab_unit_ids
 
-    run_labs = allowed_lab_unit_ids_for_action(
-        db, user=user, project_id=filters.project_id, action=ACTION_WAI_RUN
+    run_labs = allowed_project_lab_unit_ids(
+        db,
+        user,
+        project_id=filters.project_id,
+        roles={"verifier", "optometrist", "field_optometrist", "field_ophthalmologist"},
     )
-    result_labs = allowed_lab_unit_ids_for_action(
-        db, user=user, project_id=filters.project_id, action=ACTION_WAI_RESULTS
+    result_labs = allowed_project_lab_unit_ids(
+        db,
+        user,
+        project_id=filters.project_id,
+        roles={"project_pi", "site_pi", "project_admin", "optometrist"},
     )
     if run_labs is None or result_labs is None:
         allowed_labs = None

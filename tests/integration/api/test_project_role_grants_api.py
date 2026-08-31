@@ -1,4 +1,7 @@
+import time
+
 from models import Project, Role, User
+from project_configuration.models import ProjectLabUnit
 
 
 def _role(db_session, name: str) -> Role:
@@ -37,6 +40,8 @@ def test_project_role_grant_api_and_workspace_group_roles(
         active=True,
     )
     db_session.add_all([target, project])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id))
     db_session.flush()
 
     with app.test_client(user=admin) as client:
@@ -95,6 +100,8 @@ def test_remove_project_role_grant_api_deactivates_row(
     )
     db_session.add_all([target, project])
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id))
+    db_session.flush()
 
     with app.test_client(user=admin) as client:
         created = client.post(
@@ -112,3 +119,46 @@ def test_remove_project_role_grant_api_deactivates_row(
 
     assert removed.status_code == 200
     assert removed.get_json()["data"]["removed"]["active"] is False
+
+
+def test_pii_grant_and_revoke_require_recent_reauthentication(
+    app, db_session, test_users, core_test_data
+):
+    admin = db_session.merge(test_users["admin"])
+    lab = db_session.merge(core_test_data["lab_a1"])
+    _role(db_session, "pii_exporter")
+    target = User(
+        username="pii_step_up_target",
+        password_hash="x",
+        is_active=True,
+        hospital_id=lab.hospital_id,
+        lab_units=[lab],
+    )
+    project = Project(title="PII Step Up Project", code="PII_STEP_UP", active=True)
+    db_session.add_all([target, project])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id))
+    db_session.flush()
+
+    payload = {
+        "user_id": target.id,
+        "scope_type": "project",
+        "role_names": ["pii_exporter"],
+    }
+    with app.test_client(user=admin) as client:
+        stale = client.post(f"/api/projects/{project.id}/role-grants", json=payload)
+        assert stale.status_code == 302
+        assert "/confirm-password" in stale.headers["Location"]
+
+        with client.session_transaction() as session:
+            session["last_sudo_time"] = int(time.time())
+        created_response = client.post(f"/api/projects/{project.id}/role-grants", json=payload)
+        assert created_response.status_code == 200
+        created = created_response.get_json()["data"]["updated"][0]
+
+        with client.session_transaction() as session:
+            session.pop("last_sudo_time", None)
+        stale_revoke = client.delete(
+            f"/api/projects/{project.id}/role-grants/{created['id']}"
+        )
+        assert stale_revoke.status_code == 302

@@ -7,10 +7,12 @@ import pytest
 from auth.utils import utcnow
 from grading.workbench.acquisition import _target_purpose, acquire_next
 import grading.workbench.queue as queue_module
-from grading.workbench.errors import ActiveSessionExists
+from grading.workbench.acquisition import acquire_task
+from grading.workbench.errors import ActiveSessionExists, NoEligibleWork
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import release
 from models import GradingTask
+from tests.helpers.factories import ImageFactory
 from tests.helpers.test_factories import TestDataFactory
 
 
@@ -140,6 +142,46 @@ def test_resident2_queue_decides_eligibility_without_per_task_calls(
     )
 
     assert eligibility_calls == []
+
+
+def test_explicit_task_open_rejects_source_from_another_lab(
+    db_session,
+    resident_user,
+    core_test_data,
+):
+    """A task's declared Lab Unit cannot override its source lineage."""
+    user = db_session.merge(resident_user)
+    disease = db_session.merge(core_test_data["glaucoma"])
+    assigned_lab = db_session.merge(core_test_data["lab_unit"])
+    source_lab = db_session.merge(core_test_data["lab_b1"])
+    source_image = ImageFactory.create_direct_upload(
+        db_session,
+        hospital_id=source_lab.hospital_id,
+        lab_unit_id=source_lab.id,
+        user_id=user.id,
+        disease_id=disease.id,
+        camera_id=core_test_data["camera"].id,
+        area_id=core_test_data["area"].id,
+    )
+    task = GradingTask(
+        direct_image_upload_id=source_image.id,
+        disease_id=disease.id,
+        # Deliberately disagree with the source image's Lab Unit.
+        lab_unit_id=assigned_lab.id,
+        grading_target_level="image",
+        task_source="lineage_negative_test",
+        state="pending",
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    with pytest.raises(NoEligibleWork):
+        acquire_task(
+            db_session,
+            user_id=user.id,
+            task_uuid=task.uuid,
+            role_slot="resident",
+        )
 
 
 @pytest.mark.parametrize("workflow", ["package", "revision"])

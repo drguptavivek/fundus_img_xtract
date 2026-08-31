@@ -1,8 +1,7 @@
 {# Project EncounterSet Grading cards.
 
    Extracted so the Legacy panel's refresh control can swap this out of band in
-   the same response, keeping both panels' counts consistent - they share a
-   cache TTL and a single refresh action. #}
+   the same response, keeping both panels' live counts consistent. #}
 <div id="project-encounter-set-queues"
      hx-get="{{ url_for('grading.project_queues_fragment', refresh=1) }}"
      hx-trigger="refresh-queues from:body"

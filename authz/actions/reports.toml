@@ -1,7 +1,0 @@
-[[actions]]
-name = "reports.view"
-domain = "reports"
-zone = "web"
-description = "View scoped DR and glaucoma report data by UUID."
-resource_type = "report"
-requires_resource = true

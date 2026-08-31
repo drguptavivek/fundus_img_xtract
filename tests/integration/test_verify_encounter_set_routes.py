@@ -15,6 +15,7 @@ from models import (
     User,
 )
 from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
+from project_configuration.models import ProjectLabUnit
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
@@ -120,13 +121,18 @@ def encounter_set_data(db_session, core_test_data):
     )
     db_session.add_all([project, encounter_set_type, upload_profile])
     db_session.flush()
-    db_session.add(
+    db_session.add_all([
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=lab_unit.id,
+            active=True,
+        ),
         ProjectUploadProfile(
             project_id=project.id,
             upload_profile_id=upload_profile.id,
             active=True,
-        )
-    )
+        ),
+    ])
     db_session.flush()
     
     encounter = PatientEncounters(
@@ -200,6 +206,24 @@ def encounter_set_data(db_session, core_test_data):
         'encounter_set_type': encounter_set_type,
         'upload_profile': upload_profile,
     }
+
+
+def _grant_project_verify(db_session, encounter_set_data, user):
+    """Grant an active project verifier grant for the fixture encounter.
+
+    Project-bearing encounters require an active ProjectRoleGrant; an
+    assigned lab unit alone only reaches classical (project-less) records.
+    """
+    role = db_session.query(Role).filter_by(name="optometrist").one()
+    db_session.add(ProjectRoleGrant(
+        project_id=encounter_set_data["project"].id,
+        user_id=user.id,
+        role_id=role.id,
+        scope_type=LAB_UNIT_SCOPE,
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        active=True,
+    ))
+    db_session.flush()
 
 
 def test_rebuild_set_packages_preserves_only_ai_grades(
@@ -560,11 +584,8 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
     lab_unit = encounter_set_data["lab_unit"]
-    manager = UserFactory.create_with_hospital(
+    manager = UserFactory.create_admin(
         db_session,
-        "local_admin",
-        lab_unit.hospital_id,
-        [lab_unit.id],
         username="encounter_permission_manager",
     )
     user = UserFactory.create_with_hospital(
@@ -575,26 +596,22 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
         username="encounter_permission_user",
     )
     manager_client = auth_client_factory(manager)
-    endpoint = (
-        f"/api/projects/{encounter_set_data['project'].id}/encounter-set-permissions"
-    )
+    endpoint = f"/api/projects/{encounter_set_data['project'].id}/role-grants"
     response = manager_client.post(
         endpoint,
-        data={
+        json={
             "user_id": user.id,
-            "lab_unit_id": lab_unit.id,
-            "can_browse": "true",
-            "active": "true",
+            "scope_key": f"lab_unit:{lab_unit.id}",
+            "role_names": ["collaborator"],
         },
         headers={"X-CSRFToken": csrf_token},
     )
     assert response.status_code == 200
-    assert response.get_json()["data"]["updated"]["can_verify"] is False
 
     manager_client.get("/logout")
     user_client = auth_client_factory(user)
     response = user_client.get(
-        f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
+        f"/uploads/encountersets/browse-no-pii?project_id={encounter_set_data['project'].id}"
     )
     assert response.status_code == 200
     assert encounter_set_data["project"].title.encode() in response.data
@@ -607,12 +624,10 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
     manager_client = auth_client_factory(manager)
     response = manager_client.post(
         endpoint,
-        data={
+        json={
             "user_id": user.id,
-            "lab_unit_id": lab_unit.id,
-            "can_browse": "true",
-            "can_verify": "true",
-            "active": "true",
+            "scope_key": f"lab_unit:{lab_unit.id}",
+            "role_names": ["collaborator", "verifier"],
         },
         headers={"X-CSRFToken": csrf_token},
     )
@@ -659,8 +674,9 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert expected_back_url.encode() in response.data
     # The image appears in the left panel rail by UUID in thumbnail/panel URLs.
     assert encounter_set_data['image'].uuid.encode() in response.data
-    assert b"event.persisted" in response.data
-    assert b"back_forward" in response.data
+    # The submission guard ships as an external script; the page must
+    # include it rather than inline its internals.
+    assert b"js/submission-guard.js" in response.data
     assert b'id="verification-ocr-modal"' in response.data
     assert b"pollOcrUntilTerminal" in response.data
     assert b"JSON.stringify({force: true})" in response.data
@@ -693,15 +709,22 @@ def test_verify_iitk_image_shows_editable_gaze_and_nav_descriptor(
         "gaze_position": "up_left",
     }
     db_session.flush()
-
+    # The rail descriptor renders on the shell page.
     response = auth_client.get(
         f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}"
     )
-
     assert response.status_code == 200
     assert "OD · Macula · Up Left".encode() in response.data
-    assert f'name="metadata__image__{image.id}__gaze_position"'.encode() in response.data
-    assert b'<option value="up_left" selected>Up Left</option>' in response.data
+
+    # Editable image metadata (including gaze) renders in the HTMX image
+    # panel, not on the shell page.
+    panel_response = auth_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}/panel/image",
+        query_string={"image_uuid": image.uuid},
+    )
+    assert panel_response.status_code == 200
+    assert f'name="metadata__image__{image.id}__gaze_position"'.encode() in panel_response.data
+    assert b'<option value="up_left" selected>Up Left</option>' in panel_response.data
 
 
 @pytest.mark.parametrize(
@@ -1104,6 +1127,7 @@ def test_verify_encounter_set_finalize_refreshes_referral_from_edited_ocr(
         username="admin_verify_finalize_referral",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     encounter_set_data['attachment'].metadata_json = {
         "ocr": {
@@ -1140,6 +1164,7 @@ def test_verify_encounter_set_finalize_allows_project_referral_only_ocr_disease(
         username="verify_finalize_project_scoped_ocr",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     dr = db_session.merge(core_test_data["dr"])
     amd = Disease(name="AMD Referral Only", remidio_ocr_linkage="amd")
@@ -1267,6 +1292,7 @@ def test_verify_encounter_set_finalize_requires_project_positive_disease(
         username="verify_finalize_positive_disease_required",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     encounter_set_data['encounter'].referral_suggestion = "yes"
     encounter_set_data['encounter'].referral_positive_diseases_json = []
@@ -1293,6 +1319,7 @@ def test_verify_encounter_set_finalize_async_blocked(client, auth_client_factory
         username="admin_verify_finalize_async",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
 
     response = auth_client.post(
@@ -1343,6 +1370,7 @@ def test_finalize_rejects_reviewed_image_missing_configured_routing_metadata(
         username="verify_finalize_missing_laterality",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     _configure_laterality_task_routing(encounter_set_data, db_session)
     encounter_set_data["image"].metadata_json = {}
@@ -1377,6 +1405,7 @@ def test_verify_encounter_set_finalize_async_close_redirects_to_browser(
         username="admin_verify_finalize_async_close",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     encounter_set_data['image'].is_reviewed = True
     db_session.flush()
@@ -1416,6 +1445,7 @@ def test_verify_encounter_set_finalize_creates_amd_report_triggered_image_task(
         username="admin_verify_finalize_amd_policy",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     glaucoma = db_session.merge(core_test_data["glaucoma"])
     amd = Disease(
@@ -1501,6 +1531,7 @@ def test_verify_encounter_set_finalize_routes_image_tasks_by_metadata_rule(
         username="verify_laterality_routing",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     right_scheme = Disease(name=f"Retina RT {uuid.uuid4().hex[:8]}", grading_scope="image")
     left_scheme = Disease(name=f"Retina LT {uuid.uuid4().hex[:8]}", grading_scope="image")
@@ -1601,6 +1632,7 @@ def test_verify_encounter_set_finalize_creates_explicit_disease_specific_package
         username="admin_verify_finalize_disease_specific",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     glaucoma = db_session.merge(core_test_data["glaucoma"])
     dr = db_session.merge(core_test_data["dr"])
@@ -1706,6 +1738,7 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
         username="admin_verify_finalize_sampling_policy",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     glaucoma = db_session.merge(core_test_data["glaucoma"])
     amd = Disease(
@@ -1915,6 +1948,7 @@ def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targ
         username="admin_verify_finalize_ungradable",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     _configure_laterality_task_routing(encounter_set_data, db_session)
     encounter_set_data['image'].metadata_json = {}
@@ -1953,6 +1987,7 @@ def test_verify_encounter_set_exclude_async_redirects_to_browser_without_tasks(
         username="admin_verify_exclude_async",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
 
     response = auth_client.post(
@@ -2010,6 +2045,7 @@ def test_verify_encounter_set_finalize(client, auth_client_factory, encounter_se
         username="admin_verify_finalize",
         lab_units=[encounter_set_data['lab_unit']],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
 
     # First, verify that finalizing fails with unreviewed images
@@ -2049,7 +2085,7 @@ def test_verify_encounter_set_finalize(client, auth_client_factory, encounter_se
 def _project_only_verifier(db_session, encounter_set_data, *, username):
     from auth.security import hash_password
 
-    role = db_session.query(Role).filter_by(name="optometrist").one()
+    role = db_session.query(Role).filter_by(name="verifier").one()
     user = User(
         username=username,
         password_hash=hash_password("Test@2026"),
@@ -2125,6 +2161,7 @@ def test_verified_encounter_set_rejects_repeat_finalization(
         username="repeat_finalize_blocked",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
     encounter = encounter_set_data["encounter"]
     original_verified_at = utcnow() - timedelta(days=2)
@@ -2152,16 +2189,13 @@ def test_verified_encounter_set_rejects_repeat_finalization(
     assert db_session.query(GradingTask).count() == original_task_count
 
 def test_verify_encounter_set_wrong_role(client, auth_client_factory, encounter_set_data, db_session):
-    """Test role restriction."""
-    # Create a resident user (who shouldn't have access to verification UI usually)
-    # Actually, residents ARE allowed in media routes, but let's check verification UI roles:
-    # @roles_required("admin", "optometrist", "data_manager")
-    
+    """A user without verification authority receives an empty scoped list."""
     user = UserFactory.create_by_role(db_session, "ophthalmologist", username="res_no_verify")
     auth_client = auth_client_factory(user)
-    
+
     response = auth_client.get("/verify_encounter_set/")
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert encounter_set_data["encounter"].name.encode() not in response.data
 def test_package_task_identity_does_not_reuse_another_package(
     db_session, encounter_set_data, core_test_data
 ):
@@ -2353,10 +2387,10 @@ def test_reopen_verification_requires_verified_status(
     assert "Only a verified" in response.get_json()["message"]
 
 
-def test_reopen_verification_requires_admin_role(
+def test_reopen_verification_denies_non_verifier_without_disclosure(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
-    """Optometrist/data_manager can verify but not reopen - reopening is admin-only."""
+    """Ordinary clinical roles cannot reopen and receive nondisclosing 404."""
     _verify_and_create_tasks(encounter_set_data, db_session)
     optometrist = UserFactory.create_by_role(
         db_session, "optometrist", username="reopen_role_denied",
@@ -2369,7 +2403,7 @@ def test_reopen_verification_requires_admin_role(
         headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 def test_update_metadata_after_reopen_creates_audit_row(

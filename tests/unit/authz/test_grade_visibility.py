@@ -10,11 +10,25 @@ AI grades, stay out of reach.
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from authz.predicates import scope_grades
-from authz.resolver import resolve_grants
-from models import DiseaseGrading, Grade, GradingTask, PatientEncounters, Role, User
+from authz import access_context
+from grading.access import scope_inter_rater_grades
+from grading_allocation.constants import AllocationScope
+from grading_allocation.models import ProjectGraderAllocation
+from models import (
+    DirectImageUpload,
+    Disease,
+    DiseaseGrading,
+    Grade,
+    GradingTask,
+    PatientEncounters,
+    Project,
+    Role,
+    User,
+    UserDiseaseUnitRole,
+)
+from project_configuration.models import ProjectLabUnit
 
 
 def _role(db, name):
@@ -59,6 +73,34 @@ def _grade(db, task, grading, *, grader, slot="resident"):
     return g
 
 
+def _project_image_task(db, *, lab, hospital, camera, area, disease, project, uploader):
+    image = DirectImageUpload(
+        original_filename="project.jpg",
+        filename="project.jpg",
+        folder_rel="files/test_project_grading",
+        file_hash=uuid4().hex,
+        uploader_id=uploader.id,
+        hospital_id=hospital.id,
+        lab_unit_id=lab.id,
+        project_id=project.id,
+        camera_id=camera.id,
+        disease_id=disease.id,
+        area_id=area.id,
+    )
+    db.add(image)
+    db.flush()
+    task = GradingTask(
+        direct_image_upload_id=image.id,
+        disease_id=disease.id,
+        lab_unit_id=lab.id,
+        state="pending",
+    )
+    db.add(task)
+    db.flush()
+    db.refresh(task)
+    return task
+
+
 @pytest.fixture
 def world(db_session, core_test_data):
     db = db_session
@@ -66,6 +108,18 @@ def world(db_session, core_test_data):
     disease = db.merge(core_test_data["dr"])
 
     me, peer, stranger = _user(db, "ophthalmologist"), _user(db, "ophthalmologist"), _user(db, "ophthalmologist")
+    for user in (me, peer, stranger):
+        user.lab_units.append(lab)
+        db.add(
+            UserDiseaseUnitRole(
+                user_id=user.id,
+                disease_id=disease.id,
+                lab_unit_id=lab.id,
+                can_grade_resident=True,
+                can_grade_resident2=True,
+                active=True,
+            )
+        )
     # AI grades are recorded against a dedicated model account, not a person.
     ai = _user(db)
     mine_task, other_task = _task(db, lab, disease), _task(db, lab, disease)
@@ -78,12 +132,13 @@ def world(db_session, core_test_data):
         "peer_on_other_task": _grade(db, other_task, grading, grader=peer, slot="resident"),
         "ai_on_other_task": _grade(db, other_task, grading, grader=ai, slot="ai"),
     }
-    return dict(me=me, peer=peer, stranger=stranger, grades=grades)
+    return {"me": me, "peer": peer, "stranger": stranger, "grades": grades}
 
 
 def _visible(db, user, world):
-    resolved = resolve_grants(db, user)
-    ids = set(db.execute(scope_grades(select(Grade.id), resolved)).scalars())
+    context = access_context(db, user)
+    query = select(Grade.id).join(GradingTask, Grade.task_id == GradingTask.id)
+    ids = set(db.execute(scope_inter_rater_grades(query, context)).scalars())
     return {name for name, g in world["grades"].items() if g.id in ids}
 
 
@@ -125,3 +180,124 @@ def test_the_peer_sees_their_own_tasks_from_their_side(db_session, world):
     visible = _visible(db_session, world["peer"], world)
     assert visible == {"peer_on_my_task", "my_grade", "ai_on_my_task",
                        "peer_on_other_task", "ai_on_other_task"}
+
+
+def test_exact_cross_site_grading_role_is_sufficient_without_generic_lab_membership(db_session, world):
+    world["me"].lab_units.clear()
+    db_session.flush()
+    assert _visible(db_session, world["me"], world) == {
+        "my_grade", "peer_on_my_task", "ai_on_my_task",
+    }
+
+
+def test_admin_role_is_not_a_clinical_visibility_bypass(db_session, world):
+    admin = _user(db_session, "admin")
+    own_task = world["grades"]["my_grade"].task
+    grading = world["grades"]["my_grade"].label
+    world["grades"]["admin_grade"] = _grade(
+        db_session, own_task, grading, grader=admin, slot="resident"
+    )
+    assert _visible(db_session, admin, world) == set()
+
+
+@pytest.fixture
+def project_world(db_session, core_test_data):
+    db = db_session
+    lab = db.merge(core_test_data["lab_unit"])
+    hospital = db.merge(core_test_data["hospital"])
+    camera = db.merge(core_test_data["camera"])
+    area = db.merge(core_test_data["area"])
+    disease = db.merge(core_test_data["dr"])
+    other_disease = db.query(Disease).filter(Disease.id != disease.id).first()
+
+    project = Project(
+        title=f"Grade visibility project {uuid4().hex[:8]}",
+        code=f"GV-P-{uuid4().hex[:8]}",
+        active=True,
+    )
+    db.add(project)
+    db.flush()
+    boundary = ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True)
+    db.add(boundary)
+
+    me = _user(db, "field_ophthalmologist")
+    peer = _user(db, "field_ophthalmologist")
+    task = _project_image_task(
+        db,
+        lab=lab,
+        hospital=hospital,
+        camera=camera,
+        area=area,
+        disease=disease,
+        project=project,
+        uploader=me,
+    )
+    grading = _grading(db, disease)
+    grades = {
+        "my_grade": _grade(db, task, grading, grader=me, slot="resident"),
+        "peer_on_my_task": _grade(db, task, grading, grader=peer, slot="resident2"),
+    }
+    allocation = ProjectGraderAllocation(
+        project_id=project.id,
+        user_id=me.id,
+        lab_unit_id=lab.id,
+        scope=AllocationScope.DISEASE_IMAGE.value,
+        disease_id=disease.id,
+        capacity="resident",
+        active=True,
+    )
+    db.add(allocation)
+    db.flush()
+    return {
+        "me": me,
+        "project": project,
+        "boundary": boundary,
+        "allocation": allocation,
+        "grades": grades,
+        "disease": disease,
+        "other_disease": other_disease,
+    }
+
+
+def test_project_grader_does_not_need_classical_slot(db_session, project_world):
+    """Project grading is authorized by project allocation, not UserDiseaseUnitRole."""
+    assert _visible(db_session, project_world["me"], project_world) == {
+        "my_grade",
+        "peer_on_my_task",
+    }
+
+
+def test_project_grader_with_inactive_allocation_is_denied(db_session, project_world):
+    project_world["allocation"].active = False
+    db_session.flush()
+    assert _visible(db_session, project_world["me"], project_world) == set()
+
+
+def test_project_grader_with_missing_allocation_is_denied(db_session, project_world):
+    db_session.delete(project_world["allocation"])
+    db_session.flush()
+    assert _visible(db_session, project_world["me"], project_world) == set()
+
+
+def test_project_grader_with_wrong_allocation_target_is_denied(db_session, project_world):
+    project_world["allocation"].disease_id = project_world["other_disease"].id
+    db_session.flush()
+    assert _visible(db_session, project_world["me"], project_world) == set()
+
+
+def test_project_grader_without_active_project_lab_unit_is_denied(db_session, project_world):
+    project_world["boundary"].active = False
+    db_session.flush()
+    assert _visible(db_session, project_world["me"], project_world) == set()
+
+
+@pytest.mark.parametrize("role", ["project_admin", "admin"])
+def test_project_or_admin_role_alone_is_not_clinical_visibility(db_session, project_world, role):
+    user = _user(db_session, role)
+    project_world["grades"]["unauthorized_grade"] = _grade(
+        db_session,
+        project_world["grades"]["my_grade"].task,
+        project_world["grades"]["my_grade"].label,
+        grader=user,
+    )
+    assert _visible(db_session, user, project_world) == set()

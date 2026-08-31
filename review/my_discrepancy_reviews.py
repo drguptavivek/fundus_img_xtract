@@ -9,9 +9,10 @@ from sqlalchemy import String, cast, func, literal, null
 from sqlalchemy.orm import Session
 
 from encounter_sets.permissions import (
-    CAPABILITY_DISCREPANCY_REVIEW,
     apply_task_capability_scope,
 )
+
+DISCREPANCY_ROLES = frozenset({"discrepancy_reviewer"})
 from models import Disease, DiseaseGrading, Grade, GradingTask, Hospital, LabUnit, User
 from utils.timezone_choices import DEFAULT_TIMEZONE
 
@@ -133,7 +134,7 @@ def _human_review_query(db: Session, *, user: User):
         query,
         GradingTask,
         user,
-        CAPABILITY_DISCREPANCY_REVIEW,
+        DISCREPANCY_ROLES,
     )
 
 
@@ -170,7 +171,7 @@ def _ai_feedback_query(db: Session, *, user: User):
         query,
         GradingTask,
         user,
-        CAPABILITY_DISCREPANCY_REVIEW,
+        DISCREPANCY_ROLES,
     )
 
 

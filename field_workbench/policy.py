@@ -9,16 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import exists, literal, or_, select
+from sqlalchemy import and_, exists, literal, or_, select
 
 from auth.roles import FIELD_ROLE_NAMES
 from data_authorization.models import (
-    HOSPITAL_SCOPE,
     LAB_UNIT_SCOPE,
     PROJECT_SCOPE,
     ProjectRoleGrant,
 )
 from models import LabUnit, PatientEncounters, Project, Role
+from project_configuration.models import ProjectLabUnit
 
 from .exceptions import FieldNotFound
 
@@ -26,7 +26,7 @@ from .exceptions import FieldNotFound
 # of this module; the operational roles are included so existing staff are not
 # locked out of a screen their web access already covers.
 FIELD_READ_ROLES = frozenset(
-    set(FIELD_ROLE_NAMES) | {"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}
+    set(FIELD_ROLE_NAMES) | {"admin", "local_admin", "data_manager", "optometrist"}
 )
 
 
@@ -71,23 +71,30 @@ def resolve_project_scope(db, *, user, project_id: int) -> tuple[Project, FieldS
             ProjectRoleGrant.project_id == project_id,
             ProjectRoleGrant.user_id == user.id,
             ProjectRoleGrant.active.is_(True),
+            Role.name.in_(FIELD_READ_ROLES),
+            or_(
+                ProjectRoleGrant.scope_type == PROJECT_SCOPE,
+                and_(
+                    ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
+                    ProjectRoleGrant.lab_unit_id.in_(
+                        select(ProjectLabUnit.lab_unit_id).where(
+                            ProjectLabUnit.project_id == project_id,
+                            ProjectLabUnit.active.is_(True),
+                        )
+                    ),
+                ),
+            ),
         )
     ).all()
     if not grants:
         raise FieldNotFound("Project not found.")
 
     role_names = frozenset(name for _, name in grants)
-    if not (role_names & FIELD_READ_ROLES):
-        raise FieldNotFound("Project not found.")
-
     project_wide = any(grant.scope_type == PROJECT_SCOPE for grant, _ in grants)
     return project, FieldScope(
         project_id=project_id,
         project_wide=project_wide,
-        hospital_ids=frozenset(
-            grant.hospital_id for grant, _ in grants
-            if grant.scope_type == HOSPITAL_SCOPE and grant.hospital_id is not None
-        ),
+        hospital_ids=frozenset(),
         lab_unit_ids=frozenset(
             grant.lab_unit_id for grant, _ in grants
             if grant.scope_type == LAB_UNIT_SCOPE and grant.lab_unit_id is not None
@@ -99,18 +106,18 @@ def resolve_project_scope(db, *, user, project_id: int) -> tuple[Project, FieldS
 def encounter_scope_clause(scope: FieldScope):
     """SQL restricting encounters to the caller's reach within the project."""
     if scope.project_wide:
-        return literal(True)
-    clauses = []
-    if scope.lab_unit_ids:
-        clauses.append(PatientEncounters.lab_unit_id.in_(scope.lab_unit_ids))
-    if scope.hospital_ids:
-        clauses.append(
-            exists().where(
-                LabUnit.id == PatientEncounters.lab_unit_id,
-                LabUnit.hospital_id.in_(scope.hospital_ids),
+        return exists(
+            select(ProjectLabUnit.id).where(
+                ProjectLabUnit.project_id == scope.project_id,
+                ProjectLabUnit.lab_unit_id == PatientEncounters.lab_unit_id,
+                ProjectLabUnit.active.is_(True),
             )
         )
-    return or_(*clauses) if clauses else literal(False)
+    return (
+        PatientEncounters.lab_unit_id.in_(scope.lab_unit_ids)
+        if scope.lab_unit_ids
+        else literal(False)
+    )
 
 
 def list_field_projects(db, *, user) -> list[tuple[Project, FieldScope]]:

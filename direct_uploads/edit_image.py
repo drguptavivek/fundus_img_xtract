@@ -8,10 +8,12 @@ from werkzeug.exceptions import NotFound
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
+from authz.behaviors import upload_rows
+from services.uploads.access import upload_columns
 from utils.fileUtils import abs_from_parts
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import bump_media_cache_version
 
 
@@ -85,27 +87,37 @@ def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None
             exc,
         )
 
+
+def _authorized_upload_query(db, upload_id: int):
+    """Build the upload row query with complete persisted lineage."""
+    scoped = upload_rows(
+        db,
+        select(DirectImageUpload).where(DirectImageUpload.id == upload_id),
+        current_user,
+        upload_columns(DirectImageUpload),
+    )
+    return scoped.where(
+        DirectImageUpload.hospital_id.is_not(None),
+        DirectImageUpload.lab_unit_id.is_not(None),
+        exists(
+            select(LabUnit.id).where(
+                LabUnit.id == DirectImageUpload.lab_unit_id,
+                LabUnit.hospital_id == DirectImageUpload.hospital_id,
+            )
+        ),
+    )
+
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required(
+    "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+    "project_pi", "site_pi", "project_admin",
+)
 def edit_image(upload_id: int):
     with get_db_session() as db:
         try:
-            upload = db.get(DirectImageUpload, upload_id)
+            upload = db.scalars(_authorized_upload_query(db, upload_id)).one_or_none()
             if not upload:
                 flash("Upload not found.", "danger")
-                return redirect(flask_url_for("direct_uploads.dashboard"))
-
-            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-            can_manage_others = current_user.has_role(
-                "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
-            )
-
-            if upload.lab_unit_id not in allowed_lab_unit_ids:
-                flash("You don't have permission to edit this upload.", "danger")
-                return redirect(flask_url_for("direct_uploads.dashboard"))
-
-            if not (can_manage_others or upload.uploader_id == current_user.id):
-                flash("You don't have permission to edit this upload.", "danger")
                 return redirect(flask_url_for("direct_uploads.dashboard"))
 
             raw_states = db.execute(
@@ -161,24 +173,16 @@ def edit_image(upload_id: int):
             return redirect(flask_url_for("direct_uploads.dashboard"))
 
 @bp.route("/direct/upload/restore_original/<int:upload_id>", methods=["POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required(
+    "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+    "project_pi", "site_pi", "project_admin",
+)
 def restore_original(upload_id: int):
     with get_db_session() as db:
         try:
-            upload = db.get(DirectImageUpload, upload_id)
+            upload = db.scalars(_authorized_upload_query(db, upload_id)).one_or_none()
             if not upload:
                 return jsonify({"error": "Upload not found."}), 404
-
-            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-            can_manage_others = current_user.has_role(
-                "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
-            )
-
-            if upload.lab_unit_id not in allowed_lab_unit_ids:
-                return jsonify({"error": "Forbidden"}), 403
-
-            if not (can_manage_others or upload.uploader_id == current_user.id):
-                return jsonify({"error": "Permission denied."}), 403
 
             raw_states = db.execute(
                 select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)

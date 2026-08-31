@@ -8,14 +8,15 @@ from flask_login import login_required
 from auth.roles import roles_required
 from flask_login import current_user
 from db_transaction_manager import transaction_scope
-from authz import scope
+from authz import RecordColumns
+from authz.behaviors import user_administration_rows
 from models import User, LoginAttempt, IpLock
 from . import api_bp
 
 
 @api_bp.route("/admin/users", methods=["GET"])
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_admin_users_activity():
     """Return paginated user activity for admin dashboards."""
     offset = request.args.get("offset", "0")
@@ -147,7 +148,12 @@ def _build_user_activity_query(db, types: set[str], user_id: int | None, start_d
             created_q = created_q.where(User.id == user_id)
         
         # Apply hospital scoping to User
-        created_q = scope(db, created_q, User, current_user, 'admin.users.view')
+        created_q = user_administration_rows(
+            db,
+            created_q,
+            current_user,
+            RecordColumns(hospital_id=User.hospital_id, user_id=User.id, classical_only=True),
+        )
         
         if start_dt:
             created_q = created_q.where(User.created_at >= start_dt)
@@ -171,7 +177,16 @@ def _build_user_activity_query(db, types: set[str], user_id: int | None, start_d
                 success_q = success_q.where(user_alias.id == user_id)
             
             # Apply hospital scoping to (aliased) User
-            success_q = scope(db, success_q, user_alias, current_user, 'admin.users.view')
+            success_q = user_administration_rows(
+                db,
+                success_q,
+                current_user,
+                RecordColumns(
+                    hospital_id=user_alias.hospital_id,
+                    user_id=user_alias.id,
+                    classical_only=True,
+                ),
+            )
             
             if start_dt:
                 success_q = success_q.where(LoginAttempt.created_at >= start_dt)
@@ -191,7 +206,16 @@ def _build_user_activity_query(db, types: set[str], user_id: int | None, start_d
                 failure_q = failure_q.where(user_alias.id == user_id)
             
             # Apply hospital scoping to (aliased) User
-            failure_q = scope(db, failure_q, user_alias, current_user, 'admin.users.view')
+            failure_q = user_administration_rows(
+                db,
+                failure_q,
+                current_user,
+                RecordColumns(
+                    hospital_id=user_alias.hospital_id,
+                    user_id=user_alias.id,
+                    classical_only=True,
+                ),
+            )
             
             if start_dt:
                 failure_q = failure_q.where(LoginAttempt.created_at >= start_dt)
@@ -202,7 +226,7 @@ def _build_user_activity_query(db, types: set[str], user_id: int | None, start_d
     if "ip_locked" in types and user_id is None:
         # IpLock is not tied to a hospital, but for Site Admins we only show it if they are master admins
         # or we might want to skip it. For now, we restrict to master admins for consistency.
-        if getattr(current_user, 'is_master_admin', False):
+        if current_user.has_role("admin"):
             ip_lock_q = sa.select(
                 sa.literal("ip_locked").label("event_type"),
                 sa.literal(None).label("username"),

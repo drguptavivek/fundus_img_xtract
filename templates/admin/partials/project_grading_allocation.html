@@ -1,7 +1,6 @@
 {% from "_forms.html" import csrf_field %}
 
 {% set allocation_state = grading_allocation_state %}
-{% set enforcement_enabled = allocation_state.policy.enforcement_enabled %}
 {% set task_families = [
   {
     'key': 'encounter_set_scoped',
@@ -28,9 +27,7 @@
         Assign project-derived grading targets to resident and arbitrator pools. Resident capacity covers both Resident and Resident 2. Arbitrator allocation is optional and independent.
       </div>
     </div>
-    <span class="badge {{ 'text-bg-success' if enforcement_enabled else 'text-bg-secondary' }}">
-      {{ 'Project allocation enforced' if enforcement_enabled else 'Legacy eligibility active' }}
-    </span>
+    <span class="badge text-bg-success">Project allocation always required</span>
   </div>
 
   <div class="border rounded p-3">
@@ -156,8 +153,8 @@
       </div>
     </form>
     {% else %}
-    <div class="alert alert-info mb-3">
-      No grading targets are available. Enable and configure an Upload &amp; Grading Profile for this project first.
+      <div class="alert alert-info mb-3">
+      No grading targets are available. Configure an Upload &amp; Grading Profile for this project first.
     </div>
     {% endif %}
 
@@ -206,7 +203,7 @@
 
     {% if allocation_state.warnings %}
     <div class="alert alert-warning py-2">
-      <div class="fw-semibold small mb-1">Allocation is not ready for enforcement</div>
+      <div class="fw-semibold small mb-1">Allocation coverage needs attention</div>
       <ul class="small mb-0 ps-3">
         {% for warning in allocation_state.warnings %}
         <li>{{ warning.message }}</li>
@@ -215,39 +212,9 @@
     </div>
     {% endif %}
 
-    <form class="d-flex flex-wrap justify-content-between align-items-center gap-3 border-top pt-3"
-          action="{{ url_for('fundus_api.update_project_grader_allocation_policy', project_id=selected_project.id) }}"
-          method="post"
-          data-grading-allocation-form="policy"
-          data-http-method="PUT"
-          data-next-enforcement-enabled="{{ 'false' if enforcement_enabled else 'true' }}"
-          data-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}">
-      {{ csrf_field() }}
-      <div>
-        <div class="fw-semibold">Enforce project allocation</div>
-        <div class="small text-muted">
-          Resident coverage is required; arbitrator allocation is optional and independent. When off, current disease-and-lab eligibility remains active. Projectless historical tasks always retain legacy eligibility.
-        </div>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input"
-                 type="checkbox"
-                 role="switch"
-                 id="grading_enforcement_{{ selected_project.id }}"
-                 name="enforcement_enabled"
-                 {% if enforcement_enabled %}checked{% endif %}
-                 disabled>
-          <label class="form-check-label" for="grading_enforcement_{{ selected_project.id }}">
-            {{ 'Enabled' if enforcement_enabled else 'Disabled' }}
-          </label>
-        </div>
-        <button class="btn btn-sm {{ 'btn-outline-danger' if enforcement_enabled else 'btn-outline-success' }}"
-                type="submit"
-                {% if not enforcement_enabled and (allocation_state.warnings or not allocation_state.targets) %}disabled{% endif %}>
-          {{ 'Disable enforcement' if enforcement_enabled else 'Enable enforcement' }}
-        </button>
-      </div>
-    </form>
+    <div class="alert alert-secondary border-top rounded-0 mb-0 pt-3">
+      <div class="fw-semibold">Project grading allocation is always required</div>
+      <div class="small">Only users with an active allocation for this project, target, capacity, and Lab Unit can grade project-owned tasks. There is no legacy eligibility fallback or enable/disable switch.</div>
+    </div>
   </div>
 </div>

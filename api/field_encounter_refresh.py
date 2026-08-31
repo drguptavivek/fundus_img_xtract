@@ -11,7 +11,6 @@ import logging
 from flask import jsonify, request
 from flask_login import current_user, login_required
 
-from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import transaction_scope
 from field_workbench import service as field_service
 from field_workbench.exceptions import FieldError
@@ -24,10 +23,6 @@ logger = logging.getLogger("api.field_encounter_refresh")
 
 @api_bp.route("/encounter-sets/<uuid>/refresh-source", methods=["POST"])
 @login_required
-@roles_or_project_grant_required(
-    "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
-    "field_optometrist", "field_ophthalmologist",
-)
 def refresh_encounter_source(uuid: str):
     """Re-query the upstream source for this encounter.
 

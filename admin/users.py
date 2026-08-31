@@ -1,6 +1,5 @@
 from datetime import date
 from flask import (
-    after_this_request,
     current_app,
     flash,
     redirect,
@@ -55,18 +54,27 @@ from utils.timezone_choices import (
     TIMEZONE_LABELS,
     DEFAULT_TIMEZONE,
 )
-from app_cache import cache
-from grading_allocation.eligibility import invalidate_user_eligibility_cache
-from data_authorization.policy import PROJECT_ONLY_ROLE_NAMES
+from authz.project_roles import PROJECT_GOVERNANCE_ROLES
+from .user_management_authorization import (
+    PROTECTED_ROLE_NAMES as USER_MANAGER_PROTECTED_ROLE_NAMES,
+    can_manage_user as _can_manage_user,
+)
 
 
-def _global_user_roles_statement():
+PROJECT_ONLY_ROLE_NAMES = PROJECT_GOVERNANCE_ROLES | {"collaborator", "pii_exporter"}
+
+
+def _global_user_roles_statement(*, actor: User | None = None):
     """Roles assignable outside a project; project governance stays in Project Access."""
-    return (
+    statement = (
         select(Role)
         .where(Role.name.not_in(PROJECT_ONLY_ROLE_NAMES))
         .order_by(Role.name.asc())
     )
+    effective_actor = actor or current_user
+    if not effective_actor.has_role("admin"):
+        statement = statement.where(Role.name.not_in(USER_MANAGER_PROTECTED_ROLE_NAMES))
+    return statement
 
 
 def _replace_global_user_roles(
@@ -82,9 +90,8 @@ def _replace_global_user_roles(
     existing = {role.name for role in (user.roles or [])}
     preserved_role_names = existing.intersection(PROJECT_ONLY_ROLE_NAMES)
     if not actor.has_role("admin"):
-        if "admin" in existing:
-            preserved_role_names.add("admin")
-        selected_role_names.discard("admin")
+        preserved_role_names.update(existing & USER_MANAGER_PROTECTED_ROLE_NAMES)
+        selected_role_names.difference_update(USER_MANAGER_PROTECTED_ROLE_NAMES)
     target_role_names = selected_role_names | preserved_role_names
     user.roles = db.execute(
         select(Role).where(Role.name.in_(target_role_names or {"__none__"}))
@@ -93,13 +100,7 @@ def _replace_global_user_roles(
 
 def _can_access_user_detail(target_user: User) -> bool:
     """Return whether the current user may view this user's admin detail hub."""
-    user_roles = {r.name for r in (current_user.roles or [])}
-    if "admin" in user_roles:
-        return True
-
-    current_hospital_id = getattr(current_user, "hospital_id", None)
-    target_hospital_id = getattr(target_user, "hospital_id", None)
-    return bool(current_hospital_id) and target_hospital_id == current_hospital_id
+    return _can_manage_user(actor=current_user, target_user=target_user)
 
 
 def _group_lab_units_by_hospital(lab_units: list[LabUnit]) -> list[dict]:
@@ -224,7 +225,7 @@ def _render_user_hub_section(context: dict, tab: str):
     return render_template("admin/partials/user_hub_section.html", tab=normalized_tab, **render_context)
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def users_list():
     """List all users with roles, hospitals, and lab units."""
 
@@ -234,9 +235,16 @@ def users_list():
             selectinload(User.lab_units).selectinload(LabUnit.hospital)
         ).order_by(User.username.asc())
         
-        # Keep local admins scoped to their hospital, but let admins see the full list.
-        if current_user.has_role("local_admin") and not current_user.has_role("admin") and getattr(current_user, "hospital_id", None):
-            query = query.where(User.hospital_id == current_user.hospital_id)
+        if current_user.has_role("user_manager") and not current_user.has_role("admin"):
+            hospital_id = getattr(current_user, "hospital_id", None)
+            if hospital_id:
+                query = query.where(
+                    User.hospital_id == hospital_id,
+                    User.id != current_user.id,
+                    ~User.roles.any(Role.name.in_({"admin", "user_manager", "local_admin"})),
+                )
+            else:
+                query = query.where(User.id == -1)
             
         users = db.execute(query).scalars().all()
         template_name = "admin/partials/user_list_workspace.html" if request.headers.get("HX-Request") or request.args.get("format") == "partial" else "admin/users.html"
@@ -245,7 +253,7 @@ def users_list():
         return render_template(template_name, users=users)
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def user_detail(user_id: int):
     """Canonical admin user hub with all assignments and activity in one place."""
     with get_db_session() as db:
@@ -270,7 +278,7 @@ def _default_last_date_of_service(created_on: date) -> date:
     except ValueError:
         return created_on.replace(month=2, day=28, year=created_on.year + 2)
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def add_user():
     pre_username = (request.form.get("username") or request.args.get("username") or "").strip()
     pre_active = bool(request.form.get("active")) if request.method == "POST" else True
@@ -292,11 +300,14 @@ def add_user():
     pre_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units")) if request.method == "POST" else set()
 
     if request.method == "POST":
-        if pre_roles.intersection(PROJECT_ONLY_ROLE_NAMES):
+        forbidden_roles = PROJECT_ONLY_ROLE_NAMES
+        if not current_user.has_role("admin"):
+            forbidden_roles = forbidden_roles | USER_MANAGER_PROTECTED_ROLE_NAMES
+        if pre_roles.intersection(forbidden_roles):
             return _add_user_err(
                 "Project roles must be assigned from Project Access.",
                 None, None, None, pre_username, pre_active,
-                pre_roles - PROJECT_ONLY_ROLE_NAMES,
+                pre_roles - forbidden_roles,
                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj,
                 pre_ldos or default_ldos_str, pre_file_upload_quota,
                 pre_lab_unit_ids, pre_timezone,
@@ -381,12 +392,6 @@ def add_user():
             # Validate before db.add(user): transaction_scope commits on a
             # normal exit, so an early `return` after the add would leave a
             # half-built account behind (rejected request, user still created).
-
-            # Site Admin Enforcement: Check restricted roles
-            if pre_roles and "admin" in pre_roles and not current_user.has_role("admin"):
-                return _add_user_err("You cannot assign the admin role.", None, None, None, username, pre_active, pre_roles,
-                             pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
-                             pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
             lab_unit_objs = []
             if pre_lab_unit_ids:
@@ -495,7 +500,7 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
                                default_timezone=default_tz)
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def user_created():
     info = session.pop("user_created_info", None)
     if not info:
@@ -511,7 +516,7 @@ def user_created():
     return render_template("admin/user_created.html", info=info)
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def edit_user(user_id: int):
     # Handle GET request (display the form)
     with get_db_session() as db:
@@ -520,10 +525,9 @@ def edit_user(user_id: int):
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
         # Site Admin Enforcement: Cannot edit users from other hospitals (or system users like AI models)
-        if not current_user.has_role("admin"):
-             if getattr(user, 'hospital_id', None) != current_user.hospital_id:
-                 flash("You do not have permission to edit this user.", "danger")
-                 return redirect(url_for("admin.users_list"))
+        if not _can_manage_user(actor=current_user, target_user=user):
+             flash("You do not have permission to edit this user.", "danger")
+             return redirect(url_for("admin.users_list"))
 
         roles = db.execute(_global_user_roles_statement()).scalars().all()
 
@@ -575,6 +579,10 @@ def edit_user(user_id: int):
             if not user:
                 flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
+            if not _can_manage_user(actor=current_user, target_user=user):
+                flash("You do not have permission to edit this user.", "danger")
+                return redirect(url_for("admin.users_list"))
+
             roles = db.execute(_global_user_roles_statement()).scalars().all()
 
             # Hospital isolation: admin sees all hospitals, local_admin sees only their own
@@ -600,15 +608,6 @@ def edit_user(user_id: int):
                 )
 
                 db.add(user)
-                cache_key = f"auth:user:{user.id}"
-                changed_user_id = user.id
-
-                @after_this_request
-                def invalidate_role_caches(response):
-                    cache.delete(cache_key)
-                    invalidate_user_eligibility_cache(changed_user_id)
-                    return response
-
                 flash("Roles updated.", "success")
                 if request.headers.get("HX-Request") or request.args.get("format") == "partial":
                     return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
@@ -737,7 +736,7 @@ def edit_user(user_id: int):
             return redirect(url_for("admin.users_list"))
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def users_update(user_id: int):
     """
     Update a user's active flag from the users list.
@@ -754,13 +753,9 @@ def users_update(user_id: int):
         # 0) Site Admin Enforcement: a local_admin acts only within their own
         # hospital, and never on an account holding the global admin role.
         # edit_user already enforced the first half; this path did not.
-        if not current_user.has_role("admin"):
-            if getattr(user, "hospital_id", None) != current_user.hospital_id:
-                flash("You do not have permission to change this user.", "danger")
-                return redirect(url_for("admin.users_list"))
-            if "admin" in {r.name for r in (user.roles or [])}:
-                flash("You do not have permission to change an administrator account.", "danger")
-                return redirect(url_for("admin.users_list"))
+        if not _can_manage_user(actor=current_user, target_user=user):
+            flash("You do not have permission to change this user.", "danger")
+            return redirect(url_for("admin.users_list"))
 
         # 1) Don't let an admin deactivate themselves
         if user.id == getattr(current_user, "id", None) and not new_active:
@@ -801,7 +796,7 @@ def users_update(user_id: int):
     return redirect(url_for("admin.users_list"))
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def revoke_mobile_session(user_id: int, session_id: str):
     """Revoke a mobile session from the admin user hub."""
     with transaction_scope() as db:
@@ -836,7 +831,7 @@ def revoke_mobile_session(user_id: int, session_id: str):
     return redirect(url_for("admin.user_detail", user_id=user_id))
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def issue_device_enrolment_code(user_id: int):
     """Issue a single-use enrolment code so one device may sign in.
 
@@ -871,7 +866,7 @@ def issue_device_enrolment_code(user_id: int):
     return _device_admin_response(user_id)
 
 
-@roles_required("admin", "local_admin")
+@roles_required("admin", "user_manager")
 def update_mobile_device_status(user_id: int, device_id: str):
     """Approve, block, or reset a device from the admin user hub."""
     status = (request.form.get("status") or "").strip()

@@ -5,7 +5,7 @@ from flask import abort, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from db_transaction_manager import transaction_scope
-from data_authorization.policy import project_capabilities
+from authz.project_access import project_capabilities
 
 from .exceptions import ProjectReviewNotFound
 from .service import get_gradings, get_summary, get_uploads, list_projects

@@ -102,7 +102,7 @@ def test_manual_wadhwani_project_listing_uses_project_mapping_not_upload_profile
         )
     )
     db_session.flush()
-    monkeypatch.setattr(manual_service, "apply_scoping", lambda query, *_args: query)
+    monkeypatch.setattr("authz.project_access.can_run_wai", lambda *args, **kwargs: True)
 
     projects = manual_service.list_manual_wadhwani_projects(db_session, object())
 

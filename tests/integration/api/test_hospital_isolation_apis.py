@@ -25,15 +25,14 @@ class TestEligibleLabUnitAPI:
         
         data = response.get_json()
         assert data['user_id'] == hosp_a_res_1.id
-        assert data['hospital_id'] == 1  # Hospital A
+        assert data['hospital_id'] == 100  # Hospital A (test hospital)
         assert data['is_master_admin'] is False
         
         # Should only have Hospital A lab units
         lab_units = data['eligible_lab_units']
         hospital_ids = {lu['hospital_id'] for lu in lab_units}
         
-        assert 1 in hospital_ids  # Hospital A
-        assert 2 not in hospital_ids  # Hospital B should NOT be visible
+        assert hospital_ids == {100}  # Hospital A only
     
     @pytest.mark.xfail(reason="DetachedInstanceError - user merging issue (Pattern 2). Requires further investigation.", raises=Exception)
     def test_master_admin_gets_all_hospitals_labs(
@@ -75,19 +74,19 @@ class TestEligibleLabUnitCurrentUserAPI:
         
         data = response.get_json()
         assert data['user_id'] == hosp_b_res_1.id
-        assert data['hospital_id'] == 2  # Hospital B
+        assert data['hospital_id'] == 101  # Hospital B (test hospital)
         assert data['is_master_admin'] is False
         
         # Should only see Hospital B
         hospitals = data['eligible_hospitals']
         assert len(hospitals) == 1
-        assert hospitals[0]['id'] == 2
+        assert hospitals[0]['id'] == 101
         assert hospitals[0]['name'] == 'Hospital B'
         
         # Lab units should also be Hospital B only
         lab_units = data['eligible_lab_units']
         hospital_ids = {lu['hospital_id'] for lu in lab_units}
-        assert hospital_ids == {2}
+        assert hospital_ids == {101}
     
     def test_master_admin_sees_all_hospitals(
         self, app, db_session, master_admin, core_test_data
@@ -126,10 +125,10 @@ class TestHospitalsAPI:
         
         hospitals = response.get_json()
         
-        # Should only see Hospital A
+        # Should only see Hospital A (id 100 in the current seed)
         assert len(hospitals) == 1
-        assert hospitals[0]['id'] == 1
-        assert hospitals[0]['name'] == core_test_data['hospital_a'].name
+        assert hospitals[0]['id'] == 100
+        assert hospitals[0]['name'] == 'Hospital A' 
     
     def test_master_admin_gets_all_hospitals(
         self, app, db_session, master_admin, core_test_data
@@ -160,13 +159,13 @@ class TestHospitalByIdAPI:
         from tests.conftest import create_authenticated_client
         client = create_authenticated_client(app, hosp_a_data_manager)
         
-        # Access Hospital A (user's hospital)
-        response = client.get('/api/hospitals/1')
+        # Access Hospital A (user's hospital; id 100 in the current seed)
+        response = client.get('/api/hospitals/100')
         assert response.status_code == 200
         
         hospital = response.get_json()
-        assert hospital['id'] == 1
-        assert hospital['name'] == core_test_data['hospital_a'].name
+        assert hospital['id'] == 100
+        assert hospital['name'] == 'Hospital A' 
     
     def test_user_cannot_access_other_hospital(
         self, app, hosp_a_data_manager

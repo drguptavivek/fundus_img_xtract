@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from models import Session, User  # noqa: E402
+from models import Role, Session, User  # noqa: E402
 from sqlalchemy import and_  # noqa: E402
 from utils.log_sanitize import sanitize_log_value # noqa: E402
 
@@ -42,13 +42,13 @@ def get_users_needing_hospital_assignment() -> List[User]:
     
     Returns users where:
     - hospital_id is NULL
-    - is_master_admin is False (master admins can have NULL hospital_id)
+    - does not hold the explicit admin role (admins can have NULL hospital_id)
     """
     with Session() as db:
         users = db.query(User).filter(
             and_(
                 User.hospital_id.is_(None),
-                User.is_master_admin == False
+                ~User.roles.any(Role.name == "admin"),
             )
         ).all()
         

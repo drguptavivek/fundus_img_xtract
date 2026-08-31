@@ -16,6 +16,7 @@ from grading.workbench.errors import WorkbenchError
 from grading.workbench.legacy_transport import submit_task_form
 from grading.workbench_page import open_revision_workbench, open_task_workbench
 from models import Grade, GradingTask, ImageMetadata
+from tasks.lineage import valid_task_lineage
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 
 
@@ -34,17 +35,17 @@ def register_routes(bp):
     )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def revise_grading(grade_id: int):
     return open_revision_workbench(grade_id)
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_task(task_uuid: str, slot_type: str):
     return open_task_workbench(task_uuid, slot_type)
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_submit():
     try:
         with transaction_scope() as db:
@@ -62,13 +63,16 @@ def dual_grading_submit():
     return redirect(url_for("grading.index"))
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_feature_geometry(task_uuid: str):
     slot = (request.args.get("slot") or "").strip()
     if slot not in {"resident", "resident2", "arbitrator"}:
         return jsonify({"success": False, "message": "Invalid grading slot."}), 422
     with transaction_scope() as db:
-        task = db.query(GradingTask).filter(GradingTask.uuid == task_uuid).first()
+        task = db.query(GradingTask).filter(
+            GradingTask.uuid == task_uuid,
+            valid_task_lineage(GradingTask),
+        ).first()
         if task is None:
             return jsonify({"success": False, "message": "Task not found."}), 404
         grade = (

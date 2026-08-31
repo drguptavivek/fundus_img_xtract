@@ -6,25 +6,25 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from flask import jsonify, render_template, request, send_file
 from flask_login import current_user
 from auth.roles import roles_required
+from authz.behaviors import analytics_lab_units, analytics_rows
+import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app_cache import cache
 
 from . import bp
-from models import AIModel, Camera, Disease, DiseaseGrading, LabUnit
+from models import AIModel, Camera, Disease, DiseaseGrading
 from utils.final_grade_basis import (
     FINAL_GRADE_UNRESOLVED,
     final_grade_basis_label,
     normalize_final_grade_basis,
     sql_final_grade_expression,
 )
-from authz import scope
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 from db_transaction_manager import get_db_session
+from models import GradingTask, LabUnit
+from tasks.access import task_columns
 
 import json
-import hashlib
 import random
 import re
 import math
@@ -34,6 +34,45 @@ import io
 SKLEARN_AVAILABLE = False
 MATPLOTLIB_AVAILABLE = False
 OPENPYXL_AVAILABLE = False
+
+
+def _authorized_task_ids(
+    db: Session,
+    *,
+    disease_id: int,
+    lab_unit_ids: Sequence[int] | None = None,
+) -> list[int]:
+    """Resolve task authorization before reading the performance MV.
+
+    The MV contains derived grading data and cannot establish project
+    lineage.  Use the ordinary analytics row behaviour against the source
+    ``GradingTask`` rows, including the LabUnit -> Hospital relationship, and
+    use the resulting identities as the sole MV boundary.  An explicit Lab
+    Unit list is an additional narrowing filter; callers must validate that
+    list instead of silently intersecting it with the actor's scope.
+    """
+    query = db.query(GradingTask.id).join(
+        LabUnit, GradingTask.lab_unit_id == LabUnit.id
+    )
+    query = analytics_rows(
+        db,
+        query,
+        current_user,
+        task_columns(GradingTask, hospital_id_column=LabUnit.hospital_id),
+    ).filter(
+        GradingTask.disease_id == disease_id,
+        GradingTask.lab_unit_id.is_not(None),
+        LabUnit.hospital_id.is_not(None),
+    )
+    # Keep the structural source/parent checks identical to the dashboard
+    # path.  This is deliberately a local import to avoid importing route
+    # modules while the analytics blueprint is being assembled.
+    from tasks.lineage import valid_task_lineage
+
+    query = query.filter(valid_task_lineage())
+    if lab_unit_ids is not None:
+        query = query.filter(GradingTask.lab_unit_id.in_(list(lab_unit_ids) or [-1]))
+    return [int(row[0]) for row in query.all()]
 
 
 def _ensure_sklearn() -> bool:
@@ -277,71 +316,6 @@ def _build_threshold_range(
     if not thresholds:
         thresholds = [round(min_threshold, 3)]
     return thresholds, None
-
-
-def _build_threshold_cache_key(
-    disease_id: int,
-    ai_model_id: int,
-    reference_source: str,
-    upload_type: Optional[str],
-    camera_id: Optional[int],
-    class_definitions: Dict[str, List[str]],
-    positive_class: Optional[str],
-    lab_units: Sequence[int],
-    thresholds: Sequence[float],
-    sample_size: int,
-) -> str:
-    """Create a deterministic cache key for threshold explorer results."""
-    payload = {
-        "disease_id": disease_id,
-        "ai_model_id": ai_model_id,
-        "reference_source": reference_source,
-        "upload_type": upload_type,
-        "camera_id": camera_id,
-        "class_definitions": class_definitions,
-        "positive_class": positive_class,
-        "lab_units": sorted(set(lab_units)),
-        "thresholds": [round(t, 3) for t in thresholds],
-        "sample_size": sample_size,
-    }
-    serialized = json.dumps(payload, sort_keys=True)
-    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    return f"analytics:threshold-explorer:{digest}"
-
-
-def _build_performance_cache_key(
-    disease_id: int,
-    ai_model_id: int,
-    reference_source: str,
-    final_grade_basis: str,
-    upload_type: Optional[str],
-    camera_id: Optional[int],
-    class_definitions: Dict[str, List[str]],
-    positive_class: Optional[str],
-    threshold: float,
-    bootstrap_samples: int,
-    selected_lab_units: Sequence[int],
-    allowed_lab_units: Sequence[int],
-) -> str:
-    """Create a deterministic cache key for the main model performance analysis."""
-    normalized_classes = {cls: sorted(members) for cls, members in sorted(class_definitions.items())}
-    payload = {
-        "disease_id": disease_id,
-        "ai_model_id": ai_model_id,
-        "reference_source": reference_source,
-        "final_grade_basis": final_grade_basis,
-        "upload_type": upload_type,
-        "camera_id": camera_id,
-        "class_definitions": normalized_classes,
-        "positive_class": positive_class,
-        "threshold": round(threshold, 3),
-        "bootstrap_samples": bootstrap_samples,
-        "selected_lab_units": sorted(set(selected_lab_units)),
-        "allowed_lab_units": sorted(set(allowed_lab_units)),
-    }
-    serialized = json.dumps(payload, sort_keys=True)
-    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    return f"analytics:model-performance:{digest}"
 
 
 def _apply_threshold_to_cases(
@@ -645,11 +619,34 @@ def model_performance() -> str:
         )
     disease_id = request.args.get("disease_id", type=int)
     ai_model_id = request.args.get("ai_model_id", type=int)
-    selected_lab_units = request.args.getlist("lab_unit_id", type=int)
+    selected_lab_units: List[int] = []
+    invalid_lab_unit_filter = False
+    for raw_lab_unit_id in request.args.getlist("lab_unit_id"):
+        try:
+            parsed_lab_unit_id = int(raw_lab_unit_id)
+        except (TypeError, ValueError):
+            invalid_lab_unit_filter = True
+            continue
+        if parsed_lab_unit_id <= 0:
+            invalid_lab_unit_filter = True
+            continue
+        selected_lab_units.append(parsed_lab_unit_id)
     threshold = request.args.get("threshold", default=0.5, type=float)
     bootstrap_samples = request.args.get("bootstrap_samples", default=2000, type=int)
-    upload_type = (request.args.get("upload_type") or "").strip().lower() or None
-    camera_id = request.args.get("camera_id", type=int)
+    upload_type_raw = request.args.get("upload_type")
+    upload_type = (upload_type_raw or "").strip().lower() or None
+    upload_type_invalid = bool(upload_type_raw and upload_type not in {"zip", "direct"})
+    camera_id_raw = request.args.get("camera_id")
+    camera_id_invalid = False
+    if camera_id_raw is None:
+        camera_id = None
+    else:
+        try:
+            camera_id = int(camera_id_raw)
+            camera_id_invalid = camera_id <= 0
+        except (TypeError, ValueError):
+            camera_id = -1
+            camera_id_invalid = True
     class_map_raw = request.args.get("class_map", default="") or ""
     class_map = _parse_class_map(class_map_raw)
     positive_class = request.args.get("positive_class") or None
@@ -693,7 +690,7 @@ def model_performance() -> str:
         # Lab unit options respecting hospital access
         lu_query = db.query(LabUnit).order_by(LabUnit.name)
         # Apply hospital scoping for analytics context
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'analytics.encounters.view')
+        lu_query = analytics_lab_units(db, lu_query, current_user)
         lab_units = lu_query.all()
         user_lab_unit_ids = [lu.id for lu in lab_units]
         lab_units_payload = [{"id": lu.id, "name": lu.name} for lu in lab_units]
@@ -710,51 +707,6 @@ def model_performance() -> str:
             class_names = list(class_definitions.keys())
 
             if not error_message:
-                cache_key: Optional[str] = None
-                if not download:
-                    cache_key = _build_performance_cache_key(
-                        disease_id=disease_id,
-                        ai_model_id=ai_model_id,
-                        reference_source=reference_source,
-                        final_grade_basis=final_grade_basis,
-                        upload_type=upload_type,
-                        camera_id=camera_id,
-                        class_definitions=class_definitions,
-                        positive_class=positive_class,
-                        threshold=threshold,
-                        bootstrap_samples=bootstrap_samples,
-                        selected_lab_units=selected_lab_units,
-                        allowed_lab_units=user_lab_unit_ids or [],
-                    )
-                    cached_performance = cache.get(cache_key) if cache_key else None
-                    if cached_performance:
-                        performance = cached_performance
-                        return render_template(
-                            "analytics/model_performance.html",
-                            diseases=diseases_payload,
-                            ai_models=ai_models_payload,
-                            selected_disease_id=disease_id,
-                            selected_model_id=ai_model_id,
-                            selected_disease_name=selected_disease_name,
-                            selected_model_name=selected_model_name,
-                            selected_model_version=selected_model_version,
-                            performance=performance,
-                            error_message=error_message,
-                            labels_for_disease=labels_for_disease or [],
-                            reference_source=reference_source,
-                            final_grade_basis=final_grade_basis,
-                            final_grade_basis_label=final_grade_basis_label(final_grade_basis),
-                            positive_class=positive_class,
-                            threshold=threshold,
-                            bootstrap_samples=bootstrap_samples,
-                            lab_units=lab_units_payload,
-                            selected_lab_units=selected_lab_units,
-                            upload_type=upload_type,
-                            cameras=cameras_payload,
-                            selected_camera_id=camera_id,
-                            roc_points_json=json.dumps(performance.roc_points) if performance and performance.roc_points else "[]",
-                            class_map_json=json.dumps(class_definitions),
-                        )
                 mv_name = get_mv_name_for_disease(db, disease_id)
                 sql_parts = [
                     f"""
@@ -784,7 +736,9 @@ def model_performance() -> str:
                 ]
                 params: Dict[str, object] = {"disease_id": disease_id}
 
-                if upload_type in {"zip", "direct"}:
+                if upload_type_invalid or camera_id_invalid:
+                    sql_parts.append("AND 1=0")
+                elif upload_type in {"zip", "direct"}:
                     if upload_type == "zip":
                         sql_parts.append("AND upload_type = ANY(:upload_types)")
                         params["upload_types"] = ["ZIP", "SET"]
@@ -796,21 +750,24 @@ def model_performance() -> str:
                     params["camera_id"] = camera_id
                     sql_parts.append("AND camera_id = :camera_id")
 
-                if selected_lab_units:
-                    requested = set(selected_lab_units) & set(user_lab_unit_ids)
-                    if requested:
-                        sql_parts.append("AND task_lab_unit_id = ANY(:selected_lab_unit_ids)")
-                        params["selected_lab_unit_ids"] = list(requested)
-                    else:
-                        sql_parts.append("AND 1=0")
-                elif user_lab_unit_ids:
-                    sql_parts.append("AND task_lab_unit_id = ANY(:allowed_lab_unit_ids)")
-                    params["allowed_lab_unit_ids"] = user_lab_unit_ids
-                elif not current_user.is_master_admin:
-                    sql_parts.append("AND 1=0")
+                if invalid_lab_unit_filter or (
+                    not set(selected_lab_units).issubset(set(user_lab_unit_ids))
+                    and not current_user.has_role("admin")
+                ):
+                    authorized_task_ids: list[int] = []
+                else:
+                    authorized_task_ids = _authorized_task_ids(
+                        db,
+                        disease_id=disease_id,
+                        lab_unit_ids=selected_lab_units or None,
+                    )
+                sql_parts.append("AND task_id IN :authorized_task_ids")
+                params["authorized_task_ids"] = authorized_task_ids or [-1]
 
                 sql_parts.append("ORDER BY task_created_at DESC")
-                query = text("\n".join(sql_parts))
+                query = text("\n".join(sql_parts)).bindparams(
+                    sa.bindparam("authorized_task_ids", expanding=True)
+                )
 
                 rows = db.execute(query, params).mappings().all()
 
@@ -1109,13 +1066,6 @@ def model_performance() -> str:
                         unresolved_excluded_count=unresolved_excluded_count,
                     )
 
-                    if cache_key:
-                        try:
-                            cache.set(cache_key, performance, timeout=60 * 60)
-                        except Exception:
-                            # Fail open; caching should not break response
-                            pass
-
                     if download and analyzed_rows:
                         buf = _render_excel(analyzed_rows)
                         if buf:
@@ -1166,7 +1116,9 @@ def threshold_explorer() -> object:
     disease_id = payload.get("disease_id")
     ai_model_id = payload.get("ai_model_id")
     final_grade_basis = normalize_final_grade_basis(payload.get("final_grade_basis"))
-    upload_type = (payload.get("upload_type") or "").strip().lower() or None
+    upload_type_raw = payload.get("upload_type")
+    upload_type = (upload_type_raw or "").strip().lower() or None
+    upload_type_invalid = bool(upload_type_raw and upload_type not in {"zip", "direct"})
     camera_id_raw = payload.get("camera_id")
     class_map_raw = payload.get("class_map") or {}
     positive_class = payload.get("positive_class") or None
@@ -1186,11 +1138,20 @@ def threshold_explorer() -> object:
     try:
         disease_id = int(disease_id)
         ai_model_id = int(ai_model_id)
-        camera_id = int(camera_id_raw) if camera_id_raw not in (None, "") else None
     except (TypeError, ValueError):
         disease_id = None
         ai_model_id = None
+
+    camera_id_invalid = False
+    if camera_id_raw in (None, ""):
         camera_id = None
+    else:
+        try:
+            camera_id = int(camera_id_raw)
+            camera_id_invalid = camera_id <= 0
+        except (TypeError, ValueError):
+            camera_id = -1
+            camera_id_invalid = True
 
     if disease_id is None or ai_model_id is None:
         return jsonify({"error": "disease_id and ai_model_id are required."}), 400
@@ -1206,10 +1167,23 @@ def threshold_explorer() -> object:
                 class_map[k] = [s for s in v if isinstance(s, str)]
 
     # Normalize lab units list
+    invalid_lab_unit_filter = False
     if isinstance(selected_lab_units, list):
-        selected_lab_units = [int(v) for v in selected_lab_units if isinstance(v, (int, str)) and str(v).isdigit()]
+        parsed_lab_units: list[int] = []
+        for value in selected_lab_units:
+            try:
+                parsed_value = int(value)
+            except (TypeError, ValueError):
+                invalid_lab_unit_filter = True
+                continue
+            if parsed_value <= 0:
+                invalid_lab_unit_filter = True
+                continue
+            parsed_lab_units.append(parsed_value)
+        selected_lab_units = parsed_lab_units
     else:
         selected_lab_units = []
+        invalid_lab_unit_filter = True
 
     with get_db_session() as db:
         # Validate class mapping and positive class
@@ -1221,7 +1195,12 @@ def threshold_explorer() -> object:
         if not positive_class:
             return jsonify({"error": "Positive class could not be resolved."}), 400
 
-        user_lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        user_lab_unit_ids = [
+            int(row[0])
+            for row in analytics_lab_units(
+                db, db.query(LabUnit.id), current_user
+            ).all()
+        ]
 
         mv_name = get_mv_name_for_disease(db, disease_id)
         sql_parts = [
@@ -1252,7 +1231,9 @@ def threshold_explorer() -> object:
         ]
         params: Dict[str, object] = {"disease_id": disease_id}
 
-        if upload_type in {"zip", "direct"}:
+        if upload_type_invalid or camera_id_invalid:
+            sql_parts.append("AND 1=0")
+        elif upload_type in {"zip", "direct"}:
             if upload_type == "zip":
                 sql_parts.append("AND upload_type = ANY(:upload_types)")
                 params["upload_types"] = ["ZIP", "SET"]
@@ -1264,33 +1245,24 @@ def threshold_explorer() -> object:
             params["camera_id"] = camera_id
             sql_parts.append("AND camera_id = :camera_id")
 
-        if selected_lab_units:
-            requested = set(selected_lab_units) & set(user_lab_unit_ids or [])
-            if requested:
-                placeholders = []
-                for idx, val in enumerate(requested):
-                    key = f"lab_unit_id_{idx}"
-                    params[key] = val
-                    placeholders.append(f":{key}")
-                sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
-            else:
-                sql_parts.append("AND 1=0")
-        elif user_lab_unit_ids:
-            placeholders = []
-            for idx, val in enumerate(user_lab_unit_ids):
-                key = f"lab_unit_id_{idx}"
-                params[key] = val
-                placeholders.append(f":{key}")
-            if placeholders:
-                sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
-        elif not current_user.is_master_admin:
-            # Zero lab units means no reach, not unrestricted reach. The GET
-            # route already fails closed here; this one aggregated over every
-            # hospital instead.
-            sql_parts.append("AND 1=0")
+        if invalid_lab_unit_filter or (
+            not set(selected_lab_units).issubset(set(user_lab_unit_ids))
+            and not current_user.has_role("admin")
+        ):
+            authorized_task_ids: list[int] = []
+        else:
+            authorized_task_ids = _authorized_task_ids(
+                db,
+                disease_id=disease_id,
+                lab_unit_ids=selected_lab_units or None,
+            )
+        sql_parts.append("AND task_id IN :authorized_task_ids")
+        params["authorized_task_ids"] = authorized_task_ids or [-1]
 
         sql_parts.append("ORDER BY task_created_at DESC")
-        query = text("\n".join(sql_parts))
+        query = text("\n".join(sql_parts)).bindparams(
+            sa.bindparam("authorized_task_ids", expanding=True)
+        )
 
         rows = db.execute(query, params).mappings().all()
 
@@ -1383,22 +1355,6 @@ def threshold_explorer() -> object:
             return jsonify({"error": "No cases available for the selected filters."}), 400
 
         sample_size = len(cases_raw)
-        cache_key = _build_threshold_cache_key(
-            disease_id=disease_id,
-            ai_model_id=ai_model_id,
-            reference_source=reference_source,
-            upload_type=upload_type,
-            camera_id=camera_id,
-            class_definitions=class_definitions,
-            positive_class=positive_class,
-            lab_units=selected_lab_units or [],
-            thresholds=thresholds,
-            sample_size=sample_size,
-        )
-
-        cached = cache.get(cache_key) if cache else None
-        if cached:
-            return jsonify(cached)
 
         results: List[Dict[str, object]] = []
         for thr in thresholds:
@@ -1434,9 +1390,6 @@ def threshold_explorer() -> object:
             "positive_class": positive_class,
             "probabilities_present": probabilities_present,
         }
-
-        if cache:
-            cache.set(cache_key, response_payload, timeout=60 * 60)  # 1 hour
 
         return jsonify(response_payload)
     reference_source = "final"

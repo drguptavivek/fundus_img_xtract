@@ -5,16 +5,19 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from flask import current_app
-from sqlalchemy import and_, case, exists, or_, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
+from authz import RecordScope, access_context, grading_scope
 from db_transaction_manager import transaction_scope
+from grading_allocation.constants import AllocationScope
 from models import (
     AppSetting,
     DiseaseGrading,
+    EncounterSetGradingPackage,
     Grade,
     GradingTask,
     IntraRaterBatch,
@@ -24,6 +27,112 @@ from models import (
     User,
     UserDiseaseUnitRole,
 )
+
+_INTRA_RATER_SLOTS = frozenset({"resident", "resident2", "arbitrator"})
+
+
+def can_access_intra_rater_task(db, *, actor: User, task: IntraRaterTask) -> bool:
+    """Return whether ``actor`` may work on this exact reassessment task.
+
+    Intra-rater rows are derived from a source grading task, so the source
+    lineage is part of authorization.  The actor must be an active
+    ophthalmologist, the named assignee, and still hold the exact disease/Lab
+    Unit slot used by the source grade.  Project tasks additionally require
+    the current matching project allocation.  Admin alone is never enough.
+    """
+    if (
+        actor is None
+        or not getattr(actor, "is_active", False)
+        or not actor.has_role("ophthalmologist", "field_ophthalmologist")
+        or task.grader_user_id != actor.id
+    ):
+        return False
+
+    source = task.source_task or db.get(GradingTask, task.source_task_id)
+    if source is None or source.disease_id != task.disease_id:
+        return False
+    if source.lab_unit_id != task.lab_unit_id:
+        return False
+    # The reassessment must refer to the same physical source as the source
+    # grading task.  A missing or mixed source reference is incomplete lineage.
+    if (
+        task.encounter_file_id != source.encounter_file_id
+        or task.direct_image_upload_id != source.direct_image_upload_id
+    ):
+        return False
+    if (task.encounter_file_id is None) == (task.direct_image_upload_id is None):
+        return False
+
+    lab_unit = task.lab_unit or db.get(LabUnit, task.lab_unit_id)
+    if lab_unit is None:
+        return False
+
+    # The source grade identifies the slot whose current qualification must
+    # still exist.  IntraRaterTask predates an explicit slot column, so every
+    # source grade by this assignee is considered and at least one complete
+    # current path must match.
+    source_slots = db.execute(
+        select(Grade.role_slot).where(
+            Grade.task_id == source.id,
+            Grade.grader_user_id == actor.id,
+            Grade.role_slot.in_(_INTRA_RATER_SLOTS),
+        )
+    ).scalars().all()
+    if not source_slots:
+        return False
+
+    context = access_context(db, actor)
+    if source.project_id is None:
+        record = RecordScope.classical(
+            lab_unit_id=source.lab_unit_id,
+            hospital_id=lab_unit.hospital_id,
+        )
+        return any(
+            grading_scope(
+                context,
+                record,
+                disease_id=source.disease_id,
+                slot=slot,
+            ).allowed
+            for slot in source_slots
+        )
+
+    allocation_scope, encounter_set_type_id = _source_allocation_target(db, source)
+    if allocation_scope is None:
+        return False
+    record = RecordScope.project(
+        project_id=source.project_id,
+        lab_unit_id=source.lab_unit_id,
+    )
+    return any(
+        grading_scope(
+            context,
+            record,
+            disease_id=source.disease_id,
+            slot=slot,
+            allocation_scope=allocation_scope,
+            encounter_set_type_id=encounter_set_type_id,
+        ).allowed
+        for slot in source_slots
+    )
+
+
+def _source_allocation_target(
+    db, source: GradingTask
+) -> tuple[str | None, int | None]:
+    """Derive the allocation target from immutable source-task lineage."""
+    if source.encounter_set_package_id is None:
+        return AllocationScope.DISEASE_IMAGE.value, None
+    package = source.encounter_set_package or db.get(
+        EncounterSetGradingPackage, source.encounter_set_package_id
+    )
+    if package is None or package.encounter_set_type_id is None:
+        return None, None
+    if package.grading_mode == "unified":
+        return AllocationScope.ENCOUNTER_SET_UNIFIED.value, package.encounter_set_type_id
+    if package.grading_mode == "disease_specific" and package.root_scope_disease_id is not None:
+        return AllocationScope.DISEASE_ENCOUNTER.value, package.encounter_set_type_id
+    return None, None
 
 
 DEFAULT_COOLDOWN_DAYS = 21
@@ -259,8 +368,11 @@ class IntraRaterService:
         task = self.db.get(IntraRaterTask, params.task_id)
         if task is None:
             raise ValueError("Task not found")
-        if task.grader_user_id != params.grader_user_id:
-            raise ValueError("Task is not assigned to the current grader")
+        actor = self.db.get(User, params.grader_user_id)
+        if actor is None or not can_access_intra_rater_task(
+            self.db, actor=actor, task=task
+        ):
+            raise ValueError("Current user is not authorized for this intra-rater task")
         if task.state == STATE_COMPLETED:
             raise ValueError("Task already completed")
 

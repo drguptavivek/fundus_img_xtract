@@ -32,12 +32,23 @@ def put_project_lab_units(project_id: int):
         return jsonify({"success": False, "error": "lab_unit_ids must be a list."}), 400
     try:
         lab_unit_ids = [int(value) for value in values]
+        raw_settings = payload.get("site_settings", {}) if request.is_json else {}
+        if not isinstance(raw_settings, dict):
+            raise ProjectLabConfigurationError("site_settings must be an object keyed by Lab Unit ID.")
+        site_settings = {
+            int(lab_unit_id): settings
+            for lab_unit_id, settings in raw_settings.items()
+            if isinstance(settings, dict)
+        }
+        if len(site_settings) != len(raw_settings):
+            raise ProjectLabConfigurationError("Each site_settings value must be an object.")
         with transaction_scope() as db:
             rows = replace_project_lab_units(
                 db,
                 actor=current_user,
                 project_id=project_id,
                 lab_unit_ids=lab_unit_ids,
+                site_settings=site_settings,
             )
     except (TypeError, ValueError, ProjectLabConfigurationError) as exc:
         return jsonify({"success": False, "error": str(exc)}), 400

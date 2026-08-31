@@ -83,14 +83,25 @@ def test_lab_units(seed_test_database):
 
 @pytest.fixture(scope="function")
 def test_metadata(db_session):
-    """Get seeded metadata (Camera, Disease, Area) - function-scoped."""
-    # Query metadata from database
+    """Return seeded metadata, creating any missing rows on demand."""
+    # Get-or-create: nothing else seeds these names since the legacy
+    # session-scoped metadata fixture was shadowed by this one.
     test_camera = db_session.query(Camera).filter_by(name='Test Camera').first()
+    if test_camera is None:
+        test_camera = Camera(name='Test Camera')
+        db_session.add(test_camera)
     dr = db_session.query(Disease).filter_by(name='DR').first()
     glaucoma = db_session.query(Disease).filter_by(name='Glaucoma').first()
     amd = db_session.query(Disease).filter_by(name='AMD').first()
     test_disease = db_session.query(Disease).filter_by(name='Test Disease').first()
+    if test_disease is None:
+        test_disease = Disease(name='Test Disease')
+        db_session.add(test_disease)
     test_area = db_session.query(Area).filter_by(name='Test Area').first()
+    if test_area is None:
+        test_area = Area(name='Test Area')
+        db_session.add(test_area)
+    db_session.flush()
     
     return {
         'cameras': {

@@ -124,7 +124,47 @@ def test_remidio_zip_encounter_set_ingest_infers_fop_from_fop_folder(db_session,
     assert len(result["encounter_set_attachment_ids"]) == 2
 
 
-def test_verified_remidio_zip_encounter_set_creates_target_tasks(db_session, core_test_data):
+def test_verified_remidio_zip_encounter_set_creates_target_tasks(app, db_session, core_test_data):
+    """Task creation derives from the encounter's upload-profile EncounterSet
+    config (grading schemes) and eligible reviewed images — not from bare
+    PatientEncounterTargetDisease rows."""
+    from datetime import date, datetime
+
+    from encounter_set_types.models import EncounterSetType
+    from upload_profiles.models import (
+        UploadProfile,
+        UploadProfileEncounterSetType,
+        UploadProfileEncounterSetTypeImageGradingScheme,
+    )
+
+    dr = db_session.merge(core_test_data["dr"])
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    project = Project(title=f"ZIP Tasks {uuid4()}", code=f"ZIPTASK{uuid4().hex[:8]}", active=True)
+    encounter_set_type = EncounterSetType(
+        name=f"ZIP Task Set {uuid4().hex[:6]}",
+        code=f"ziptask_{uuid4().hex[:8]}",
+        metadata_schema_json={"fields": []},
+        asset_rules_json={"allow_clinical_images": True},
+        active=True,
+    )
+    upload_profile = UploadProfile(name=f"ZIP Task Profile {uuid4().hex[:6]}", active=True)
+    config = UploadProfileEncounterSetType(
+        encounter_set_type=encounter_set_type,
+        encounter_grading_scheme=dr,
+        default_image_grading_scheme=dr,
+        image_grading_schemes=[
+            UploadProfileEncounterSetTypeImageGradingScheme(
+                disease=dr, is_default=True, display_order=1
+            ),
+            UploadProfileEncounterSetTypeImageGradingScheme(
+                disease=glaucoma, is_default=False, display_order=2
+            ),
+        ],
+    )
+    upload_profile.encounter_set_types.append(config)
+    db_session.add_all([project, encounter_set_type, upload_profile])
+    db_session.flush()
+
     encounter = PatientEncounters(
         name="Task Test",
         patient_id=f"MRN{uuid4().hex[:6]}",
@@ -132,21 +172,37 @@ def test_verified_remidio_zip_encounter_set_creates_target_tasks(db_session, cor
         lab_unit_id=core_test_data["lab_unit"].id,
         is_set_based=True,
         encounter_verified_status="verified",
+        project_id=project.id,
+        upload_profile_id=upload_profile.id,
     )
     db_session.add(encounter)
     db_session.flush()
-    from upload_profiles.models import PatientEncounterTargetDisease
 
-    db_session.add_all(
-        [
-            PatientEncounterTargetDisease(patient_encounter_id=encounter.id, disease_id=core_test_data["dr"].id),
-            PatientEncounterTargetDisease(patient_encounter_id=encounter.id, disease_id=core_test_data["glaucoma"].id),
-        ]
+    image = EncounterSetImage(
+        uuid=str(uuid4()),
+        patient_encounter_id=encounter.id,
+        spatial_position=1,
+        original_filename="task_test.jpg",
+        folder_rel=f"files/test_sets/{encounter.id}",
+        metadata_json={"laterality": "right", "image_variant": "STANDARD", "fundus_field": "macula"},
+        is_reviewed=True,
+        asset_kind="clinical_image",
+        creates_task=True,
+        visible_to_grader=True,
+        created_at=datetime.now(),
     )
+    db_session.add(image)
     db_session.flush()
 
-    created = _create_verified_encounter_set_tasks(db_session, encounter)
+    created = _create_verified_encounter_set_tasks(db_session, encounter, create_negative_controls=False)
 
-    assert created == 2
-    tasks = db_session.query(GradingTask).filter(GradingTask.patient_encounter_id == encounter.id).all()
-    assert {task.disease_id for task in tasks} == {core_test_data["dr"].id, core_test_data["glaucoma"].id}
+    # The unified package anchors an encounter-level grading task and creates
+    # per-disease image tasks. Encounter-level tasks reference the encounter;
+    # image-level tasks reference their EncounterSetImage.
+    tasks = db_session.query(GradingTask).filter(
+        (GradingTask.patient_encounter_id == encounter.id)
+        | (GradingTask.encounter_set_image_id == image.id)
+    ).all()
+    assert created >= 2
+    assert {t.disease_id for t in tasks} == {dr.id, glaucoma.id}
+    assert all(task.patient_encounter_id == encounter.id for task in tasks if task.grading_target_level == "encounter")

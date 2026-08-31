@@ -5,6 +5,7 @@ from itertools import count
 import pytest
 
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role
+from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -76,7 +77,6 @@ def upload_options_data(db_session, core_test_data):
     profile_a = _add_profile(db_session, uploader.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
     profile_b = _add_profile(db_session, uploader.id, lab_b.id, project_b.id, dr.id, camera_b.id, area_b.id)
     _add_profile(db_session, admin_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
-    _add_profile(db_session, elevated_uploader_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
     db_session.flush()
 
     # Every login in this module goes through the device enrolment gate.
@@ -217,6 +217,13 @@ def _add_profile(db_session, user_id, lab_unit_id, project_id, disease_id, camer
     db_session.flush()
     project_profile = ProjectUploadProfile(project_id=project_id, upload_profile_id=profile.id, active=True)
     db_session.add(project_profile)
+    db_session.flush()
+    existing_plu = db_session.query(ProjectLabUnit).filter_by(
+        project_id=project_id, lab_unit_id=lab_unit_id
+    ).first()
+    if existing_plu is None:
+        db_session.add(ProjectLabUnit(project_id=project_id, lab_unit_id=lab_unit_id, active=True))
+        db_session.flush()
     db_session.flush()
     db_session.add(
         ProjectUploadProfileAssignment(

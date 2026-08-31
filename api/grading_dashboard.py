@@ -12,7 +12,7 @@ from grading.queue_cards import disease_queue_card, grader_queue_overview
 from . import api_bp
 
 
-GRADING_ROLES = ("resident", "ophthalmologist")
+GRADING_ROLES = ("ophthalmologist", "field_ophthalmologist")
 
 
 @api_bp.route("/grading/me/eligibility", methods=["GET"])

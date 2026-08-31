@@ -1820,6 +1820,29 @@
     }
   });
 
+  function syncUploaderRoleWarning(form) {
+    const select = form && form.querySelector('[name="user_id"]');
+    const warning = form && form.querySelector('[data-uploader-role-warning]');
+    if (!select || !warning) {
+      return true;
+    }
+    const option = select.options[select.selectedIndex];
+    const qualified = !option || !option.value || option.dataset.uploaderQualified === 'true';
+    warning.classList.toggle('d-none', qualified);
+    const grantLink = warning.querySelector('[data-uploader-role-grant-link]');
+    if (grantLink && option && option.dataset.roleGrantUrl) {
+      grantLink.href = option.dataset.roleGrantUrl;
+    }
+    return qualified;
+  }
+
+  document.body.addEventListener('change', function (event) {
+    const select = event.target.closest('[data-uploader-assignment-form] [name="user_id"]');
+    if (select) {
+      syncUploaderRoleWarning(select.form);
+    }
+  });
+
   document.body.addEventListener('htmx:afterSwap', function (event) {
     bindPackageBuilderEvents(document);
     initSchemeGradePopovers(document);
@@ -1837,6 +1860,17 @@
   });
 
   document.body.addEventListener('htmx:beforeRequest', function (event) {
+    const uploaderAssignmentForm = event.detail.elt.closest && event.detail.elt.closest('[data-uploader-assignment-form]');
+    if (uploaderAssignmentForm && !syncUploaderRoleWarning(uploaderAssignmentForm)) {
+      const roleLabel = uploaderAssignmentForm.dataset.requiredUploaderLabel || 'required uploader';
+      const proceed = window.confirm(
+        'This user does not have the ' + roleLabel + ' role. The assignment will be saved but uploading will remain blocked. Continue?'
+      );
+      if (!proceed) {
+        event.preventDefault();
+        return;
+      }
+    }
     const form = event.detail.elt.closest && event.detail.elt.closest('[data-upload-profile-editor]');
     if (form) {
       syncPackageCardsToFields(form);

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 
+from authz.project_roles import PROJECT_ASSIGNABLE_ROLES
 from models import DiseaseGrading
 from utils.final_grade_basis import (
     FINAL_GRADE_UNRESOLVED,
@@ -14,21 +15,7 @@ from utils.final_grade_basis import (
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 AI_REVIEW_STATUS_MISSING = "missing"
-PROJECT_CAPABILITY_COLUMNS = {
-    "can_review_discrepancies",
-    "can_export_data",
-    "can_create_datasets",
-}
-PROJECT_CAPABILITY_ROLE_NAMES = {
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "fileUploader",
-    "optometrist",
-    "discrepancy_reviewer",
-    "dataset_creator",
-}
+PROJECT_CAPABILITY_ROLE_NAMES = set(PROJECT_ASSIGNABLE_ROLES)
 
 
 def build_discrepancy_filter_query(
@@ -112,6 +99,18 @@ def build_discrepancy_filter_query(
         where_clauses.append("v.task_id = ANY(:task_ids)")
         params["task_ids"] = task_ids
 
+    # Export workers pre-resolve this set through the ORM, including the
+    # maintained source-lineage predicate and the actor's current grants.
+    # Keeping the resolved IDs as an explicit SQL constraint prevents the
+    # materialized view from becoming an authorization boundary of its own.
+    # An empty set is intentional: ANY('{}') matches no rows (fail closed).
+    authorized_task_ids = filters.get("authorized_task_ids")
+    if authorized_task_ids is not None:
+        where_clauses.append("v.task_id = ANY(:authorized_task_ids)")
+        params["authorized_task_ids"] = [
+            int(task_id) for task_id in authorized_task_ids if task_id
+        ]
+
     if project_id is not None:
         where_clauses.append(
             """EXISTS (
@@ -130,107 +129,75 @@ def build_discrepancy_filter_query(
                 LEFT JOIN direct_image_uploads selected_task_direct
                   ON selected_task_direct.id = selected_project_task.direct_image_upload_id
                 WHERE selected_project_task.id = v.task_id
-                  AND COALESCE(
-                    selected_task_encounter.project_id,
-                    selected_task_set_image.project_id,
-                    selected_set_image_encounter.project_id,
-                    selected_task_image.project_id,
-                    selected_task_image_encounter.project_id,
-                    selected_task_direct.project_id
-                  ) = :project_id
+                  AND selected_project_task.project_id = :project_id
             )"""
         )
         params["project_id"] = int(project_id)
 
-    capability_columns = [
-        value
-        for value in filters.get("project_capability_columns", [])
-        if value in PROJECT_CAPABILITY_COLUMNS
-    ]
     capability_role_names = [
         value
         for value in filters.get("project_capability_role_names", [])
         if value in PROJECT_CAPABILITY_ROLE_NAMES
     ]
     project_user_id = filters.get("project_capability_user_id")
-    if (capability_columns or capability_role_names) and project_user_id:
-        authorization_sql = []
-        if capability_columns:
-            capability_sql = " OR ".join(f"pap.{column} = TRUE" for column in capability_columns)
-            authorization_sql.append(
-                f"""EXISTS (
+    if not project_user_id:
+        return "", "", {}, None
+
+    authorization_sql = [
+        """EXISTS (
+              SELECT 1
+              FROM user_roles actor_role_link
+              JOIN roles actor_role ON actor_role.id = actor_role_link.role_id
+              WHERE actor_role_link.user_id = :project_capability_user_id
+                AND actor_role.name = 'admin'
+            )"""
+    ]
+    if capability_role_names:
+        # Project-wide access requires a project grant; Lab-scoped access is
+        # valid only for the exact task Lab Unit. Missing lineage matches none.
+        if filters.get("project_capability_require_project_scope"):
+            scope_sql = "prg.scope_type = 'project'"
+        else:
+            scope_sql = """prg.scope_type = 'project'
+                      OR (
+                        prg.scope_type = 'lab_unit'
+                        AND prg.lab_unit_id = project_task.lab_unit_id
+                      )"""
+        authorized_grant_ids = filters.get("project_capability_grant_ids")
+        grant_constraint = (
+            "AND prg.id = ANY(:project_capability_grant_ids)"
+            if authorized_grant_ids is not None
+            else "AND project_role.name = ANY(:project_capability_role_names)"
+        )
+        authorization_sql.append(
+            """EXISTS (
+                  SELECT 1
+                  FROM project_role_grants prg
+                  JOIN roles project_role ON project_role.id = prg.role_id
+                  WHERE prg.user_id = :project_capability_user_id
+                    AND prg.project_id = project_task.project_id
+                    AND prg.active = TRUE
+                    {grant_constraint}
+                    AND EXISTS (
                       SELECT 1
-                      FROM project_encounter_set_permissions pap
-                      WHERE pap.user_id = :project_capability_user_id
-                        AND pap.project_id = COALESCE(
-                          task_encounter.project_id,
-                          task_set_image.project_id,
-                          set_image_encounter.project_id,
-                          task_image.project_id,
-                          task_image_encounter.project_id,
-                          task_direct.project_id
-                        )
-                        AND pap.lab_unit_id = project_task.lab_unit_id
-                        AND pap.active = TRUE
-                        AND ({capability_sql})
-                    )"""
-            )
-        if capability_role_names:
-            # A project-wide action accepts only a grant issued at project
-            # scope; authority over one lab of a project is not authority
-            # over the project's data as a whole.
-            if filters.get("project_capability_require_project_scope"):
-                scope_sql = "prg.scope_type = 'project'"
-            else:
-                scope_sql = """prg.scope_type = 'project'
-                          OR (
-                            prg.scope_type = 'lab_unit'
-                            AND prg.lab_unit_id = project_task.lab_unit_id
-                          )
-                          OR (
-                            prg.scope_type = 'hospital'
-                            AND EXISTS (
-                              SELECT 1
-                              FROM lab_units scope_lab
-                              WHERE scope_lab.id = project_task.lab_unit_id
-                                AND scope_lab.hospital_id = prg.hospital_id
-                            )
-                          )"""
-            authorization_sql.append(
-                """EXISTS (
-                      SELECT 1
-                      FROM project_role_grants prg
-                      JOIN roles project_role ON project_role.id = prg.role_id
-                      WHERE prg.user_id = :project_capability_user_id
-                        AND prg.project_id = COALESCE(
-                          task_encounter.project_id,
-                          task_set_image.project_id,
-                          set_image_encounter.project_id,
-                          task_image.project_id,
-                          task_image_encounter.project_id,
-                          task_direct.project_id
-                        )
-                        AND prg.active = TRUE
-                        AND project_role.name = ANY(:project_capability_role_names)
-                        AND ({scope_sql}
-                        )
-                    )""".replace("{scope_sql}", scope_sql)
-            )
-        project_authorization_sql = " OR ".join(authorization_sql)
-        classical_authorization_sql = (
-            """COALESCE(
-                      task_encounter.project_id,
-                      task_set_image.project_id,
-                      set_image_encounter.project_id,
-                      task_image.project_id,
-                      task_image_encounter.project_id,
-                      task_direct.project_id
-                    ) IS NULL OR"""
+                      FROM project_lab_units active_project_lab
+                      WHERE active_project_lab.project_id = prg.project_id
+                        AND active_project_lab.lab_unit_id = project_task.lab_unit_id
+                        AND active_project_lab.active = TRUE
+                    )
+                    AND ({scope_sql})
+                )""".replace("{scope_sql}", scope_sql).replace(
+                    "{grant_constraint}", grant_constraint
+                )
+        )
+    project_authorization_sql = " OR ".join(authorization_sql)
+    classical_authorization_sql = (
+            """project_task.project_id IS NULL OR"""
             if filters.get("allow_classical_capability")
             else ""
         )
-        where_clauses.append(
-            f"""EXISTS (
+    where_clauses.append(
+        f"""EXISTS (
                 SELECT 1
                 FROM grading_tasks project_task
                 LEFT JOIN patient_encounters task_encounter
@@ -249,11 +216,15 @@ def build_discrepancy_filter_query(
                   AND (
                     {classical_authorization_sql} ({project_authorization_sql})
                   )
-            )"""
+        )"""
+    )
+    params["project_capability_user_id"] = int(project_user_id)
+    if capability_role_names:
+        params["project_capability_role_names"] = capability_role_names
+    if filters.get("project_capability_grant_ids") is not None:
+        params["project_capability_grant_ids"] = list(
+            filters.get("project_capability_grant_ids") or []
         )
-        params["project_capability_user_id"] = int(project_user_id)
-        if capability_role_names:
-            params["project_capability_role_names"] = capability_role_names
 
     if lab_unit_id and lab_unit_id in allowed_lab_units:
         where_clauses.append("v.task_lab_unit_id = :lab_unit_id")

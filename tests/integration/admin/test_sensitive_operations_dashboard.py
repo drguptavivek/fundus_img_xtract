@@ -1,10 +1,9 @@
-import pytest
-from flask import url_for
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
-from models import SensitiveOperationAudit
+
+import pytest
+
 from auth.utils import utcnow
+from models import SensitiveOperationAudit
 
 # Removed clean_context_processors to ensure base.html works in error cases
 
@@ -27,45 +26,113 @@ def test_dashboard_access_denied_for_non_admin(app, client, resident_user):
              # Basic verification for Permission Denied page
              assert "Permission denied" in page_text or "Home" in page_text
 
-@pytest.mark.xfail(reason="DetachedInstanceError - session merging issue after commit (Pattern 2). Requires further investigation.")
-def test_dashboard_access_allowed_for_local_admin(app, client, db_session, site_admin_hospital_a):
-    """Verify that local_admin (site_admin) users CAN access the dashboard (Mocked View)."""
-    # Pattern 2: Merge session-scoped fixture into function-scoped test session
-    site_admin_hospital_a = db_session.merge(site_admin_hospital_a)
-
-    # Create a log entry
-    log = SensitiveOperationAudit(
-        user_id=site_admin_hospital_a.id,
-        operation_type="admin_export",
-        status="completed",
-        created_at=utcnow()
-    )
-    db_session.add(log)
-    db_session.commit()
-
-    target_url = "/admin/sensitive-operations"
-
-    # Merge again after commit to ensure fresh attachment (Pattern 2)
-    site_admin_hospital_a = db_session.merge(site_admin_hospital_a)
-
+def test_dashboard_access_denied_for_local_admin(
+    app, client, db_session, site_admin_hospital_a
+):
+    """Sensitive-operation audit details are global-admin-only."""
+    user_id = db_session.merge(site_admin_hospital_a).id
     with client.session_transaction() as sess:
-        sess['user_id'] = str(site_admin_hospital_a.id)
+        sess['user_id'] = str(user_id)
+        sess['_user_id'] = str(user_id)
         sess['_fresh'] = True
-    
-    # Mock render_template to bypass base.html rendering issues in test env
-    with patch('admin.audit_routes.render_template', return_value="OK") as mock_render:
-        response = client.get(target_url)
-        assert response.status_code == 200
-        assert response.get_data(as_text=True) == "OK"
-        
-        # Verify correct template and context
-        args, kwargs = mock_render.call_args
-        assert args[0] == "admin/sensitive_operations.html"
-        assert 'audit_logs' in kwargs
-        assert len(kwargs['audit_logs']) >= 1
-        assert kwargs['current_user'].id == site_admin_hospital_a.id
 
-@pytest.mark.xfail(reason="Email config setup error in test environment", raises=Exception)
+    assert client.get("/admin/sensitive-operations").status_code == 403
+    assert client.get("/admin/sensitive-operations/1").status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/admin/s3-sync-dashboard"),
+        ("get", "/admin/s3-sync-dashboard/hospital/1"),
+        ("get", "/admin/api/s3-sync-status"),
+        ("post", "/admin/api/s3-sync-retry/1"),
+        ("get", "/admin/api/s3-sync-stats"),
+    ],
+)
+@pytest.mark.parametrize("user_fixture", ["site_admin_hospital_a", "hosp_a_data_manager"])
+def test_s3_sync_surface_denies_non_admin_roles(
+    app, client, db_session, request, method, path, user_fixture
+):
+    """Neither classical management role can query or mutate S3 state."""
+    user_id = db_session.merge(request.getfixturevalue(user_fixture)).id
+    with client.session_transaction() as sess:
+        sess['user_id'] = str(user_id)
+        sess['_user_id'] = str(user_id)
+        sess['_fresh'] = True
+
+    assert getattr(client, method)(path).status_code == 403
+
+
+def test_s3_sync_api_remains_reachable_to_global_admin(client, admin_user):
+    """The narrowed boundary must not disable the global-admin workflow."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = str(admin_user.id)
+        sess['_user_id'] = str(admin_user.id)
+        sess['_fresh'] = True
+
+    assert client.get("/admin/api/s3-sync-status").status_code == 200
+    assert client.post("/admin/api/s3-sync-retry/999999").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "hospital_id=",
+        "hospital_id=abc",
+        "hospital_id=0",
+        "hospital_id=-1",
+        "limit=",
+        "limit=abc",
+        "limit=0",
+        "limit=501",
+        "status=unknown",
+    ],
+)
+def test_s3_sync_status_rejects_malformed_supplied_filters(client, admin_user, query):
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(admin_user.id)
+        sess['_fresh'] = True
+
+    response = client.get(f"/admin/api/s3-sync-status?{query}")
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin/s3-configs/api/test-connection-modal",
+        "/admin/s3-configs/api/create",
+    ],
+)
+def test_s3_config_modal_apis_reject_unknown_hospital_before_io(
+    client, admin_user, path
+):
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(admin_user.id)
+        sess['_fresh'] = True
+
+    form = {
+        "hospital_id": "999999",
+        "provider": "aws",
+        "name": "test config",
+        "bucket_name": "valid-test-bucket",
+        "region": "us-east-1",
+        "access_key": "access",
+        "secret_key": "secret",
+    }
+    with (
+        patch("utils.s3_storage_backends.create_s3_client_from_creds") as create_client,
+        patch("admin.s3_config.encrypt_secret") as encrypt_secret,
+    ):
+        response = client.post(path, data=form)
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is False
+    assert "Invalid hospital" in response.get_json()["message"]
+    create_client.assert_not_called()
+    encrypt_secret.assert_not_called()
+
 def test_dashboard_renders_logs(app, client, db_session, admin_user):
     """Verify that the dashboard queries logs correctly (Mocked View)."""
     app.config['SERVER_NAME'] = 'localhost'
@@ -102,7 +169,7 @@ def test_dashboard_renders_logs(app, client, db_session, admin_user):
         response = client.get(target_url)
         assert response.status_code == 200
         
-        args, kwargs = mock_render.call_args
+        _, kwargs = mock_render.call_args
         audit_logs = kwargs['audit_logs']
         
         # Verify logs content logic (DTOs are dictionaries)
@@ -143,7 +210,7 @@ def test_dashboard_filters(app, client, db_session, admin_user):
         response = client.get(target_url)
         assert response.status_code == 200
         
-        args, kwargs = mock_render.call_args
+        _, kwargs = mock_render.call_args
         audit_logs = kwargs['audit_logs']
         
         # Verify filtering logic (DTOs are dictionaries)

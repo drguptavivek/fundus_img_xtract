@@ -142,7 +142,7 @@
           hx-get="{{ url_for('grading.refresh_queues_trigger') }}"
           hx-swap="none"
           hx-indicator="#queue-refresh-spinner"
-          title="Counts are cached for {{ cache_ttl_seconds }} seconds. Refresh to recount now.">
+          title="Counts are evaluated from current grading eligibility.">
     <span id="queue-refresh-spinner"
           class="htmx-indicator spinner-border spinner-border-sm me-1"
           role="status" aria-hidden="true"></span>

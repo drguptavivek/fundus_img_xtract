@@ -60,7 +60,8 @@
       </form>
       <!-- Pagination -->
       {% if regrade_creator_mode %}
-      <form method="POST" action="{{ url_for('review.create_regrade_tasks') }}"
+      <form method="POST" action="{{ url_for('fundus_api.create_regrade_tasks_api') }}"
+        hx-post="{{ url_for('fundus_api.create_regrade_tasks_api') }}" hx-swap="none"
         class="d-flex flex-wrap gap-2 align-items-end">
         {{ csrf_field() }}
         {% if filters.project_id %}<input type="hidden" name="project_id" value="{{ filters.project_id }}">{% endif %}

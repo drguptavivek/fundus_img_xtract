@@ -117,7 +117,7 @@
   {% endif %}
 
   {% if data.configured_users and capabilities.can_manage_access %}
-  <section class="card shadow-sm mb-3" aria-labelledby="users-heading"><div class="card-header d-flex justify-content-between align-items-center"><div><h3 class="h6 mb-0" id="users-heading">Configured users</h3><div class="small text-muted">{{ data.configured_users|length }} active members · Grading allocation {{ 'enforced' if data.allocation_enforced else 'not enforced' }}</div></div><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#configured-users">View users</button></div></section>
+  <section class="card shadow-sm mb-3" aria-labelledby="users-heading"><div class="card-header d-flex justify-content-between align-items-center"><div><h3 class="h6 mb-0" id="users-heading">Configured users</h3><div class="small text-muted">{{ data.configured_users|length }} active members · Project grading always requires an explicit allocation</div></div><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#configured-users">View users</button></div></section>
   {% endif %}
 </div>
 

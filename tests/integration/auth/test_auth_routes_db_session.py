@@ -238,6 +238,18 @@ class TestAuthRoutesProtection:
             response = client.get("/ping")
             # Should redirect to login
             assert response.status_code == 302
+
+    def test_deactivation_revokes_existing_session_immediately(
+        self, app, db_session, test_users
+    ):
+        user = test_users["admin"]
+        with app.test_client(user=user) as client:
+            assert client.get("/ping").status_code == 200
+
+            user.is_active = False
+            db_session.commit()
+
+            assert client.get("/ping", follow_redirects=False).status_code == 302
     
     def test_forgot_password_route_not_protected(self, app):
         """Test that /forgot-password route is accessible without authentication"""

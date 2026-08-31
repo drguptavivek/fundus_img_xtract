@@ -1,60 +1,63 @@
-"""Public interface for the transport-neutral central authorization engine.
+"""Lean, role-bound authorization and SQL scoping helpers."""
 
-Callers resolve persisted relationships in their domain module, convert them
-to these value objects, and ask the pure engine for a decision. This package
-does not query application tables or serve protected resources.
-"""
-
-from authz.adapters import (
-    actor_from_user,
-    admin_global_grant,
-    general_scope_grants,
-    grading_slot_grant,
-    grading_slot_grants,
-    hospital_scope_grant,
-    lab_unit_assignment_grants,
-    self_grant,
-    upload_profile_grant,
-    upload_profile_grants,
+from authz.context import AccessContext, access_context, clear_access_context
+from authz.exceptions import AuthorizationDenied
+from authz.rows import (
+    RecordColumns,
+    admin_rows,
+    assigned_lab_rows,
+    hospital_rows,
+    hospital_choice_rows,
+    lab_unit_choice_rows,
+    project_rows,
+    role_scoped_rows,
+    self_rows,
+    where_all,
+    where_any,
 )
-from authz.engine import authorize
-from authz.predicates import (
-    reachable_hospital_ids,
-    reachable_lab_unit_ids,
-    scope,
-    scope_predicate,
-    scope_query,
+from authz.scopes import (
+    RecordScope,
+    RecordWorld,
+    ScopeCheck,
+    admin_scope,
+    assigned_lab_scope,
+    grading_scope,
+    hospital_scope,
+    project_scope,
+    project_wide_scope,
+    require_all,
+    require_any,
+    self_scope,
+    upload_scope,
 )
-from authz.resolver import ResolvedGrants, resolve_grants
-from authz.registry import ActionDefinition, ActionRegistryError, get_action, load_action_registry
-from authz.types import AuthzActor, AuthzDecision, GrantSource, RelationshipGrant, ResourceRef
 
 __all__ = [
-    "ActionDefinition",
-    "ActionRegistryError",
-    "AuthzActor",
-    "AuthzDecision",
-    "GrantSource",
-    "RelationshipGrant",
-    "ResourceRef",
-    "actor_from_user",
-    "admin_global_grant",
-    "ResolvedGrants",
-    "authorize",
-    "general_scope_grants",
-    "get_action",
-    "grading_slot_grant",
-    "grading_slot_grants",
-    "hospital_scope_grant",
-    "lab_unit_assignment_grants",
-    "load_action_registry",
-    "reachable_hospital_ids",
-    "reachable_lab_unit_ids",
-    "resolve_grants",
-    "scope",
-    "scope_predicate",
-    "scope_query",
-    "self_grant",
-    "upload_profile_grant",
-    "upload_profile_grants",
+    "AccessContext",
+    "AuthorizationDenied",
+    "RecordColumns",
+    "RecordScope",
+    "RecordWorld",
+    "ScopeCheck",
+    "access_context",
+    "admin_rows",
+    "admin_scope",
+    "assigned_lab_rows",
+    "assigned_lab_scope",
+    "clear_access_context",
+    "grading_scope",
+    "hospital_rows",
+    "hospital_choice_rows",
+    "hospital_scope",
+    "project_rows",
+    "lab_unit_choice_rows",
+    "project_scope",
+    "project_wide_scope",
+    "require_all",
+    "require_any",
+    "role_scoped_rows",
+    "self_rows",
+    "self_scope",
+    "upload_scope",
+    "where_all",
+    "where_any",
 ]

@@ -22,6 +22,7 @@ def test_build_discrepancy_filter_query_uses_preference_expression(monkeypatch):
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "final_grade": ["A"],
             "final_grade_basis": "preference",
         },
@@ -40,6 +41,7 @@ def test_build_discrepancy_filter_query_allows_unresolved_for_double_match(monke
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "final_grade": ["Unresolved"],
             "final_grade_basis": "double_match",
         },
@@ -59,6 +61,7 @@ def test_build_discrepancy_filter_query_filters_missing_ai_review_status(monkeyp
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_ai_grade": "yes",
             "ai_review_status": ["missing"],
         },
@@ -79,6 +82,7 @@ def test_build_discrepancy_filter_query_combines_missing_and_explicit_ai_review_
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_ai_grade": "yes",
             "ai_model_id": ["7"],
             "ai_review_status": ["ok", "missing"],
@@ -100,6 +104,7 @@ def test_build_discrepancy_filter_query_filters_selected_model_human_review(monk
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_ai_grade": "yes",
             "ai_model_id": ["7"],
             "has_human_review": "yes",
@@ -122,6 +127,7 @@ def test_build_discrepancy_filter_query_filters_selected_model_not_human_reviewe
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_ai_grade": "yes",
             "ai_model_id": ["7"],
             "has_human_review": "no",
@@ -141,6 +147,7 @@ def test_build_discrepancy_filter_query_filters_any_model_human_review(monkeypat
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_ai_grade": "yes",
             "has_human_review": "yes",
         },
@@ -160,6 +167,7 @@ def test_build_discrepancy_filter_query_includes_review_grade_without_ai_filter(
         {
             "disease_id": 1,
             "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
             "has_human_review": "yes",
         },
     )
@@ -175,7 +183,12 @@ def test_build_discrepancy_filter_query_supports_review_status_cohorts(monkeypat
     for status in ("unreviewed", "human", "ai", "both", "any"):
         _mv, clauses[status], _params, _model = discrepancy_filters.build_discrepancy_filter_query(
             _FakeDB(),
-            {"disease_id": 1, "allowed_lab_units": [1], "has_human_review": status},
+            {
+                "disease_id": 1,
+                "allowed_lab_units": [1],
+                "project_capability_user_id": 1,
+                "has_human_review": status,
+            },
         )
 
     assert "NOT (v.has_review = TRUE OR" in clauses["unreviewed"]
@@ -189,26 +202,49 @@ def test_build_discrepancy_filter_query_scopes_uploaded_task_ids(monkeypatch):
     monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
     _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
         _FakeDB(),
-        {"disease_id": 1, "allowed_lab_units": [1], "task_ids": [9, 4]},
+        {
+            "disease_id": 1,
+            "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
+            "task_ids": [9, 4],
+        },
     )
 
     assert "v.task_id = ANY(:task_ids)" in where_sql
     assert params["task_ids"] == [9, 4]
 
 
+def test_build_discrepancy_filter_query_requires_pre_resolved_export_ids(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+    _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {
+            "disease_id": 1,
+            "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
+            "authorized_task_ids": [],
+        },
+    )
+
+    assert "v.task_id = ANY(:authorized_task_ids)" in where_sql
+    assert params["authorized_task_ids"] == []
+
+
 def test_build_discrepancy_filter_query_scopes_source_project(monkeypatch):
     monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
     _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
         _FakeDB(),
-        {"disease_id": 1, "project_id": 8, "allowed_lab_units": [1]},
+        {
+            "disease_id": 1,
+            "project_id": 8,
+            "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
+        },
     )
 
     assert "selected_project_task.id = v.task_id" in where_sql
-    assert "selected_task_encounter.project_id" in where_sql
-    assert "selected_task_set_image.project_id" in where_sql
-    assert "selected_set_image_encounter.project_id" in where_sql
-    assert "selected_task_image.project_id" in where_sql
-    assert "selected_task_direct.project_id" in where_sql
+    assert "selected_project_task.project_id = :project_id" in where_sql
+    assert "COALESCE" not in where_sql
     assert params["project_id"] == 8
 
 
@@ -234,15 +270,15 @@ def test_build_discrepancy_filter_query_accepts_scoped_project_role_grants(monke
     assert "FROM project_role_grants prg" in where_sql
     assert "prg.scope_type = 'project'" in where_sql
     assert "prg.lab_unit_id = project_task.lab_unit_id" in where_sql
-    assert "scope_lab.hospital_id = prg.hospital_id" in where_sql
+    assert "prg.scope_type = 'hospital'" not in where_sql
     assert params["project_capability_user_id"] == 22
     assert params["project_capability_role_names"] == ["discrepancy_reviewer"]
 
 
 # --- project-wide scope for dataset curation --------------------------------
 # The curation screen reads a materialized view through raw SQL rather than
-# the ORM, so the rule expressed in authz.policies for dataset.curation.*
-# has to be asserted against the generated SQL as well.
+# the ORM, so the named project-wide rule must be asserted against the
+# generated SQL as well.
 
 
 def _curation_sql(monkeypatch, **overrides):
@@ -250,7 +286,6 @@ def _curation_sql(monkeypatch, **overrides):
     filters = {
         "disease_id": 1,
         "allowed_lab_units": [1],
-        "project_capability_columns": [],
         "project_capability_role_names": ["dataset_creator"],
         "project_capability_require_project_scope": True,
         "allow_classical_capability": True,
@@ -289,4 +324,4 @@ def test_other_surfaces_keep_accepting_narrower_grants(monkeypatch):
         project_capability_require_project_scope=False,
     )
     assert "prg.scope_type = 'lab_unit'" in where_sql
-    assert "prg.scope_type = 'hospital'" in where_sql
+    assert "prg.scope_type = 'hospital'" not in where_sql

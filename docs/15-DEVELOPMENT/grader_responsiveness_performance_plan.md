@@ -2,6 +2,13 @@
 
 ## Status and objective
 
+> **Historical record (2026-08-25).** This plan records the performance
+> investigation and measurements from before project grader allocation became
+> always-on. References below to `enforcement_enabled`, enabled/disabled
+> policies, or legacy fallback describe that historical test state; they are
+> not current authorization behavior. Current project tasks always require an
+> active matching `ProjectGraderAllocation`.
+
 This document is the implementation plan for restoring and protecting interactive
 responsiveness for graders as the dataset grows.
 
@@ -16,7 +23,7 @@ The objective is interactive latency that stays flat as data volume grows, under
 a hard constraint that no image is ever served without a live authentication and
 authorization check.
 
-## Implementation record — 2026-08-25
+## Historical implementation record — 2026-08-25
 
 The queue-side work in this plan is implemented. The image-side work is not, and
 could not be evaluated on the machine used (see "Not done" below). Everything in
@@ -434,7 +441,7 @@ directly with no S3 resolution at all.
 family. This is recorded for completeness; acting on it is out of scope per
 "Explicitly out of scope" below.
 
-### D12. The `/grading` dashboard counts pending work by materializing it
+### D12. (Historical) The `/grading` dashboard counts pending work by materializing it
 
 > **Diagnosis confirmed; prescription rejected.** Counting through the coarse
 > `exclude_unallocated_project_tasks()` filter overstated Glaucoma resident as

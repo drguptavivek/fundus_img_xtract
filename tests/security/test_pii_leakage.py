@@ -190,6 +190,7 @@ class TestExportPIILeakage:
             consensus_status="consensus",
             consensus_method="manual",
             final_impression="No DR",
+            final_plus_review=None,
             grading_details_json="[]",
             ai_review_comments=[],
             ai_review_statuses=[],

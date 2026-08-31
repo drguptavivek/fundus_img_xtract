@@ -2,29 +2,44 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from data_authorization.models import ProjectRoleGrant
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation
 from grading_schemes.service import sanitize_guidelines_html
 from iitk_api_integration.models import IITKApiProjectConfig
-from models import Disease, DiseaseGrading, LinkedDiseaseGrading, ProjectReferralDisease
+from models import DiseaseGrading, LinkedDiseaseGrading, ProjectReferralDisease
 from project_annotations.models import ProjectAnnotationPolicy
-from remote_inference.models import ProjectAutomatedRemoteInferenceRule, ProjectManualRemoteInferenceWorkflow
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding
+from remote_inference.models import (
+    ProjectAutomatedRemoteInferenceRule,
+    ProjectManualRemoteInferenceWorkflow,
+)
 from upload_profiles.models import ProjectUploadProfile
 
 from .dto import (
-    AnnotationConfigurationDTO, ConfiguredUserDTO, DiseaseDefinitionDTO, GradeChoiceDTO,
-    GradingTargetDTO, MetadataFieldDTO, ProjectAnalysisDTO, ProjectSourceDTO,
+    AnnotationConfigurationDTO,
+    ConfiguredUserDTO,
+    DiseaseDefinitionDTO,
+    GradeChoiceDTO,
+    GradingTargetDTO,
+    MetadataFieldDTO,
+    ProjectAnalysisDTO,
+    ProjectSourceDTO,
     ReferralDiseaseDTO,
 )
 
 
-def effective_configuration(db: Session, *, project_id: int, allowed_lab_ids: frozenset[int] | None) -> dict:
+def effective_configuration(
+    db: Session,
+    *,
+    project_id: int,
+    allowed_lab_ids: frozenset[int] | None,
+    include_people: bool,
+) -> dict:
     """Build currently enabled configuration. ``None`` means project-wide visibility."""
     mappings = db.execute(
         select(ProjectUploadProfile)
@@ -36,20 +51,27 @@ def effective_configuration(db: Session, *, project_id: int, allowed_lab_ids: fr
     ).scalars().all()
     mappings = [m for m in mappings if m.profile.active]
     return {
-        "sources": _sources(db, project_id, mappings, allowed_lab_ids),
+        "sources": _sources(
+            db,
+            project_id,
+            mappings,
+            allowed_lab_ids,
+            include_people=include_people,
+        ),
         "automated_analyses": _analyses(db, project_id),
         "grading_targets": _targets(db, mappings),
         "annotation": _annotation(db, project_id),
         "metadata_fields": _metadata(mappings),
-        "configured_users": _users(db, project_id, mappings, allowed_lab_ids),
-        "allocation_enforced": bool(db.execute(select(ProjectGradingAllocationPolicy.enforcement_enabled).where(
-            ProjectGradingAllocationPolicy.project_id == project_id
-        )).scalar_one_or_none()),
+        "configured_users": (
+            _users(db, project_id, mappings, allowed_lab_ids)
+            if include_people
+            else ()
+        ),
         "referral_diseases": _referrals(db, project_id, mappings),
     }
 
 
-def _sources(db, project_id, mappings, allowed_lab_ids):
+def _sources(db, project_id, mappings, allowed_lab_ids, *, include_people):
     rows = []
     for mapping in mappings:
         p = mapping.profile
@@ -62,8 +84,18 @@ def _sources(db, project_id, mappings, allowed_lab_ids):
             ("Dilation", _dilation(p)),
             ("EncounterSet types", _labels(x.encounter_set_type.name for x in p.encounter_set_types if x.active)),
             ("ZIP intake", _labels(x for x, enabled in (("Remidio ZIP", p.allow_remidio_zip_encounter_set), ("IITK ZIP", p.allow_iitk_zip_encounter_set)) if enabled)),
-            ("Authorised uploaders", _labels(f"{a.user.full_name or a.user.username} - {a.lab_unit.hospital.name} / {a.lab_unit.name}" for a in assignments)),
         ]
+        if include_people:
+            details.append(
+                (
+                    "Authorised uploaders",
+                    _labels(
+                        f"{a.user.full_name or a.user.username} - "
+                        f"{a.lab_unit.hospital.name} / {a.lab_unit.name}"
+                        for a in assignments
+                    ),
+                )
+            )
         rows.append(ProjectSourceDTO(
             id=f"profile-{mapping.id}", kind="Upload profile", name=p.name,
             summary=_labels(x.upload_kind for x in p.upload_kinds),
@@ -71,7 +103,7 @@ def _sources(db, project_id, mappings, allowed_lab_ids):
             details=tuple((k, v) for k, v in details if v and v != "None"),
         ))
 
-    today = date.today()
+    today = datetime.now(UTC).date()
     remidio = db.execute(select(ProjectUploadProfileRemidioApiBinding).options(
         selectinload(ProjectUploadProfileRemidioApiBinding.routing_profile),
         selectinload(ProjectUploadProfileRemidioApiBinding.source_rule),
@@ -93,9 +125,13 @@ def _sources(db, project_id, mappings, allowed_lab_ids):
         for r in remidio:
             site = r.source_rule.site
             site_name = f" ({site.site_name})" if site and site.site_name else ""
-            details.append((r.source_rule.site_custom_identifier + site_name,
-                f"{r.source_rule.remidio_device_type}; {r.lab_unit.hospital.name} / {r.lab_unit.name}; "
-                f"{r.camera.name}; {r.project_profile.profile.name}; {r.active_from_date} to {r.active_to_date or 'Open-ended'}"))
+            details.append((
+                r.source_rule.site_custom_identifier + site_name,
+                (
+                    f"{r.source_rule.remidio_device_type}; {r.lab_unit.hospital.name} / {r.lab_unit.name}; "
+                    f"{r.camera.name}; {r.project_profile.profile.name}; {r.active_from_date} to {r.active_to_date or 'Open-ended'}"
+                ),
+            ))
         rows.append(ProjectSourceDTO(
             id="remidio-api", kind="API intake", name="Remidio API",
             summary=f"{len(remidio)} active route{'s' if len(remidio) != 1 else ''}",
@@ -341,7 +377,7 @@ def _metadata(mappings):
 
 def _users(db, project_id, mappings, allowed_lab_ids):
     grants = db.execute(select(ProjectRoleGrant).options(selectinload(ProjectRoleGrant.user), selectinload(ProjectRoleGrant.role),
-        selectinload(ProjectRoleGrant.hospital), selectinload(ProjectRoleGrant.lab_unit)).where(
+        selectinload(ProjectRoleGrant.lab_unit)).where(
         ProjectRoleGrant.project_id == project_id, ProjectRoleGrant.active.is_(True))).scalars().all()
     grants = [g for g in grants if _grant_visible(g, allowed_lab_ids)]
     allocations = db.execute(select(ProjectGraderAllocation).options(selectinload(ProjectGraderAllocation.user),
@@ -352,9 +388,11 @@ def _users(db, project_id, mappings, allowed_lab_ids):
     by_user = defaultdict(lambda: {"user": None, "scopes": set(), "roles": set(), "uploads": set(), "allocations": set()})
     for g in grants:
         x = by_user[g.user_id]; x["user"] = g.user; x["roles"].add(g.role.name)
-        x["scopes"].add("Project-wide" if g.scope_type == "project" else
-            f"Hospital: {g.hospital.name}" if g.scope_type == "hospital" else
-            f"Lab unit: {g.lab_unit.hospital.name} / {g.lab_unit.name}")
+        x["scopes"].add(
+            "Project-wide"
+            if g.scope_type == "project"
+            else f"Lab unit: {g.lab_unit.hospital.name} / {g.lab_unit.name}"
+        )
     for mapping in mappings:
         for a in mapping.assignments:
             if a.active and _lab_visible(a.lab_unit_id, allowed_lab_ids):
@@ -409,8 +447,7 @@ def _referrals(db, project_id, mappings):
 def _lab_visible(lab_id, allowed): return allowed is None or lab_id in allowed
 def _grant_visible(grant, allowed):
     if allowed is None or grant.scope_type == "project": return True
-    if grant.scope_type == "lab_unit": return grant.lab_unit_id in allowed
-    return any(lab.hospital_id == grant.hospital_id for lab in grant.hospital.lab_units if lab.id in allowed)
+    return grant.scope_type == "lab_unit" and grant.lab_unit_id in allowed
 def _human(value): return str(value or "").replace("_", " ").strip().title()
 def _clean_text(value): return " ".join(str(value or "").split())
 def _labels(values):

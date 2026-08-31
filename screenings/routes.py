@@ -15,9 +15,13 @@ from models import (
     EncounterFilePDF, DiabeticRetinopathyReport, GlaucomaReport, ZipFile
 )
 from db_transaction_manager import get_db_session
-from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
+from .access import (
+    apply_screening_scope,
+    authorized_screening_lab_unit_ids,
+    load_screening_or_abort,
+)
 
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
@@ -30,10 +34,10 @@ def list_screenings():
     page = max(1, page)
     per_page = max(1, per_page)
 
-    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
     is_admin_like = current_user.has_role("admin")
 
     with get_db_session() as db:
+        allowed_lab_unit_ids = authorized_screening_lab_unit_ids(db, current_user)
         # Base query with eager loading of lab_unit and hospital relationships
         base_q = (
             db.query(PatientEncounters)
@@ -53,11 +57,12 @@ def list_screenings():
             )
         )
 
-        if is_admin_like:
-            pass
-        elif allowed_lab_unit_ids:
-            base_q = base_q.filter(PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids)))
-        else:
+        base_q = apply_screening_scope(
+            base_q,
+            is_admin=is_admin_like,
+            allowed_lab_unit_ids=allowed_lab_unit_ids,
+        )
+        if not is_admin_like and not allowed_lab_unit_ids:
             return render_template(
                 "screenings/list.html",
                 items=[],
@@ -143,13 +148,16 @@ def list_screenings():
 def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
-    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
     is_admin_like = current_user.has_role("admin")
 
     with get_db_session() as db:
-        encounter = (
-            db.query(PatientEncounters)
-            .options(
+        allowed_lab_unit_ids = authorized_screening_lab_unit_ids(db, current_user)
+        encounter = load_screening_or_abort(
+            db,
+            encounter_id,
+            is_admin=is_admin_like,
+            allowed_lab_unit_ids=allowed_lab_unit_ids,
+            options=(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.encounter_set_images),
@@ -157,28 +165,21 @@ def screening_detail(encounter_id: int):
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.encounter_file_pdfs),
-                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
-            )
-            .filter(PatientEncounters.id == encounter_id)
-            .first()
+                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
+            ),
         )
         if not encounter:
             abort(404, description="Encounter not found")
-
-        # Fail closed: an empty lab set means this user reaches no lab, and a
-        # NULL-lab encounter is reachable by nobody but a global admin.
-        if not is_admin_like and (
-            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
-        ):
-            abort(403)
 
         # Prev/Next (ordering: capture_date DESC, id DESC), confined to the
         # same labs as the detail view above -- otherwise stepping through the
         # list walks straight out of the user's scope.
         def _nav_scope(q):
-            if is_admin_like:
-                return q
-            return q.filter(PatientEncounters.lab_unit_id.in_(allowed_lab_unit_ids or []))
+            return apply_screening_scope(
+                q,
+                is_admin=is_admin_like,
+                allowed_lab_unit_ids=allowed_lab_unit_ids,
+            )
 
         prev_enc = (
             _nav_scope(
@@ -276,23 +277,16 @@ def _screening_source_context(encounter: PatientEncounters) -> dict[str, str | N
 def reprocess_pdf(encounter_id: int):
     """Reset OCR processing flag for a specific encounter to allow reprocessing."""
     with get_db_session() as db:
-        # Get the encounter
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        # Get and authorize exactly the requested persisted encounter.
+        encounter = load_screening_or_abort(
+            db,
+            encounter_id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=authorized_screening_lab_unit_ids(db, current_user),
+        )
         if not encounter:
             flash("Encounter not found", "danger")
             return redirect(url_for("screenings.list_screenings"))
-
-        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin")
-
-        # Admin override or strict lab unit check (data_manager role is not exempt from hospital scoping unless global admin logic implemented elsewhere, but here rely on allowed_lab_unit_ids)
-        # Note: 'data_manager' is often treated as local admin. If they have lab_units, restrict them.
-        # Fail closed: an empty lab set means this user reaches no lab, and a
-        # NULL-lab encounter is reachable by nobody but a global admin.
-        if not is_admin_like and (
-            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
-        ):
-            abort(403)
 
         # Find PDF files for this encounter
         pdf_files = db.query(EncounterFilePDF).filter(
@@ -358,22 +352,16 @@ def reprocess_pdf(encounter_id: int):
 def delete_encounter(encounter_id: int):
     """Delete an entire encounter including all associated data."""
     with get_db_session() as db:
-        # Get the encounter with all related data
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        # Get and authorize exactly the requested persisted encounter.
+        encounter = load_screening_or_abort(
+            db,
+            encounter_id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=authorized_screening_lab_unit_ids(db, current_user),
+        )
         if not encounter:
             flash("Encounter not found", "danger")
             return redirect(url_for("screenings.list_screenings"))
-
-        # Check permissions
-        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin")
-
-        # Fail closed: an empty lab set means this user reaches no lab, and a
-        # NULL-lab encounter is reachable by nobody but a global admin.
-        if not is_admin_like and (
-            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
-        ):
-            abort(403)
 
         # Check if there are any non-pending grading tasks for this encounter's images
         from models import GradingTask
@@ -568,20 +556,16 @@ def delete_encounter(encounter_id: int):
 def delete_reports(encounter_id: int):
     """Delete existing DR and Glaucoma reports for an encounter."""
     with get_db_session() as db:
-        # Get the encounter
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        # Get and authorize exactly the requested persisted encounter.
+        encounter = load_screening_or_abort(
+            db,
+            encounter_id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=authorized_screening_lab_unit_ids(db, current_user),
+        )
         if not encounter:
             flash("Encounter not found", "danger")
             return redirect(url_for("screenings.list_screenings"))
-
-        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin")
-        # Fail closed: an empty lab set means this user reaches no lab, and a
-        # NULL-lab encounter is reachable by nobody but a global admin.
-        if not is_admin_like and (
-            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
-        ):
-            abort(403)
 
         # Delete existing reports
         dr_reports = db.query(DiabeticRetinopathyReport).filter_by(

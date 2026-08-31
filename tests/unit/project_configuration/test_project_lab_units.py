@@ -7,6 +7,7 @@ from project_configuration.models import ProjectLabUnit
 from project_configuration.service import (
     ProjectLabConfigurationDenied,
     configured_project_lab_unit_ids,
+    project_site_feature_allows,
     replace_project_lab_units,
 )
 from tests.helpers.factories import UserFactory
@@ -102,6 +103,75 @@ def test_replacing_boundary_deactivates_out_of_scope_access_rows(db_session, cor
     assert configured_project_lab_unit_ids(db_session, project_id=project.id) == {lab_a.id}
     assert grant.active is False
     assert assignment.active is False
+
+
+def test_site_feature_flags_are_explicit_and_project_scope_bypasses_them(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    admin = UserFactory.create_admin(db_session, username="site_feature_admin")
+    project = _project(db_session, "SITE_FEATURES")
+
+    rows = replace_project_lab_units(
+        db_session,
+        actor=admin,
+        project_id=project.id,
+        lab_unit_ids=[lab.id],
+        site_settings={
+            lab.id: {
+                "sites_can_export_grades": True,
+                "sites_can_create_datasets": False,
+                "sites_can_share_datasets": True,
+            }
+        },
+    )
+    assert rows[0].sites_can_export_grades is True
+    assert rows[0].sites_can_create_datasets is False
+    assert rows[0].sites_can_share_datasets is True
+    assert project_site_feature_allows(
+        db_session,
+        project_id=project.id,
+        lab_unit_id=lab.id,
+        authority_scope_type=LAB_UNIT_SCOPE,
+        feature="sites_can_export_grades",
+    )
+    assert not project_site_feature_allows(
+        db_session,
+        project_id=project.id,
+        lab_unit_id=lab.id,
+        authority_scope_type=LAB_UNIT_SCOPE,
+        feature="sites_can_create_datasets",
+    )
+    assert project_site_feature_allows(
+        db_session,
+        project_id=project.id,
+        lab_unit_id=None,
+        authority_scope_type=PROJECT_SCOPE,
+        feature="sites_can_create_datasets",
+    )
+
+
+def test_site_feature_flags_deny_missing_inactive_and_malformed_facts(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    admin = UserFactory.create_admin(db_session, username="site_feature_deny_admin")
+    project = _project(db_session, "SITE_FEATURE_DENY")
+    with pytest.raises(ValueError):
+        replace_project_lab_units(
+            db_session,
+            actor=admin,
+            project_id=project.id,
+            lab_unit_ids=[lab.id],
+            site_settings={lab.id: {"sites_can_export_grades": 1}},
+        )
+    assert not project_site_feature_allows(
+        db_session,
+        project_id=project.id,
+        lab_unit_id=lab.id,
+        authority_scope_type=LAB_UNIT_SCOPE,
+        feature="sites_can_export_grades",
+    )
 
 
 def test_project_admin_cannot_change_project_lab_unit_api(

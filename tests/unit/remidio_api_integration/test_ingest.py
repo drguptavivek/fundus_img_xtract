@@ -18,6 +18,7 @@ from models import (
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remidio_api_integration.ingest import ingest_staged_files
+from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     PatientEncounterTargetDisease,
     ProjectUploadProfile,
@@ -110,7 +111,21 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
         remidio_device_type="FOP",
         active=True,
     )
-    db_session.add_all([encounter_scheme, encounter_set_type, upload_profile, project_profile, source_rule])
+    project_lab = ProjectLabUnit(
+        project_id=project.id,
+        lab_unit_id=core_test_data["lab_unit"].id,
+        active=True,
+    )
+    db_session.add_all(
+        [
+            encounter_scheme,
+            encounter_set_type,
+            upload_profile,
+            project_profile,
+            source_rule,
+            project_lab,
+        ]
+    )
     db_session.flush()
 
     binding = ProjectUploadProfileRemidioApiBinding(

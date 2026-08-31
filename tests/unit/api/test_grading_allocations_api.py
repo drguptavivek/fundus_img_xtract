@@ -1,12 +1,17 @@
 from uuid import uuid4
 
-from models import Project
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectEncounterSetQueueDTO,
 )
+from models import Project
+from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import UserFactory
-from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileDisease
+from upload_profiles.models import (
+    ProjectUploadProfile,
+    UploadProfile,
+    UploadProfileDisease,
+)
 
 
 def _authenticate(client, user):
@@ -25,6 +30,7 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     db_session.flush()
     db_session.add_all(
         [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
             ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True),
             UploadProfileDisease(upload_profile_id=profile.id, disease_id=disease.id, is_default=True),
         ]
@@ -36,11 +42,30 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
         username=f"api_allocation_resident_{suffix}",
         lab_units=[],
     )
+    field_ophthalmologist = UserFactory.create_by_role(
+        db_session,
+        "field_ophthalmologist",
+        username=f"api_allocation_field_oph_{suffix}",
+        lab_units=[],
+    )
+    field_optometrist = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username=f"api_allocation_field_opt_{suffix}",
+        lab_units=[],
+    )
+    nonclinical = UserFactory.create_by_role(
+        db_session,
+        "data_manager",
+        username=f"api_allocation_nonclinical_{suffix}",
+        lab_units=[],
+    )
     db_session.flush()
     _authenticate(client, admin)
 
     get_response = client.get(f"/api/projects/{project.id}/grader-allocations")
     assert get_response.status_code == 200
+    assert "policy" not in get_response.get_json()
     target = get_response.get_json()["targets"][0]
     assert target["scope"] == "disease_image"
     assert target["task_family"] == "image_wise_non_set"
@@ -57,6 +82,10 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
         if row["id"] == resident.id
     )
     assert candidate["is_member_of_lab"] is False
+    candidate_ids = {row["id"] for row in candidates_response.get_json()["candidates"]}
+    assert field_ophthalmologist.id in candidate_ids
+    assert field_optometrist.id not in candidate_ids
+    assert nonclinical.id not in candidate_ids
 
     create_response = client.post(
         f"/api/projects/{project.id}/grader-allocations",
@@ -80,7 +109,7 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     assert delete_response.get_json()["allocation"]["active"] is False
 
 
-def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
+def test_arbitrator_candidates_include_active_ophthalmologists_outside_target_lab(
     client,
     db_session,
     core_test_data,
@@ -102,6 +131,13 @@ def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
         username=f"cross_lab_ophthalmologist_{suffix}",
         lab_units=[],
     )
+    db_session.add(
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=core_test_data["lab_unit"].id,
+            active=True,
+        )
+    )
     db_session.flush()
     _authenticate(client, admin)
 
@@ -115,10 +151,7 @@ def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
 
     assert response.status_code == 200
     candidates = response.get_json()["candidates"]
-    assert any(
-        row["id"] == ophthalmologist.id and row["is_member_of_lab"] is False
-        for row in candidates
-    )
+    assert any(row["id"] == ophthalmologist.id for row in candidates)
 
 
 def test_grader_allocation_api_rejects_invalid_target_shape(
@@ -146,6 +179,23 @@ def test_grader_allocation_api_rejects_invalid_target_shape(
 
     assert response.status_code == 400
     assert response.get_json()["error"]["code"] == "grading_allocation_error"
+
+
+def test_grader_allocation_policy_endpoint_is_removed(client, db_session):
+    project = Project(
+        title=f"No Toggle Project {uuid4().hex[:8]}",
+        code=f"NO-TOGGLE-{uuid4().hex[:8]}",
+        active=True,
+    )
+    db_session.add(project)
+    db_session.flush()
+
+    response = client.put(
+        f"/api/projects/{project.id}/grader-allocation-policy",
+        json={"enforcement_enabled": False},
+    )
+
+    assert response.status_code == 404
 
 
 def test_project_encounter_set_queue_api_returns_current_users_queues(
@@ -179,7 +229,7 @@ def test_project_encounter_set_queue_api_returns_current_users_queues(
     )
     observed = {}
 
-    # The route now goes through the cached accessor in grading.queue_cards,
+    # The route now goes through the live accessor in grading.queue_cards,
     # which returns already-serialised dicts rather than DTOs.
     def _queues(_db, *, user_id, refresh=False):
         observed["user_id"] = user_id

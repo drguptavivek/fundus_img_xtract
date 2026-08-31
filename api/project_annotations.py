@@ -3,7 +3,7 @@
 import json
 
 from flask import Response, jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
@@ -32,7 +32,7 @@ from . import api_bp
 
 
 @api_bp.route("/grading-tasks/<string:task_uuid>/annotation-context", methods=["GET"])
-@roles_required("ophthalmologist", "admin")
+@login_required
 def get_task_annotation_context(task_uuid: str):
     """Return the server-resolved project policy for one accessible task."""
     slot = (request.args.get("slot") or "").strip()
@@ -52,7 +52,7 @@ def get_task_annotation_context(task_uuid: str):
         )
         if task is None:
             return jsonify({"error": "not_found", "message": "Grading task not found."}), 404
-        if not current_user.has_role("admin") and not get_user_eligibility_for_task(
+        if not get_user_eligibility_for_task(
             db, current_user.id, task.id, slot
         ):
             return jsonify({"error": "access_denied", "message": "Task is outside your grading scope."}), 403

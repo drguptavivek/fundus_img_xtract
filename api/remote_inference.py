@@ -96,18 +96,17 @@ def get_project_automated_remote_inference_workflows(project_id: int):
 def get_recent_project_wadhwani_encounter_set_jobs(project_id: int):
     """Return the latest 10 scoped EncounterSet Wadhwani jobs for a project."""
     with get_db_session() as db:
-        from data_authorization.policy import (
-            ACTION_WAI_RESULTS,
-            allowed_lab_unit_ids_for_action,
-            user_can_project_action,
-        )
+        from authz.project_access import allowed_project_lab_unit_ids, can_view_wai_results
 
-        if not user_can_project_action(
-            db, user=current_user, project_id=project_id, action=ACTION_WAI_RESULTS
+        if not can_view_wai_results(
+            db, current_user, project_id=project_id
         ):
             return jsonify(success=False, error="Project WAI results are outside your scope."), 403
-        project_labs = allowed_lab_unit_ids_for_action(
-            db, user=current_user, project_id=project_id, action=ACTION_WAI_RESULTS
+        project_labs = allowed_project_lab_unit_ids(
+            db,
+            current_user,
+            project_id=project_id,
+            roles={"project_pi", "site_pi", "project_admin", "optometrist"},
         )
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id) if project_labs is None else set(project_labs)
         if db.get(Project, project_id) is None:
@@ -236,10 +235,10 @@ def get_encounter_remote_inference_candidates():
         page_size=optional_int("page_size", ALLOWED_PAGE_SIZES[0]),
     ).normalized()
     with get_db_session() as db:
-        from data_authorization.policy import ACTION_WAI_RUN, user_can_project_action
+        from authz.project_access import can_run_wai
 
-        if not user_can_project_action(
-            db, user=current_user, project_id=project_id, action=ACTION_WAI_RUN
+        if not can_run_wai(
+            db, current_user, project_id=project_id
         ):
             return jsonify(success=False, error="Project WAI execution is outside your scope."), 403
         if db.get(Project, project_id) is None:

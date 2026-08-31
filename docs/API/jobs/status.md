@@ -14,6 +14,12 @@ This surface exposes the list view, job-status JSON, and read-only job pages.
 
 HTML list of recent jobs.
 
+Visibility uses one fail-closed default contract: global `admin`, the exact job
+owner, or an authorized non-NULL classical Lab Unit. A NULL Lab Unit supplies
+no generic scope and is therefore owner/admin only. Classical Lab Unit
+assignment never grants a project job; feature-specific project job pages apply
+their own project and task-lineage checks.
+
 Auth:
 - `@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")`
 
@@ -81,6 +87,9 @@ Error responses:
 
 HTML status page.
 
+The job is loaded and authorized before the page shell is rendered. Missing and
+unauthorized tokens both return `404`.
+
 Response:
 - `templates/jobs/export_job_status.html` for export jobs
 - `templates/jobs/job_status.html` for all other jobs
@@ -92,6 +101,9 @@ HTML upload-result page for the original upload job.
 ## `GET /jobs/processing/<job_id>`
 
 HTML processing page.
+
+Despite the historical parameter name, `job_id` is the job token. The same
+visibility contract is applied before rendering.
 
 ## CSRF Rules
 

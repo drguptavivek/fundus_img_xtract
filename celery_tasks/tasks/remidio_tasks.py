@@ -15,8 +15,8 @@ def run_remidio_api_routing_profile_sync_task(
     user_id: int | None = None,
     hospital_id: int | None = None,
 ) -> dict:
-    _ = user_id, hospital_id
-    return run_routing_profile_sync_job(job_id)
+    _ = self, hospital_id
+    return run_routing_profile_sync_job(job_id, expected_user_id=user_id)
 
 
 @celery_app.task(name="celery_tasks.tasks.remidio_tasks.run_remidio_api_project_sync_task", bind=True, acks_late=True)
@@ -26,8 +26,8 @@ def run_remidio_api_project_sync_task(
     user_id: int | None = None,
     hospital_id: int | None = None,
 ) -> dict:
-    _ = self, user_id, hospital_id
-    return run_project_sync_job(job_id)
+    _ = self, hospital_id
+    return run_project_sync_job(job_id, expected_user_id=user_id)
 
 
 @celery_app.task(name="celery_tasks.tasks.remidio_tasks.queue_remidio_api_prospective_project_syncs_task", bind=True, acks_late=True)

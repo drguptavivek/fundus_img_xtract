@@ -98,19 +98,7 @@
   async function submitForm(form) {
     const kind = form.dataset.gradingAllocationForm;
     const method = form.dataset.httpMethod || 'POST';
-    const body = kind === 'create'
-      ? createPayload(form)
-      : (kind === 'policy'
-          ? { enforcement_enabled: form.dataset.nextEnforcementEnabled === 'true' }
-          : null);
-    if (kind === 'policy' && body.enforcement_enabled) {
-      const confirmed = window.confirm(
-        'Enable project allocation enforcement? Only explicitly allocated users will receive project-owned tasks.'
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
+    const body = kind === 'create' ? createPayload(form) : null;
 
     const submitButton = form.querySelector('[type="submit"]');
     if (submitButton) {
@@ -134,9 +122,6 @@
       const messages = {
         create: 'Grader allocation saved.',
         deactivate: 'Grader allocation removed.',
-        policy: body.enforcement_enabled
-          ? 'Project allocation enforcement enabled.'
-          : 'Project allocation enforcement disabled.'
       };
       notify(messages[kind] || 'Grading allocation updated.', 'success');
       refreshWorkspace(form.dataset.reloadUrl);

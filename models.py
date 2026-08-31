@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, BigInteger, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import sessionmaker, relationship, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
@@ -12,6 +12,7 @@ from uuid import uuid4
 from utils.env_loader import load_environment
 from auth.utils import utcnow
 from utils.log_sanitize import sanitize_log_value
+from db_base import Base
 
 load_environment()
 
@@ -68,9 +69,6 @@ GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/glaucoma_pdfs
 SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.txt")
 ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
-
-class Base(DeclarativeBase):
-    pass
 
 user_lab_units = Table(
     'user_lab_units', Base.metadata,
@@ -129,7 +127,7 @@ class User(Base):
     )
 
     @property
-    def is_authenticated(self) -> bool: return True
+    def is_authenticated(self) -> bool: return bool(self.is_active)
     @property
     def is_anonymous(self) -> bool: return False
     def get_id(self) -> str: return str(self.id)
@@ -2043,6 +2041,11 @@ class CuratedDataset(Base):
     filters_json: Mapped[str] = mapped_column(Text, nullable=False)
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    admin_managed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    context_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -2058,6 +2061,14 @@ class CuratedDataset(Base):
         back_populates="dataset",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "admin_managed = true OR "
+            "(context_kind = 'classical' AND project_id IS NULL) OR "
+            "(context_kind = 'project' AND project_id IS NOT NULL)",
+            name="ck_curated_datasets_authorization_context",
+        ),
     )
 
 

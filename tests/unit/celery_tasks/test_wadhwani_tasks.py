@@ -1,11 +1,47 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from types import SimpleNamespace
 
 from celery_tasks.tasks import wadhwani_tasks
+
+
+def test_madhunetra_failure_is_written_to_sanitized_wai_log(monkeypatch, caplog):
+    class ProviderError(RuntimeError):
+        step = "submit"
+        code = "model_unavailable"
+        status_code = 502
+        retryable = True
+
+    def _fail_inference(**kwargs):
+        raise ProviderError("failed URL https://storage.example/file?token=secret")
+
+    item_states: list[tuple[str, str, str | None]] = []
+    monkeypatch.setattr(wadhwani_tasks, "run_encounter_inference", _fail_inference)
+    monkeypatch.setattr(
+        wadhwani_tasks,
+        "db_set_item_state",
+        lambda token, item, state, detail=None: item_states.append((item, state, detail)),
+    )
+    monkeypatch.setattr(wadhwani_tasks, "db_set_job_status", lambda *args, **kwargs: None)
+    caplog.set_level(logging.ERROR, logger="wai")
+
+    wadhwani_tasks.run_madhunetra_dr_dme_batch_task.run(
+        "job-token", [42], user_id=9
+    )
+
+    assert "provider_failure provider=madhunetrai workflow=dr_dme" in caplog.text
+    assert "job=job-token encounter_id=42 stage=submit" in caplog.text
+    assert "error_code=model_unavailable http_status=502 retryable=True" in caplog.text
+    assert "token=secret" not in caplog.text
+    assert "token=***" in caplog.text
+    error_detail = next(
+        json.loads(detail) for _, state, detail in item_states if state == "error"
+    )
+    assert "token=secret" not in error_detail["detail"]
 
 
 def test_wadhwani_batch_processes_at_most_two_items_concurrently(monkeypatch):

@@ -10,11 +10,13 @@ from celery_app import celery_app
 from job_store import db_set_item_state, db_set_job_status
 from services.wadhwani_glaucoma_inference import run_task_inference
 from remote_inference.dr_dme_service import run_encounter_inference
+from utils.error_sanitization import sanitize_exception_message
 from utils.materialized_view_scheduler import refresh_ai_inference_runs_materialized_view
 from utils.log_sanitize import sanitize_log_value
 
 
 logger = logging.getLogger(__name__)
+wai_logger = logging.getLogger("wai")
 WADHWANI_BATCH_CONCURRENCY = 2
 WADHWANI_FINAL_RETRY_DELAY_SECONDS = 5
 WADHWANI_FINAL_RETRY_PASSES = 2
@@ -160,11 +162,26 @@ def run_madhunetra_dr_dme_batch_task(
             )
         except Exception as exc:  # noqa: BLE001
             errors += 1
+            safe_error = sanitize_log_value(
+                sanitize_exception_message(str(exc)), max_len=500
+            )
             logger.error(
                 "MadhuNetrAI encounter failure job=%s encounter_id=%s error=%s",
                 sanitize_log_value(job_token),
                 sanitize_log_value(encounter_id),
-                sanitize_log_value(exc),
+                safe_error,
+            )
+            wai_logger.error(
+                "provider_failure provider=madhunetrai workflow=dr_dme "
+                "job=%s encounter_id=%s stage=%s error_code=%s "
+                "http_status=%s retryable=%s message=%s",
+                sanitize_log_value(job_token),
+                sanitize_log_value(encounter_id),
+                sanitize_log_value(getattr(exc, "step", "unknown")),
+                sanitize_log_value(getattr(exc, "code", "unexpected_error")),
+                sanitize_log_value(getattr(exc, "status_code", None)),
+                sanitize_log_value(getattr(exc, "retryable", False)),
+                safe_error,
             )
             db_set_item_state(
                 job_token,
@@ -177,7 +194,7 @@ def run_madhunetra_dr_dme_batch_task(
                         # Without the detail, an ineligible_encounter or http_error
                         # says nothing about which rule failed or which URL 404'd,
                         # and the job page cannot explain itself.
-                        "detail": str(sanitize_log_value(exc))[:500],
+                        "detail": str(safe_error)[:500],
                     }
                 ),
             )

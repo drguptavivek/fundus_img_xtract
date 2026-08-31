@@ -258,6 +258,14 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
         max_bytes=log_max_bytes,
         backup_count=log_backup_count,
     )
+    wai_handler = _make_handler(
+        "wai.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
     db_query_handler = WatchedFileHandler(
         log_dir / "db_query.log", encoding="utf-8", delay=True
     )
@@ -335,6 +343,7 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
     s3_sync_logger = _configure_logger(
         "admin.s3_sync_status", logging.INFO, s3_sync_handler
     )
+    wai_logger = _configure_logger("wai", logging.INFO, wai_handler)
     authorization_handler = _make_handler(
         "authorization.log",
         logging.INFO,
@@ -454,6 +463,7 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
     s3_sync_logger.info(
         "S3 sync status logger initialized at %s", str(log_dir / "s3_sync.log")
     )
+    wai_logger.info("WAI logger initialized at %s", str(log_dir / "wai.log"))
     db_query_logger.info(
         "DB query logger initialized at %s", str(log_dir / "db_query.log")
     )
@@ -483,6 +493,7 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
         "image_metadata": image_metadata_logger,
         "encounter_set": encounter_set_logger,
         "s3_sync": s3_sync_logger,
+        "wai": wai_logger,
         "db_query": db_query_logger,
         "db_query_slow": db_query_slow_logger,
         "authorization": authorization_logger,

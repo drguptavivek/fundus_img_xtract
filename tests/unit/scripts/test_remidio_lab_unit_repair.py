@@ -5,11 +5,41 @@ import pytest
 from scripts.remidio_lab_unit_repair import (
     RemidioLabUnitRepairError,
     RepairScope,
+    _encounter_matches_binding,
     _LabRecord,
+    _one_or_none,
     _validate_lab_lineage,
     apply_repair,
     preview_repair,
 )
+
+
+def test_encounter_lineage_uses_upload_profile_not_mapping_id():
+    binding = SimpleNamespace(
+        project_upload_profile_id=700,
+        project_profile=SimpleNamespace(upload_profile_id=17),
+    )
+    encounter = SimpleNamespace(project_id=3, upload_profile_id=17)
+
+    assert _encounter_matches_binding(encounter, project_id=3, binding=binding)
+    encounter.upload_profile_id = 700
+    assert not _encounter_matches_binding(encounter, project_id=3, binding=binding)
+
+
+def test_apply_scope_queries_request_row_lock():
+    class Query:
+        locked = False
+
+        def with_for_update(self):
+            self.locked = True
+            return self
+
+        def one_or_none(self):
+            return self.locked
+
+    query = Query()
+
+    assert _one_or_none(query, lock=True) is True
 
 
 def _scope(entities, *, source=3, target=1):

@@ -154,6 +154,12 @@ def _query_all(query, *, lock: bool) -> list[Any]:
     return list(query.all())
 
 
+def _one_or_none(query, *, lock: bool):
+    if lock:
+        query = query.with_for_update()
+    return query.one_or_none()
+
+
 def _require_lab_unit(db, lab_unit_id: int, label: str) -> None:
     if db.get(LabUnit, lab_unit_id) is None:
         raise RemidioLabUnitRepairError(f"{label} lab unit {lab_unit_id} was not found.")
@@ -161,6 +167,14 @@ def _require_lab_unit(db, lab_unit_id: int, label: str) -> None:
 
 def _append_record(records: list[_LabRecord], table: str, entity: Any) -> None:
     records.append(_LabRecord(table, int(entity.id), entity, entity.lab_unit_id))
+
+
+def _encounter_matches_binding(encounter: Any, *, project_id: int, binding: Any) -> bool:
+    """Match the encounter to the profile, not the project-profile mapping row."""
+    return (
+        encounter.project_id == project_id
+        and encounter.upload_profile_id == binding.project_profile.upload_profile_id
+    )
 
 
 def _validate_lab_lineage(
@@ -191,7 +205,9 @@ def resolve_repair_scope(
     if not project_code.strip():
         raise RemidioLabUnitRepairError("Project code must not be empty.")
 
-    project = db.query(Project).filter(Project.code == project_code).one_or_none()
+    project = _one_or_none(
+        db.query(Project).filter(Project.code == project_code), lock=lock
+    )
     if project is None:
         raise RemidioLabUnitRepairError(f"Project code {project_code!r} was not found.")
     if not project.active:
@@ -200,28 +216,28 @@ def resolve_repair_scope(
     _require_lab_unit(db, source_lab_unit_id, "Source")
     _require_lab_unit(db, target_lab_unit_id, "Target")
 
-    target_boundary = (
+    target_boundary = _one_or_none(
         db.query(ProjectLabUnit)
         .filter(
             ProjectLabUnit.project_id == project.id,
             ProjectLabUnit.lab_unit_id == target_lab_unit_id,
             ProjectLabUnit.active.is_(True),
-        )
-        .one_or_none()
+        ),
+        lock=lock,
     )
     if target_boundary is None:
         raise RemidioLabUnitRepairError(
             f"Target lab unit {target_lab_unit_id} is not an active lab-unit boundary for project "
             f"{project_code!r}."
         )
-    source_boundary = (
+    source_boundary = _one_or_none(
         db.query(ProjectLabUnit)
         .filter(
             ProjectLabUnit.project_id == project.id,
             ProjectLabUnit.lab_unit_id == source_lab_unit_id,
             ProjectLabUnit.active.is_(True),
-        )
-        .one_or_none()
+        ),
+        lock=lock,
     )
     if source_boundary is not None:
         raise RemidioLabUnitRepairError(
@@ -229,7 +245,7 @@ def resolve_repair_scope(
             f"{project_code!r}; refusing to re-home it."
         )
 
-    binding = (
+    binding = _one_or_none(
         db.query(ProjectUploadProfileRemidioApiBinding)
         .join(
             ProjectUploadProfile,
@@ -239,8 +255,8 @@ def resolve_repair_scope(
         .filter(
             ProjectUploadProfileRemidioApiBinding.id == binding_id,
             ProjectUploadProfile.project_id == project.id,
-        )
-        .one_or_none()
+        ),
+        lock=lock,
     )
     if binding is None:
         raise RemidioLabUnitRepairError(
@@ -272,7 +288,6 @@ def resolve_repair_scope(
 
     profile_id = int(binding.project_upload_profile_id)
     encounter_ids: list[int] = []
-    encounters: list[Any] = []
     for link in links:
         if link.project_upload_profile_id != profile_id or link.remidio_api_binding_id != binding_id:
             raise RemidioLabUnitRepairError(
@@ -284,19 +299,26 @@ def resolve_repair_scope(
             raise RemidioLabUnitRepairError(
                 f"Refusing link {link.id}: Remidio exam and encounter lineage is incomplete."
             )
-        encounter = db.get(PatientEncounters, link.patient_encounter_id)
-        if encounter is None:
-            raise RemidioLabUnitRepairError(f"Refusing link {link.id}: encounter is missing.")
-        if encounter.project_id != project.id or encounter.upload_profile_id != binding.project_upload_profile_id:
+        encounter_ids.append(int(link.patient_encounter_id))
+
+    if len(set(encounter_ids)) != len(encounter_ids):
+        raise RemidioLabUnitRepairError("Refusing duplicate encounter lineage in binding links.")
+    encounters = _query_all(
+        db.query(PatientEncounters)
+        .filter(PatientEncounters.id.in_(encounter_ids))
+        .order_by(PatientEncounters.id),
+        lock=lock,
+    )
+    if {int(encounter.id) for encounter in encounters} != set(encounter_ids):
+        raise RemidioLabUnitRepairError("A linked encounter is missing.")
+    for encounter in encounters:
+        if not _encounter_matches_binding(
+            encounter, project_id=project.id, binding=binding
+        ):
             raise RemidioLabUnitRepairError(
                 f"Refusing encounter {encounter.id}: project or upload-profile lineage does not "
                 "match the binding."
             )
-        encounter_ids.append(int(encounter.id))
-        encounters.append(encounter)
-
-    if len(set(encounter_ids)) != len(encounter_ids):
-        raise RemidioLabUnitRepairError("Refusing duplicate encounter lineage in binding links.")
 
     records: list[_LabRecord] = []
     for encounter in encounters:
@@ -376,8 +398,11 @@ def resolve_repair_scope(
             db.query(IntraRaterTask).filter(or_(*intra_conditions)).order_by(IntraRaterTask.id),
             lock=lock,
         )
-        for row in intra_tasks:
-            _append_record(records, "intra_rater_tasks", row)
+        if intra_tasks:
+            raise RemidioLabUnitRepairError(
+                "Intra-rater derivatives exist for the repair scope. Their batch and "
+                "clinical lineage require a separate reviewed repair; refusing to infer it."
+            )
 
         regrade_tasks = _query_all(
             db.query(RegradeTask).filter(RegradeTask.source_task_id.in_(task_ids)).order_by(RegradeTask.id),

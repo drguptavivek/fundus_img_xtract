@@ -660,6 +660,9 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert encounter_set_data['encounter'].name.encode() in response.data
     assert encounter_set_data['encounter_set_type'].name.encode() in response.data
     assert b"verification-panel-stage" in response.data
+    assert b"window.history.replaceState" in response.data
+    assert b"decodeURIComponent(window.location.hash.slice(1))" in response.data
+    assert b"initialPanelButton?.click()" in response.data
     assert b"imageFieldsAnchor.scrollIntoView({behavior: 'smooth', block: 'start'})" in response.data
     assert b"1 / 4" in response.data
     assert b"Summary" in response.data
@@ -681,6 +684,11 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     # include it rather than inline its internals.
     assert b"js/submission-guard.js" in response.data
     assert b'id="verification-ocr-modal"' in response.data
+    assert b'id="exclude-encounter-set-modal"' in response.data
+    assert b"Exclude this EncounterSet from verification and grading?" in response.data
+    assert b"data-exclusion-reason-choice" in response.data
+    assert b"data-confirm-exclusion" in response.data
+    assert b"prompt('Optional exclusion note:')" not in response.data
     assert b"pollOcrUntilTerminal" in response.data
     assert b"JSON.stringify({force: true})" in response.data
     assert b"Close and refresh report" in response.data
@@ -923,7 +931,6 @@ def test_verify_encounter_set_summary_panel(client, auth_client_factory, encount
     assert b"Disease names or free text" not in response.data
     assert b"Level" in response.data
     assert b"Exclude EncounterSet" in response.data
-    assert b"Exclude this EncounterSet from verification and grading?" in response.data
     assert b"Verify and Close" in response.data
     assert b"Verify and Next" in response.data
     assert b">Save<" not in response.data

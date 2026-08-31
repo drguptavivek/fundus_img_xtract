@@ -258,8 +258,6 @@
 
       <main class="verify-panel-frame">
         <div id="verification-panel-stage"
-             hx-get="{{ url_for('verify_encounter_set.verify_panel', uuid=encounter.uuid, panel='patient') }}"
-             hx-trigger="load"
              hx-swap="innerHTML">
           <div class="verify-panel-loading">
             <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
@@ -315,6 +313,37 @@
       </div>
     </div>
   </div>
+
+  <div class="modal fade" id="exclude-encounter-set-modal" tabindex="-1"
+       aria-labelledby="exclude-encounter-set-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="exclude-encounter-set-modal-title">Exclude this EncounterSet from verification and grading?</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">This removes the EncounterSet from verification and grading. Select a reason:</p>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for reason in ['Poor focus / blurry', 'Media opacity', 'Poor illumination', 'Field missing or incorrect', 'Artifact / obstruction', 'Not a fundus image'] %}
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-exclusion-reason-choice data-reason="{{ reason }}">{{ reason }}</button>
+            {% endfor %}
+          </div>
+          <label class="form-label" for="exclude-encounter-set-reason">Exclusion reason</label>
+          <textarea class="form-control" id="exclude-encounter-set-reason" rows="3"
+                    placeholder="Select a reason or enter details manually." data-exclusion-reason></textarea>
+          <div class="small text-danger mt-2 d-none" role="alert" data-exclusion-error>
+            Select or enter an exclusion reason.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" data-confirm-exclusion>Exclude EncounterSet</button>
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
@@ -342,6 +371,10 @@
     const ocrModalDetail = ocrModalElement?.querySelector('[data-verification-ocr-detail]');
     const ocrModalSpinner = ocrModalElement?.querySelector('[data-verification-ocr-spinner]');
     const ocrModalClose = ocrModalElement?.querySelector('[data-verification-ocr-close]');
+    const exclusionModalElement = document.getElementById('exclude-encounter-set-modal');
+    const exclusionReason = exclusionModalElement?.querySelector('[data-exclusion-reason]');
+    const exclusionError = exclusionModalElement?.querySelector('[data-exclusion-error]');
+    let pendingExcludeAction = null;
     let ocrPollTimer = null;
     let ocrAttachmentUuid = null;
     let refreshOcrPanelOnClose = false;
@@ -791,12 +824,27 @@
       }
     });
 
-    document.querySelectorAll('.verify-nav-item').forEach((button) => {
+    const panelButtons = Array.from(document.querySelectorAll('.verify-nav-item'));
+    panelButtons.forEach((button) => {
       button.addEventListener('click', function () {
         document.querySelectorAll('.verify-nav-item.active').forEach((item) => item.classList.remove('active'));
         button.classList.add('active');
         counter.textContent = `${button.dataset.panelIndex || '1'} / ${panelCount}`;
+        const panelKey = button.dataset.panelKey || 'patient';
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${encodeURIComponent(panelKey)}`);
       });
+    });
+
+    let requestedPanelKey = 'patient';
+    try {
+      requestedPanelKey = decodeURIComponent(window.location.hash.slice(1)) || 'patient';
+    } catch (error) {
+      requestedPanelKey = 'patient';
+    }
+    const initialPanelButton = panelButtons.find((button) => button.dataset.panelKey === requestedPanelKey)
+      || panelButtons[0];
+    window.requestAnimationFrame(function () {
+      initialPanelButton?.click();
     });
 
     document.addEventListener('click', function (event) {
@@ -812,19 +860,41 @@
 
       const excludeAction = event.target.closest('[data-exclude-encounter-set]');
       if (excludeAction) {
-        const confirmMessage = excludeAction.dataset.confirmMessage || 'Exclude this EncounterSet from verification and grading?';
-        if (!confirm(confirmMessage)) return;
-        const reason = prompt('Optional exclusion note:');
-        if (reason === null) return;
+        pendingExcludeAction = excludeAction;
+        if (exclusionReason) exclusionReason.value = '';
+        exclusionError?.classList.add('d-none');
+        window.bootstrap?.Modal.getOrCreateInstance(exclusionModalElement)?.show();
+        return;
+      }
+
+      const exclusionReasonChoice = event.target.closest('[data-exclusion-reason-choice]');
+      if (exclusionReasonChoice) {
+        const reason = exclusionReasonChoice.dataset.reason || exclusionReasonChoice.textContent.trim();
+        const current = exclusionReason?.value.trim() || '';
+        if (exclusionReason) exclusionReason.value = current ? `${current}; ${reason}` : reason;
+        exclusionError?.classList.add('d-none');
+        exclusionReason?.focus();
+        return;
+      }
+
+      const confirmExclusion = event.target.closest('[data-confirm-exclusion]');
+      if (confirmExclusion) {
+        const reason = exclusionReason?.value.trim() || '';
+        if (!reason || !pendingExcludeAction) {
+          exclusionError?.classList.remove('d-none');
+          exclusionReason?.focus();
+          return;
+        }
         const submission = beginVerificationAction(
-          excludeAction,
+          confirmExclusion,
           'Excluding this EncounterSet…',
           'Excluding…',
           true
         );
         if (!submission) return;
+        window.bootstrap?.Modal.getInstance(exclusionModalElement)?.hide();
         let navigating = false;
-        postJson(excludeAction.dataset.excludeUrl, {reason: reason.trim()}).then((payload) => {
+        postJson(pendingExcludeAction.dataset.excludeUrl, {reason}).then((payload) => {
           clearAllVerificationStorage();
           navigating = true;
           window.location.href = payload.redirect_url || "{{ url_for('verify_encounter_set.index') }}";

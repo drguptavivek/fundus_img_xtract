@@ -787,8 +787,7 @@
   <div class="d-flex flex-wrap justify-content-end gap-2">
     <button class="btn btn-outline-danger me-auto" type="button"
             data-exclude-encounter-set
-            data-exclude-url="{{ url_for('verify_encounter_set.exclude_encounter_set', uuid=encounter.uuid) }}"
-            data-confirm-message="Exclude this EncounterSet from verification and grading?">
+            data-exclude-url="{{ url_for('verify_encounter_set.exclude_encounter_set', uuid=encounter.uuid) }}">
       <i class="bi bi-x-octagon me-1"></i> Exclude EncounterSet
     </button>
     <button class="btn btn-primary" type="button" data-finalize-action="next">

@@ -21,9 +21,14 @@ sys.path.insert(0, str(project_root))
 from utils.env_loader import load_environment
 load_environment()
 
-# Base URL from environment variables
-# Note: BASE_URL already includes the port from .env
-BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5001")
+# These tests send hundreds of real HTTP requests. Keep them out of the normal
+# suite unless an operator explicitly supplies a non-production test target.
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_LIVE_RATE_LIMIT_E2E") != "1",
+    reason="live rate-limit E2E tests require RUN_LIVE_RATE_LIMIT_E2E=1",
+)
+
+BASE_URL = os.getenv("RATE_LIMIT_E2E_BASE_URL", "http://127.0.0.1:5001")
 
 # Remove port if it's already included in BASE_URL
 if BASE_URL.endswith(f":{os.getenv('FLASK_PORT', '5001')}"):

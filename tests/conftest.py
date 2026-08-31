@@ -318,6 +318,9 @@ def app(db_session):
         "FORCE_HTTPS": "false", 
         "SESSION_COOKIE_SECURE": "false",
         "SESSION_COOKIE_SAMESITE": "Lax",
+        # Keep host-UID test runs away from production-mounted log files,
+        # which are owned by the web runtime user inside Compose.
+        "LOG_DIR": f"/tmp/fundus_img_xtract_pytest_logs_{os.getpid()}",
         "THUMBNAIL_MAINTENANCE_ENABLED": "false",
         "MATERIALIZED_VIEW_SCHEDULE_ENABLED": "false",
         "RATELIMIT_ENABLED": "false"  # Disable rate limiting for tests significantly speeds them up

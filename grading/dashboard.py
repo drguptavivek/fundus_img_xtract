@@ -13,7 +13,7 @@ from grading.workbench.service import list_active_sessions
 from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from grading.queue_cards import (
     disease_queue_card,
-    gradable_disease_cards,
+    disease_queue_cards,
     project_encounter_set_cards,
 )
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
@@ -212,19 +212,9 @@ def disease_queues_fragment():
     """
     refresh = request.args.get("refresh") == "1"
     with transaction_scope() as db:
-        queue_cards = [
-            card
-            for card in (
-                disease_queue_card(
-                    db,
-                    user_id=current_user.id,
-                    disease_id=disease["id"],
-                    refresh=refresh,
-                )
-                for disease in gradable_disease_cards(db, user_id=current_user.id)
-            )
-            if card is not None
-        ]
+        queue_cards = disease_queue_cards(
+            db, user_id=current_user.id, refresh=refresh
+        )
     return render_template(
         "grading/_disease_queues.html",
         queue_cards=queue_cards,

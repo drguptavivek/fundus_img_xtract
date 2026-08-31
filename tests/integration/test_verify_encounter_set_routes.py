@@ -804,13 +804,14 @@ def test_verify_encounter_set_panel_is_not_browser_cached(
     assert response.headers["Cache-Control"] == "no-store, private"
 
 
-def test_verified_encounter_set_browser_uses_view_label(
-    client, auth_client_factory, encounter_set_data, db_session
+@pytest.mark.parametrize("terminal_status", ["verified", "excluded"])
+def test_terminal_encounter_set_browser_date_has_no_warning_dot(
+    client, auth_client_factory, encounter_set_data, db_session, terminal_status
 ):
-    user = UserFactory.create_admin(db_session, username="admin_browse_verified_set")
+    user = UserFactory.create_admin(db_session, username=f"admin_browse_{terminal_status}_set")
     auth_client = auth_client_factory(user)
     encounter = encounter_set_data["encounter"]
-    encounter.encounter_verified_status = "verified"
+    encounter.encounter_verified_status = terminal_status
     db_session.flush()
 
     response = auth_client.get(
@@ -824,9 +825,35 @@ def test_verified_encounter_set_browser_uses_view_label(
     )
 
     assert response.status_code == 200
-    assert b"View Verification" in response.data
+    if terminal_status == "verified":
+        assert b"View Verification" in response.data
     assert b"/api/encounter-viewer/encounters/" not in response.data
     assert b"Loading encounter evidence" not in response.data
+    assert b"data-date-has-unverified" not in response.data
+
+
+def test_pending_encounter_set_marks_browser_date_with_warning_dot(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_browse_pending_date_dot")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "pending"
+    db_session.flush()
+
+    response = auth_client.get(
+        "/uploads/encountersets/browse",
+        query_string={
+            "project_id": encounter.project_id,
+            "month": "2023-10",
+            "date": "2023-10-27",
+            "encounter_id": encounter.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"data-date-has-unverified" in response.data
+    assert b"1 EncounterSet not verified or excluded" in response.data
 
 
 def test_verify_encounter_set_patient_panel(client, auth_client_factory, encounter_set_data, db_session):
@@ -2001,10 +2028,10 @@ def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targ
     assert all(task.encounter_set_image_id is None for task in tasks)
 
 
-def test_verify_encounter_set_exclude_async_redirects_to_browser_without_tasks(
+def test_verify_encounter_set_exclude_async_redirects_to_next_pending_without_tasks(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
-    """Excluding an EncounterSet removes it from verification without creating tasks."""
+    """Exclusion advances to the next pending EncounterSet on the same date."""
     user = UserFactory.create_by_role(
         db_session,
         "optometrist",
@@ -2013,6 +2040,21 @@ def test_verify_encounter_set_exclude_async_redirects_to_browser_without_tasks(
     )
     _grant_project_verify(db_session, encounter_set_data, user)
     auth_client = auth_client_factory(user)
+    next_encounter = PatientEncounters(
+        uuid=str(uuid.uuid4()),
+        name="Z Next Patient Set",
+        patient_id="PAT-SET-002",
+        capture_date="2023-10-27",
+        capture_date_dt=date(2023, 10, 27),
+        lab_unit_id=encounter_set_data['lab_unit'].id,
+        is_set_based=True,
+        encounter_verified_status="pending",
+        project_id=encounter_set_data['project'].id,
+        upload_profile_id=encounter_set_data['upload_profile'].id,
+        metadata_json={},
+    )
+    db_session.add(next_encounter)
+    db_session.flush()
 
     response = auth_client.post(
         f"/verify_encounter_set/exclude/{encounter_set_data['encounter'].uuid}",
@@ -2022,10 +2064,7 @@ def test_verify_encounter_set_exclude_async_redirects_to_browser_without_tasks(
 
     assert response.status_code == 200
     assert response.json["success"] is True
-    assert response.json["redirect_url"] == (
-        f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
-        f"&month=2023-10&date=2023-10-27&encounter_id={encounter_set_data['encounter'].id}"
-    )
+    assert response.json["redirect_url"] == f"/verify_encounter_set/verify/{next_encounter.uuid}"
     db_session.refresh(encounter_set_data['encounter'])
     assert encounter_set_data['encounter'].encounter_verified_status == "excluded"
     assert encounter_set_data['encounter'].metadata_json["verification"]["excluded"] is True

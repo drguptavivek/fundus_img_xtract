@@ -150,8 +150,6 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
             object_key = (
                 getattr(row, "s3_object_key_edited_thumbnail", None)
                 or getattr(row, "s3_object_key_thumbnail", None)
-                or getattr(row, "s3_object_key_edited", None)
-                or getattr(row, "s3_object_key", None)
             )
         else:
             object_key = getattr(row, "s3_object_key", None)

@@ -244,8 +244,18 @@ def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> 
 
 
 def _encounter_set_browser_dates(db: Session, user, project_id: int, *, no_pii: bool = False) -> list[dict[str, Any]]:
+    unverified_count = func.count(PatientEncounters.id).filter(
+        or_(
+            PatientEncounters.encounter_verified_status.is_(None),
+            PatientEncounters.encounter_verified_status.notin_(("verified", "excluded")),
+        )
+    )
     query = (
-        db.query(PatientEncounters.capture_date_dt, func.count(PatientEncounters.id))
+        db.query(
+            PatientEncounters.capture_date_dt,
+            func.count(PatientEncounters.id),
+            unverified_count,
+        )
         .filter(
             PatientEncounters.is_set_based.is_(True),
             PatientEncounters.project_id == project_id,
@@ -260,8 +270,10 @@ def _encounter_set_browser_dates(db: Session, user, project_id: int, *, no_pii: 
             "date": capture_date,
             "label": capture_date.strftime("%d %b"),
             "count": count,
+            "unverified_count": int(unverified_count or 0),
+            "has_unverified": bool(unverified_count),
         }
-        for capture_date, count in query.all()
+        for capture_date, count, unverified_count in query.all()
     ]
 
 

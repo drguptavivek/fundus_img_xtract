@@ -14,7 +14,7 @@ from utils.fileUtils import (
     thumbnail_exists_direct, thumbnail_exists_encounter,
     get_encounter_thumbnail_serving_path, get_direct_thumbnail_serving_path
 )
-from utils.image_processing import get_thumbnail_filename
+from utils.image_processing import generate_thumbnail, get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import bump_media_cache_version
 from db_transaction_manager import transaction_scope
@@ -856,7 +856,7 @@ def universalImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSo
             return _serve_direct_final_thumbnail(db, direct_image, uuid)
 
         if encounter_set_image:
-            return _serve_encounter_set_thumbnail(encounter_set_image, uuid)
+            return _serve_encounter_set_thumbnail(db, encounter_set_image, uuid)
 
         abort(404)
 
@@ -888,7 +888,7 @@ def _serve_encounter_set_final_image(img: EncounterSetImage, uuid: str):
     return _serve_encounter_set_image(img, uuid)
 
 
-def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
+def _serve_encounter_set_thumbnail(db, img: EncounterSetImage, uuid: str):
     # A single DB column stores the current thumbnail. When an edit exists, do
     # not serve an older original thumbnail under the edited image UUID.
     expected_edited_thumbnail = (
@@ -908,7 +908,29 @@ def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
                 cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                 extra_headers={"X-Thumbnail": "true"},
             )
-    return _serve_encounter_set_final_image(img, uuid)
+
+    source_filename = img.edited_filename or img.original_filename
+    source_path = BASE_DIR / img.folder_rel / source_filename
+    thumbnail_filename = get_thumbnail_filename(source_filename)
+    thumbnail_path = BASE_DIR / img.folder_rel / "thumbnails" / thumbnail_filename
+    if source_path.is_file() and generate_thumbnail(source_path, thumbnail_path):
+        img.thumbnail_filename = thumbnail_filename
+        db.add(img)
+        db.flush()
+        bump_media_cache_version(uuid)
+        return _build_image_response(
+            str(thumbnail_path),
+            thumbnail_filename,
+            uuid,
+            cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
+            extra_headers={"X-Thumbnail": "true"},
+        )
+
+    current_app.logger.warning(
+        "EncounterSet thumbnail unavailable uuid=%s",
+        sanitize_log_value(uuid),
+    )
+    abort(404)
 
 def encounterSetImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     if preauthorized is None and (not current_user or not current_user.is_authenticated):
@@ -937,7 +959,7 @@ def encounterSetImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMedi
         if not img:
             abort(404)
         
-        return _serve_encounter_set_thumbnail(img, uuid)
+        return _serve_encounter_set_thumbnail(db, img, uuid)
 
 
 def encounterSetImageEditedByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):

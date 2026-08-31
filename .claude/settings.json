@@ -1,6 +1,7 @@
 {
+  "hooks": {},
   "enabledPlugins": {
-    "documentation-generation@claude-code-workflows": true
-  },
-  "hooks": {}
+    "documentation-generation@claude-code-workflows": true,
+    "frontend-design@claude-plugins-official": true
+  }
 }

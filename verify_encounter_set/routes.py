@@ -1012,7 +1012,12 @@ def exclude_encounter_set(uuid):
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = excluded_at
 
-        redirect_url = _encounter_set_browser_url(encounter)
+        next_uuid = _next_pending_encounter_uuid(db, encounter=encounter)
+        redirect_url = (
+            url_for("verify_encounter_set.verify_encounter", uuid=next_uuid)
+            if next_uuid
+            else _encounter_set_browser_url(encounter)
+        )
         flash(f"Encounter set {encounter.name} excluded from verification.", "warning")
         if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
             return jsonify({"success": True, "redirect_url": redirect_url})

@@ -517,10 +517,10 @@ def _register_blueprints(app: Flask) -> None:
     from remedio_zip_uploads import bp as remedio_zip_uploads_bp
     from preprocess import bp as preprocess_bp
     from notifications import bp as notifications_bp
-    from tasks import bp as tasks_bp
+    from tasks import bp as tasks_bp, register_routes as register_task_routes
     from tasks.ad_hoc import bp as ad_hoc_tasks_bp
     from help import bp as help_bp
-    from review import bp as review_bp
+    from review import bp as review_bp, register_routes as register_review_routes
     from public import bp as public_bp
     from admin import admin_bp
     from admin.rate_limit_admin import rate_limit_admin_bp
@@ -552,9 +552,11 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(remedio_zip_uploads_bp)
     app.register_blueprint(preprocess_bp)
     app.register_blueprint(notifications_bp)
+    register_task_routes()
     app.register_blueprint(tasks_bp)
     app.register_blueprint(ad_hoc_tasks_bp)
     app.register_blueprint(help_bp)
+    register_review_routes()
     app.register_blueprint(review_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)

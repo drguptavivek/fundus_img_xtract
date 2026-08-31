@@ -53,7 +53,16 @@
                   hx-get="{{ url_for(workspace_endpoint, project_id=selected_project_id, month=selected_month, date=date_row.date.isoformat()) }}"
                   hx-target="#encounter-set-browser-workspace"
                   hx-swap="innerHTML">
-            <span class="d-block fw-semibold">{{ date_row.label }}</span>
+            <span class="d-block fw-semibold">
+              {{ date_row.label }}
+              {% if date_row.has_unverified %}
+              <span class="d-inline-block rounded-circle bg-warning ms-1"
+                    style="width: .55rem; height: .55rem;"
+                    title="{{ date_row.unverified_count }} EncounterSet{{ 's' if date_row.unverified_count != 1 else '' }} not verified or excluded"
+                    aria-label="{{ date_row.unverified_count }} EncounterSet{{ 's' if date_row.unverified_count != 1 else '' }} not verified or excluded"
+                    data-date-has-unverified></span>
+              {% endif %}
+            </span>
             <span class="small">{{ date_row.count }}</span>
           </button>
           {% else %}

@@ -138,8 +138,9 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
         dict: Regeneration statistics and status
     """
     from db_transaction_manager import transaction_scope
-    from models import DirectImageUpload, EncounterFile
+    from models import DirectImageUpload, EncounterFile, EncounterSetImage
     from utils.thumbnail_integration import trigger_direct_upload_thumbnails, trigger_encounter_thumbnails
+    from utils.thumbnail_jobs import schedule_encounter_set_thumbnails
 
     timezone_str = app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
     tz = pytz.timezone(timezone_str)
@@ -156,6 +157,8 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
         'direct_uploads_triggered': 0,
         'encounter_files_processed': 0,
         'encounter_files_triggered': 0,
+        'encounter_set_images_processed': 0,
+        'encounter_set_images_triggered': 0,
         'total_processed': 0,
         'total_triggered': 0,
         'errors': []
@@ -231,8 +234,46 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
                     except Exception as e:
                         stats['errors'].append(f"Encounter files batch: {str(e)}")
 
-        stats['total_processed'] = stats['direct_uploads_processed'] + stats['encounter_files_processed']
-        stats['total_triggered'] = stats['direct_uploads_triggered'] + stats['encounter_files_triggered']
+        # Process EncounterSetImage rows (Remidio/IITK/mobile ingestion) using
+        # the same bounded run budget as every other image source.
+        remaining_for_encounter_sets = max(
+            limit - stats['direct_uploads_triggered'] - stats['encounter_files_triggered'],
+            0,
+        )
+        if remaining_for_encounter_sets > 0:
+            with transaction_scope() as db:
+                encounter_set_missing = db.query(EncounterSetImage).filter(
+                    EncounterSetImage.thumbnail_filename.is_(None),
+                    EncounterSetImage.original_filename.isnot(None),
+                ).limit(remaining_for_encounter_sets).all()
+
+                encounter_set_image_ids = [image.id for image in encounter_set_missing]
+                stats['encounter_set_images_processed'] = len(encounter_set_image_ids)
+                if encounter_set_image_ids:
+                    try:
+                        schedule_encounter_set_thumbnails(
+                            encounter_set_image_ids,
+                            app,
+                            user_context={
+                                'user_id': None,
+                                'username': 'system',
+                                'ip': '127.0.0.1',
+                            },
+                        )
+                        stats['encounter_set_images_triggered'] = len(encounter_set_image_ids)
+                    except Exception as e:
+                        stats['errors'].append(f"EncounterSet images batch: {str(e)}")
+
+        stats['total_processed'] = (
+            stats['direct_uploads_processed']
+            + stats['encounter_files_processed']
+            + stats['encounter_set_images_processed']
+        )
+        stats['total_triggered'] = (
+            stats['direct_uploads_triggered']
+            + stats['encounter_files_triggered']
+            + stats['encounter_set_images_triggered']
+        )
 
         duration = datetime.now(pytz.UTC) - start_time
         local_time_end = datetime.now(tz)

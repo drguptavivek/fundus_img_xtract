@@ -142,18 +142,22 @@ def test_access_encounter_set_image_wrong_role(client, auth_client_factory, enco
 
 
 def test_access_encounter_set_thumbnail_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):
+    from PIL import Image
+
     user = UserFactory.create_by_role(db_session, "collaborator", username="media_project_collaborator")
     _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     db_session.commit()
     media_dir = tmp_path / "files" / "test_sets"
     media_dir.mkdir(parents=True)
-    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    Image.new("RGB", (1000, 800), color="blue").save(media_dir / "test_pos_1.jpg")
     monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}/thumbnail")
 
     assert response.status_code == 200
+    assert response.headers["X-Thumbnail"] == "true"
+    assert encounter_set_data["image"].thumbnail_filename == "thm_test_pos_1.jpg"
 
 
 def test_access_encounter_set_thumbnail_collaborator_without_project_membership(
@@ -261,6 +265,8 @@ def test_universal_thumbnail_serves_encounter_set_image(
 def test_universal_thumbnail_never_serves_stale_original_for_edited_set_image(
     auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path
 ):
+    from PIL import Image
+
     user = UserFactory.create_by_role(
         db_session, "collaborator", username="edited_set_thumbnail_viewer"
     )
@@ -273,8 +279,8 @@ def test_universal_thumbnail_never_serves_stale_original_for_edited_set_image(
     media_dir = tmp_path / "files" / "test_sets"
     thumbnail_dir = media_dir / "thumbnails"
     thumbnail_dir.mkdir(parents=True)
-    (media_dir / image.original_filename).write_bytes(b"original bytes")
-    (media_dir / image.edited_filename).write_bytes(b"edited bytes")
+    Image.new("RGB", (1000, 800), color="blue").save(media_dir / image.original_filename)
+    Image.new("RGB", (1000, 800), color="green").save(media_dir / image.edited_filename)
     (thumbnail_dir / image.thumbnail_filename).write_bytes(b"stale original thumbnail")
     monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
     auth_client = auth_client_factory(user)
@@ -282,8 +288,9 @@ def test_universal_thumbnail_never_serves_stale_original_for_edited_set_image(
     response = auth_client.get(f"/media/img/{image.uuid}/thumbnail")
 
     assert response.status_code == 200
-    assert response.data == b"edited bytes"
-    assert response.headers.get("X-Thumbnail") is None
+    assert response.data != b"stale original thumbnail"
+    assert response.headers["X-Thumbnail"] == "true"
+    assert image.thumbnail_filename == f"thm_{image.edited_filename}"
 
 
 def test_encounter_set_media_denies_lab_role_without_project_capability(

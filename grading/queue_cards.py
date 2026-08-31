@@ -83,12 +83,56 @@ def disease_queue_card(
         disease_ids={disease_id},
     ).get(disease["name"], [])
 
+    return _build_disease_queue_card(disease, pending, linked_followups)
+
+
+def disease_queue_cards(db, *, user_id: int, refresh: bool = False) -> list[dict[str, Any]]:
+    """Build every legacy disease card with one pair of KPI sweeps.
+
+    The fragment used to call ``disease_queue_card`` once per disease. Each
+    call independently resolved the user's complete eligibility and linked
+    disease graph, multiplying query count by the number of visible cards.
+    """
+    _ = refresh
+    diseases = get_user_gradable_diseases(db, user_id)
+    if not diseases:
+        return []
+
+    disease_ids = {int(disease["id"]) for disease in diseases}
+    pending_by_disease = get_user_kpi_pending_task_count_data(
+        db,
+        user_id,
+        exclude_project_encounter_sets=EXCLUDE_PROJECT_ENCOUNTER_SETS,
+        disease_ids=disease_ids,
+    )
+    linked_by_disease = get_user_kpi_linked_followup_counts(
+        db,
+        user_id,
+        exclude_project_encounter_sets=EXCLUDE_PROJECT_ENCOUNTER_SETS,
+        disease_ids=disease_ids,
+    )
+
+    return [
+        _build_disease_queue_card(
+            disease,
+            pending_by_disease.get(disease["name"], {}),
+            linked_by_disease.get(disease["name"], []),
+        )
+        for disease in diseases
+    ]
+
+
+def _build_disease_queue_card(
+    disease: dict[str, Any],
+    pending: dict[str, Any],
+    linked_followups: list[dict[str, Any]],
+) -> dict[str, Any]:
     resident_pending = int(pending.get("resident_pending", 0))
     resident2_pending = int(pending.get("resident2_pending", 0))
     arbitration_pending = int(pending.get("arbitration_pending", 0))
     linked_total = sum(int(item.get("count", 0)) for item in linked_followups)
 
-    card = {
+    return {
         "disease": {"id": disease["id"], "name": disease["name"]},
         "can_grade_resident": disease["can_grade_resident"],
         "can_grade_resident2": disease["can_grade_resident2"],
@@ -108,7 +152,6 @@ def disease_queue_card(
             resident_pending or resident2_pending or arbitration_pending or linked_total
         ),
     }
-    return card
 
 
 def project_encounter_set_cards(

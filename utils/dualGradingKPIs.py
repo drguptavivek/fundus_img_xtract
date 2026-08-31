@@ -7,6 +7,7 @@ This design allows for better transaction management and session reuse.
 """
 
 from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, or_, func, exists, case, select
@@ -147,13 +148,60 @@ def _resolve_user_disease_slots(db, user_id: int):
     if not eligible_roles:
         return None
 
+    # Load the small linked-disease graph once. The previous implementation
+    # recursively queried it for every role row, and this resolver is called
+    # several times while building dashboard cards. For users with broad
+    # eligibility that turned one fragment request into hundreds of tiny SQL
+    # round trips even though the queue COUNT queries themselves were fast.
+    linked_rows = (
+        db.query(
+            LinkedDiseaseGrading.primary_disease_id,
+            LinkedDiseaseGrading.linked_disease_id,
+        )
+        .filter(LinkedDiseaseGrading.is_active.is_(True))
+        .order_by(LinkedDiseaseGrading.display_order, LinkedDiseaseGrading.id)
+        .all()
+    )
+    children_by_primary: dict[int, list[int]] = defaultdict(list)
+    parent_by_linked: dict[int, int] = {}
+    for primary_id, linked_id in linked_rows:
+        children_by_primary[primary_id].append(linked_id)
+        # Match the old ``first()`` behavior if malformed data contains more
+        # than one active parent for a linked disease.
+        parent_by_linked.setdefault(linked_id, primary_id)
+
+    def root_disease_id(disease_id: int) -> int:
+        current_id = disease_id
+        visited = {disease_id}
+        while current_id in parent_by_linked:
+            parent_id = parent_by_linked[current_id]
+            if parent_id in visited:
+                return current_id
+            visited.add(parent_id)
+            current_id = parent_id
+        return current_id
+
+    def linked_disease_ids(primary_id: int) -> list[int]:
+        linked_ids: list[int] = []
+        queue = [primary_id]
+        visited = {primary_id}
+        while queue:
+            current_id = queue.pop(0)
+            for linked_id in children_by_primary.get(current_id, ()):
+                if linked_id in visited:
+                    continue
+                visited.add(linked_id)
+                linked_ids.append(linked_id)
+                queue.append(linked_id)
+        return linked_ids
+
     # Group eligible lab units by disease, including linked diseases from primary permissions
     disease_lab_units = {}
     for role in eligible_roles:
-        primary_id = get_primary_disease_id(db, role.disease_id)
+        primary_id = root_disease_id(role.disease_id)
         if role.disease_id != primary_id:
             continue
-        linked_ids = get_linked_disease_ids(db, primary_id)
+        linked_ids = linked_disease_ids(primary_id)
         all_ids = [primary_id] + linked_ids
         for disease_id in all_ids:
             is_currently_primary = (disease_id == primary_id)

@@ -104,13 +104,23 @@
   .verify-counter {
     font-variant-numeric: tabular-nums;
   }
-  @media (max-width: 991.98px) {
+  @media (max-width: 1399.98px) {
     .verify-layout {
       grid-template-columns: 1fr;
     }
     .verify-rail {
       position: static;
       max-height: none;
+      display: flex;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scrollbar-width: thin;
+    }
+    .verify-nav-item {
+      width: auto;
+      min-width: 12rem;
+      border-bottom: 0;
+      border-right: 1px solid var(--bs-border-color);
     }
   }
 </style>

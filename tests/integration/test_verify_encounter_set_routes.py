@@ -662,6 +662,8 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"verification-panel-stage" in response.data
     assert b"1 / 4" in response.data
     assert b"Summary" in response.data
+    assert b"@media (max-width: 1399.98px)" in response.data
+    assert b"overflow-x: auto" in response.data
     assert b"Patient Age" not in response.data
     assert b"Clinical Note" not in response.data
     assert b"Laterality" not in response.data
@@ -841,6 +843,9 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     )
     assert response.status_code == 200
     assert b"EncounterSet Image 1" in response.data
+    assert b"panel-header image-panel-header" in response.data
+    assert b"panel-content image-panel-content" in response.data
+    assert b"image-fields-heading mb-2" in response.data
     assert b"test_pos_1.jpg" in response.data
     assert b"Laterality" in response.data
     assert b"right" in response.data

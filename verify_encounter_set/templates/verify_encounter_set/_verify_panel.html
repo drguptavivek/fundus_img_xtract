@@ -119,7 +119,22 @@
   .image-panel-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: .75rem;
+  }
+  .image-panel-header {
+    padding-block: .75rem;
+  }
+  .image-panel-content {
+    padding-top: .75rem;
+  }
+  .image-fields-row .form-label {
+    margin-bottom: .25rem;
+  }
+  .image-fields-heading {
+    color: var(--bs-secondary-color);
+    font-size: .75rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
   }
   .panel-actions {
     display: flex;
@@ -228,7 +243,7 @@
 {% set image_type = image_metadata.get('fundus_field') or image_metadata.get('image_segment') or image_metadata.get('image_type') or image_metadata.get('image_device_type') or selected_image.asset_kind %}
 {% set image_gaze = image_metadata.get('gaze_position') or image_metadata.get('strabismus_gaze_position') or image_metadata.get('gaze') %}
 {% set has_gaze_context = image_gaze or image_metadata.get('source_kind') == 'iitk_api' %}
-<div class="panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+<div class="panel-header image-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
   <div class="min-width-0">
     <div class="image-title-row">
       <h2 class="h5 mb-0 flex-shrink-0">EncounterSet Image {{ image_index }}</h2>
@@ -252,14 +267,14 @@
     {% endif %}
   </div>
 </div>
-<div class="panel-content">
+<div class="panel-content image-panel-content">
   <div class="image-panel-grid">
     <div class="image-fields-row">
-      <h3 class="h6 mb-3">Editable Image Fields</h3>
+      <h3 class="image-fields-heading mb-2">Editable Image Fields</h3>
       {% set effective_laterality = (image_descriptor.laterality if image_descriptor else none) or image_metadata.get('laterality') %}
       {% set effective_focus = ((image_descriptor.focus | lower) if image_descriptor and image_descriptor.focus else none) or image_metadata.get('focus') %}
       {% set image_control_col = 'col-12 col-md-6 col-xl-3' if has_gaze_context else 'col-4' %}
-      <div class="row g-3 mb-3">
+      <div class="row g-2 mb-2">
         <div class="{{ image_control_col }}">
           <label class="form-label" for="image_laterality_{{ selected_image.id }}">Laterality{% if 'laterality' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__laterality" value="1">

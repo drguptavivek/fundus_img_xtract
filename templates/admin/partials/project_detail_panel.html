@@ -43,6 +43,24 @@
         </form>
       </div>
       <div class="col-12">
+        <h3 class="h6">Verification Observation Tags</h3>
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.put_project_verification_tags', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.put_project_verification_tags', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <label class="form-label" for="detail_project_verification_tags">Quick-add tags</label>
+          <textarea class="form-control" id="detail_project_verification_tags" name="verification_tags" rows="3"
+                    placeholder="One tag per line">{{ (selected_project.verification_tags_json or []) | join('\n') }}</textarea>
+          <div class="form-text">Optional labels shown below verifier comment fields. One per line; maximum 30 tags and 80 characters each.</div>
+          <button class="btn btn-primary mt-3" type="submit">Save Verification Tags</button>
+        </form>
+      </div>
+      <div class="col-12">
         <h3 class="h6">Project Lab Units</h3>
         <p class="small text-muted">This is the hard data and authorization boundary for the project. Project-wide access means every Lab Unit selected here.</p>
         <form class="border rounded p-3"

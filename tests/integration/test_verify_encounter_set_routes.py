@@ -62,7 +62,12 @@ def encounter_set_data(db_session, core_test_data):
     lab_unit = db_session.merge(core_test_data['lab_unit'])
     glaucoma = db_session.merge(core_test_data['glaucoma'])
     suffix = uuid.uuid4().hex[:8]
-    project = Project(title=f"EncounterSet Project {suffix}", code=f"esp_{suffix}", active=True)
+    project = Project(
+        title=f"EncounterSet Project {suffix}",
+        code=f"esp_{suffix}",
+        verification_tags_json=["Lid lesion", "Surface mass"],
+        active=True,
+    )
     encounter_set_type = EncounterSetType(
         name=f"Fundus EncounterSet {suffix}",
         code=f"fundus_{suffix}",
@@ -663,6 +668,8 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"window.history.replaceState" in response.data
     assert b"decodeURIComponent(window.location.hash.slice(1))" in response.data
     assert b"initialPanelButton?.click()" in response.data
+    assert b"data-verification-observation-tag" in response.data
+    assert b"values.join('; ')" in response.data
     assert b"imageFieldsAnchor.scrollIntoView({behavior: 'smooth', block: 'start'})" in response.data
     assert b"1 / 4" in response.data
     assert b"Summary" in response.data
@@ -902,6 +909,9 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"Confirm Ungradable" in response.data
     assert b"Brightness" in response.data
     assert b"Fullscreen" in response.data
+    assert b"Verifier observation" in response.data
+    assert b"Lid lesion" in response.data
+    assert b"Surface mass" in response.data
     assert b'data-fixed-viewport="true"' in response.data
     assert b"height:clamp(640px, 72vh, 960px)" in response.data
     assert b"data-image-verification-actions" in response.data
@@ -960,6 +970,8 @@ def test_verify_encounter_set_summary_panel(client, auth_client_factory, encount
     assert b"Exclude EncounterSet" in response.data
     assert b"Verify and Close" in response.data
     assert b"Verify and Next" in response.data
+    assert b"EncounterSet verifier observation" in response.data
+    assert b"Lid lesion" in response.data
     assert b">Save<" not in response.data
 
 
@@ -993,11 +1005,13 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
         data={
             "metadata__patient__patient_age_yrs": "56",
             "metadata__encounter__clinical_note": "verified note",
+            "metadata__encounter__verifier_observation": "Lid lesion; free text detail",
             f"__present__metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "1",
             f"metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "no",
             f"metadata__image__{encounter_set_data['image'].id}__laterality": "left",
             f"__present__metadata__image__{encounter_set_data['image'].id}__gaze_position": "1",
             f"metadata__image__{encounter_set_data['image'].id}__gaze_position": "up_left",
+            f"metadata__image__{encounter_set_data['image'].id}__verifier_observation": "Surface mass; temporal edge",
         },
         headers={'X-CSRFToken': csrf_token},
         follow_redirects=True,
@@ -1008,10 +1022,28 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
     db_session.refresh(encounter_set_data['image'])
     assert encounter_set_data['encounter'].metadata_json["patient"]["patient_age_yrs"] == "56"
     assert encounter_set_data['encounter'].metadata_json["encounter"]["clinical_note"] == "verified note"
+    assert encounter_set_data['encounter'].metadata_json["verification"]["observation"] == "Lid lesion; free text detail"
+    assert encounter_set_data['encounter'].metadata_json["verification"]["observation_by"] == user.username
     assert encounter_set_data['image'].metadata_json["laterality"] == "left"
     assert encounter_set_data['image'].metadata_json["gaze_position"] == "up_left"
+    assert encounter_set_data['image'].metadata_json["verification"]["observation"] == "Surface mass; temporal edge"
+    assert encounter_set_data['image'].metadata_json["verification"]["observation_by"] == user.username
     assert encounter_set_data['image'].referral_needed_or_positive_image == "no"
     assert "referral_needed_or_positive_image" not in encounter_set_data['image'].metadata_json
+
+    cleared = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={
+            "metadata__encounter__verifier_observation": "",
+            f"metadata__image__{encounter_set_data['image'].id}__verifier_observation": "",
+        },
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+    assert cleared.status_code == 200
+    db_session.refresh(encounter_set_data['encounter'])
+    db_session.refresh(encounter_set_data['image'])
+    assert "observation" not in encounter_set_data['encounter'].metadata_json.get("verification", {})
+    assert "observation" not in encounter_set_data['image'].metadata_json.get("verification", {})
 
 
 def test_verify_encounter_set_metadata_partial_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):

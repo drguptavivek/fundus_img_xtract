@@ -848,6 +848,21 @@
     });
 
     document.addEventListener('click', function (event) {
+      const observationTag = event.target.closest('[data-verification-observation-tag]');
+      if (observationTag) {
+        const target = document.getElementById(observationTag.dataset.verificationObservationTarget || '');
+        if (!target) return;
+        const tag = (observationTag.dataset.verificationObservationTag || '').trim();
+        const values = target.value.split(';').map((value) => value.trim()).filter(Boolean);
+        if (tag && !values.some((value) => value.toLowerCase() === tag.toLowerCase())) {
+          values.push(tag);
+          target.value = values.join('; ');
+          target.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+        target.focus();
+        return;
+      }
+
       const viewerImage = event.target.closest('#verification-panel-stage .imggr-main-img');
       if (viewerImage) {
         const root = viewerImage.closest('.imggr-viewer-root');

@@ -20,6 +20,73 @@ class ProjectLabConfigurationDenied(PermissionError):
     pass
 
 
+MAX_VERIFICATION_TAGS = 30
+MAX_VERIFICATION_TAG_LENGTH = 80
+
+
+@dataclass(frozen=True)
+class ProjectVerificationTagsDTO:
+    project_id: int
+    tags: tuple[str, ...]
+
+
+def _normalize_verification_tags(values: Iterable[str]) -> tuple[str, ...]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            raise ProjectLabConfigurationError("Each verification tag must be a string.")
+        tag = " ".join(value.split()).strip()
+        if not tag:
+            continue
+        if ";" in tag:
+            raise ProjectLabConfigurationError("Verification tags cannot contain semicolons.")
+        if len(tag) > MAX_VERIFICATION_TAG_LENGTH:
+            raise ProjectLabConfigurationError(
+                f"Verification tags cannot exceed {MAX_VERIFICATION_TAG_LENGTH} characters."
+            )
+        key = tag.casefold()
+        if key not in seen:
+            seen.add(key)
+            tags.append(tag)
+    if len(tags) > MAX_VERIFICATION_TAGS:
+        raise ProjectLabConfigurationError(
+            f"A project can have at most {MAX_VERIFICATION_TAGS} verification tags."
+        )
+    return tuple(tags)
+
+
+def get_project_verification_tags(db: Session, *, project_id: int) -> ProjectVerificationTagsDTO:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise ProjectLabConfigurationError("Project not found.")
+    return ProjectVerificationTagsDTO(
+        project_id=project.id,
+        tags=tuple(project.verification_tags_json or []),
+    )
+
+
+def replace_project_verification_tags(
+    db: Session,
+    *,
+    actor: Any,
+    project_id: int,
+    tags: Iterable[str],
+) -> ProjectVerificationTagsDTO:
+    """Replace verifier quick-add tags; only System Admin may mutate them."""
+    if not actor.has_role("admin"):
+        raise ProjectLabConfigurationDenied(
+            "Only a System Admin can configure project verification tags."
+        )
+    project = db.get(Project, project_id)
+    if project is None:
+        raise ProjectLabConfigurationError("Project not found.")
+    normalized = _normalize_verification_tags(tags)
+    project.verification_tags_json = list(normalized)
+    db.flush()
+    return ProjectVerificationTagsDTO(project_id=project.id, tags=normalized)
+
+
 @dataclass(frozen=True)
 class ProjectLabUnitDTO:
     id: int

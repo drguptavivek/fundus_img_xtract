@@ -54,6 +54,7 @@
 {% set patient_fields = editable_fields_by_scope.patient %}
 {% set image_fields = editable_fields_by_scope.image | rejectattr('key', 'in', ['laterality', 'focus', 'image_variant']) | list %}
 {% set routing_required_keys = verification_profile.metadata_fields | selectattr('required_for_task_routing') | map(attribute='key') | list %}
+{% set verification_tags = verification_profile.verification_tags or [] %}
 {% set reviewed_count = images|selectattr('is_reviewed')|list|length %}
 
 <style>
@@ -339,6 +340,26 @@
       {% if image_fields %}
       {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
       {% endif %}
+      {% set image_verification = image_metadata.get('verification', {}) if image_metadata.get('verification') is mapping else {} %}
+      <div class="mt-2">
+        <label class="form-label" for="image_verifier_observation_{{ selected_image.id }}">Verifier observation</label>
+        <textarea class="form-control" id="image_verifier_observation_{{ selected_image.id }}"
+                  name="metadata__image__{{ selected_image.id }}__verifier_observation"
+                  rows="2" maxlength="2000" placeholder="Observed feature(s) or comment"
+                  {% if verification_read_only %}disabled{% endif %}>{{ image_verification.get('observation') or '' }}</textarea>
+        {% if verification_tags and not verification_read_only %}
+        <div class="d-flex flex-wrap gap-1 mt-2" aria-label="Project verification tags">
+          {% for tag in verification_tags %}
+          <button class="btn btn-sm btn-outline-secondary" type="button"
+                  data-verification-observation-tag="{{ tag }}"
+                  data-verification-observation-target="image_verifier_observation_{{ selected_image.id }}">{{ tag }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if image_verification.get('observation_by') %}
+        <div class="form-text">Last noted by {{ image_verification.get('observation_by') }}</div>
+        {% endif %}
+      </div>
     </div>
     {% if not verification_read_only %}
     <div class="panel-actions" data-image-verification-actions>
@@ -533,6 +554,26 @@
     {% endfor %}
   </div>
   {% endif %}
+  {% set encounter_verification = encounter_metadata.get('verification', {}) if encounter_metadata.get('verification') is mapping else {} %}
+  <div class="mb-4">
+    <label class="form-label" for="encounter_verifier_observation">EncounterSet verifier observation</label>
+    <textarea class="form-control" id="encounter_verifier_observation"
+              name="metadata__encounter__verifier_observation" rows="2" maxlength="2000"
+              placeholder="Observed feature(s) or comment"
+              {% if verification_read_only %}disabled{% endif %}>{{ encounter_verification.get('observation') or '' }}</textarea>
+    {% if verification_tags and not verification_read_only %}
+    <div class="d-flex flex-wrap gap-1 mt-2" aria-label="Project verification tags">
+      {% for tag in verification_tags %}
+      <button class="btn btn-sm btn-outline-secondary" type="button"
+              data-verification-observation-tag="{{ tag }}"
+              data-verification-observation-target="encounter_verifier_observation">{{ tag }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if encounter_verification.get('observation_by') %}
+    <div class="form-text">Last noted by {{ encounter_verification.get('observation_by') }}</div>
+    {% endif %}
+  </div>
   <div class="row g-3 mb-4">
     <div class="col-12 col-lg-3">
       <label class="form-label" for="metadata__encounter__referral_suggestion">Referral Suggestion</label>

@@ -15,6 +15,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Uploads Index](uploads/README.md)
 - [Upload Profiles API](upload-profiles/README.md)
 - [Project Authorization API](project-authorization/README.md)
+- [Project Verification Tags API](project-verification-tags/README.md)
 - [EncounterSetTypes API](encounter-set-types/README.md)
 - [Upload Metadata Field Definitions API](upload-metadata/README.md)
 - [Grading Schemes API](grading-schemes/README.md)

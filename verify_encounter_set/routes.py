@@ -250,6 +250,17 @@ def update_metadata(uuid):
         if encounter.encounter_verified_status == "verified":
             return _already_verified_response(encounter)
 
+        observation_values = [
+            value
+            for key, value in request.form.items()
+            if key.endswith("__verifier_observation")
+        ]
+        if any(len(value) > 2000 for value in observation_values):
+            return _verification_validation_response(
+                "Verifier observations cannot exceed 2000 characters.",
+                encounter_uuid=encounter.uuid,
+            )
+
         was_reopened_for_correction = bool(
             (encounter.metadata_json or {}).get("verification", {}).get("reopened")
         )
@@ -332,6 +343,13 @@ def update_metadata(uuid):
                 section[key] = _metadata_form_value(request.form, form_name, field)
             if section:
                 encounter_metadata[scope] = section
+        encounter_observation_name = "metadata__encounter__verifier_observation"
+        if _metadata_form_field_present(request.form, encounter_observation_name):
+            _set_verifier_observation(
+                encounter_metadata,
+                request.form.get(encounter_observation_name),
+                actor_username=current_user.username,
+            )
         encounter.metadata_json = encounter_metadata
         if (encounter_metadata.get("upload") or {}).get("source_kind") == "iitk_api":
             from iitk_api_integration.service import remap_iitk_encounter_site
@@ -382,6 +400,13 @@ def update_metadata(uuid):
                     request.form,
                     form_name,
                     field,
+                )
+            image_observation_name = f"metadata__image__{image_id}__verifier_observation"
+            if _metadata_form_field_present(request.form, image_observation_name):
+                _set_verifier_observation(
+                    metadata,
+                    request.form.get(image_observation_name),
+                    actor_username=current_user.username,
                 )
             image.metadata_json = metadata
 
@@ -791,6 +816,7 @@ def _encounter_set_verification_profile(db, encounter: PatientEncounters) -> dic
             }
             for option in positive_disease_options
         ],
+        "verification_tags": list(encounter.project.verification_tags_json or []) if encounter.project else [],
     }
 
 
@@ -885,6 +911,26 @@ def _set_nested_metadata_value(metadata: dict, path: tuple[str, ...], value):
             target[key] = child
         target = child
     target[path[-1]] = value
+
+
+def _set_verifier_observation(metadata: dict, value, *, actor_username: str) -> None:
+    """Persist one free-text verifier observation with lightweight authorship."""
+    observation = " ".join(str(value or "").split()).strip()
+    verification = dict(metadata.get("verification") or {})
+    if observation:
+        verification.update({
+            "observation": observation,
+            "observation_by": actor_username,
+            "observation_at": utcnow().isoformat(),
+        })
+    else:
+        verification.pop("observation", None)
+        verification.pop("observation_by", None)
+        verification.pop("observation_at", None)
+    if verification:
+        metadata["verification"] = verification
+    else:
+        metadata.pop("verification", None)
 
 
 def _sync_attachment_ocr_clinical_reports(db, attachment: EncounterSetAttachment) -> None:

@@ -8,7 +8,9 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from project_configuration.service import (
     ProjectLabConfigurationError,
+    get_project_verification_tags,
     list_project_lab_units,
+    replace_project_verification_tags,
     replace_project_lab_units,
 )
 
@@ -53,3 +55,39 @@ def put_project_lab_units(project_id: int):
     except (TypeError, ValueError, ProjectLabConfigurationError) as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
     return jsonify({"success": True, "lab_units": [asdict(row) for row in rows]})
+
+
+@api_bp.route("/projects/<int:project_id>/verification-tags", methods=["GET"])
+@roles_required("admin")
+def get_project_verification_tags_api(project_id: int):
+    try:
+        with transaction_scope() as db:
+            result = get_project_verification_tags(db, project_id=project_id)
+    except ProjectLabConfigurationError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 404
+    return jsonify({"success": True, **asdict(result)})
+
+
+@api_bp.route("/projects/<int:project_id>/verification-tags", methods=["PUT", "POST"])
+@roles_required("admin")
+def put_project_verification_tags(project_id: int):
+    payload = request.get_json(silent=True) if request.is_json else request.form
+    if request.is_json:
+        values = payload.get("tags", []) if isinstance(payload, dict) else None
+    else:
+        raw = request.form.get("verification_tags", "")
+        values = raw.splitlines()
+    if not isinstance(values, list):
+        return jsonify({"success": False, "error": "tags must be a list."}), 400
+    try:
+        with transaction_scope() as db:
+            result = replace_project_verification_tags(
+                db,
+                actor=current_user,
+                project_id=project_id,
+                tags=values,
+            )
+    except ProjectLabConfigurationError as exc:
+        status = 404 if str(exc) == "Project not found." else 400
+        return jsonify({"success": False, "error": str(exc)}), status
+    return jsonify({"success": True, **asdict(result)})

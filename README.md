@@ -215,6 +215,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
 - [Project Referral Diseases API](docs/API/referral-diseases/README.md) - Project-owned referral-only disease choices extending grading-scheme defaults
 - [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project-wide or exact Project-Lab Unit scope
+- [Project Verification Tags API](docs/API/project-verification-tags/README.md) - Admin-only quick-add tag configuration for free-text image and EncounterSet verifier observations
 - [Patient Media API](docs/API/media/README.md) - Central object authorization for images, thumbnails, PDFs, metadata, OCR, and signed delivery
 - [Encounter Evidence Viewer API](docs/API/encounter-viewer/README.md) - Shared JSON DTO and HTMX partial for authorized non-PII legacy, EncounterSet, and direct-image evidence
 - [Project Review API](docs/API/project-review/README.md) - Scoped non-PII project summary, upload inventory, and grading aggregates

@@ -7,7 +7,9 @@ from project_configuration.models import ProjectLabUnit
 from project_configuration.service import (
     ProjectLabConfigurationDenied,
     configured_project_lab_unit_ids,
+    get_project_verification_tags,
     project_site_feature_allows,
+    replace_project_verification_tags,
     replace_project_lab_units,
 )
 from tests.helpers.factories import UserFactory
@@ -194,6 +196,73 @@ def test_project_admin_cannot_change_project_lab_unit_api(
             json={"lab_unit_ids": [lab.id]},
         )
     assert denied.status_code == 403
+
+
+def test_system_admin_configures_normalized_verification_tags(db_session):
+    admin = UserFactory.create_admin(db_session, username="verification_tag_admin")
+    project = _project(db_session, "VERIFY_TAGS")
+
+    result = replace_project_verification_tags(
+        db_session,
+        actor=admin,
+        project_id=project.id,
+        tags=["  Lid   lesion ", "Surface mass", "lid lesion", ""],
+    )
+
+    assert result.tags == ("Lid lesion", "Surface mass")
+    assert get_project_verification_tags(db_session, project_id=project.id).tags == result.tags
+    assert project.verification_tags_json == ["Lid lesion", "Surface mass"]
+
+
+def test_project_admin_cannot_configure_verification_tags(db_session):
+    project_admin = UserFactory.create_by_role(
+        db_session,
+        "project_admin",
+        username="verification_tag_project_admin",
+    )
+    project = _project(db_session, "VERIFY_TAG_DENIED")
+
+    with pytest.raises(ProjectLabConfigurationDenied):
+        replace_project_verification_tags(
+            db_session,
+            actor=project_admin,
+            project_id=project.id,
+            tags=["Lid lesion"],
+        )
+
+
+def test_project_admin_cannot_configure_verification_tags_api(app, db_session, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", False)
+    project_admin = UserFactory.create_by_role(
+        db_session,
+        "project_admin",
+        username="verification_tag_api_project_admin",
+    )
+    project = _project(db_session, "VERIFY_TAG_API")
+
+    with app.test_client(user=project_admin) as denied_client:
+        denied = denied_client.put(
+            f"/api/projects/{project.id}/verification-tags",
+            json={"tags": ["Lid lesion"]},
+        )
+    assert denied.status_code == 403
+
+
+def test_verification_tags_api_supports_admin_json(app, db_session, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", False)
+    admin = UserFactory.create_admin(db_session, username="verification_tag_api_admin")
+    project = _project(db_session, "VERIFY_TAG_API_JSON")
+
+    with app.test_client(user=admin) as admin_client:
+        saved = admin_client.put(
+            f"/api/projects/{project.id}/verification-tags",
+            json={"tags": ["Lid lesion", "Surface mass"]},
+        )
+        fetched = admin_client.get(f"/api/projects/{project.id}/verification-tags")
+
+    assert saved.status_code == 200
+    assert saved.get_json()["tags"] == ["Lid lesion", "Surface mass"]
+    assert fetched.get_json()["tags"] == ["Lid lesion", "Surface mass"]
 
 
 def test_project_admin_cannot_change_upload_profile_configuration(

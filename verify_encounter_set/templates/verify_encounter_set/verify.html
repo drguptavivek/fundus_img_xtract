@@ -762,6 +762,12 @@
       if (event.detail.target !== panelStage) return;
       restorePanelInputs();
       updateSummaryChanges();
+      const imageFieldsAnchor = panelStage.querySelector('[data-image-fields-anchor]');
+      if (imageFieldsAnchor) {
+        window.requestAnimationFrame(function () {
+          imageFieldsAnchor.scrollIntoView({behavior: 'smooth', block: 'start'});
+        });
+      }
     });
 
     document.addEventListener('input', function (event) {

@@ -660,6 +660,7 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert encounter_set_data['encounter'].name.encode() in response.data
     assert encounter_set_data['encounter_set_type'].name.encode() in response.data
     assert b"verification-panel-stage" in response.data
+    assert b"imageFieldsAnchor.scrollIntoView({behavior: 'smooth', block: 'start'})" in response.data
     assert b"1 / 4" in response.data
     assert b"Summary" in response.data
     assert b"@media (max-width: 1399.98px)" in response.data
@@ -846,6 +847,7 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"panel-header image-panel-header" in response.data
     assert b"panel-content image-panel-content" in response.data
     assert b"image-fields-heading mb-2" in response.data
+    assert b"data-image-fields-anchor" in response.data
     assert b"test_pos_1.jpg" in response.data
     assert b"Laterality" in response.data
     assert b"right" in response.data
@@ -853,6 +855,8 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"macula" in response.data
     assert b"Laterality" in response.data
     assert b"Referral Needed / Image Positive" in response.data
+    assert response.data.count(b"col-12 col-sm-3 col-lg-2") == 2
+    assert b"col-12 col-sm-6 col-lg-8" in response.data
     assert b"Patient Age" not in response.data
     assert b"Clinical Note" not in response.data
     assert b"Verified" in response.data
@@ -863,6 +867,12 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"Confirm Ungradable" in response.data
     assert b"Brightness" in response.data
     assert b"Fullscreen" in response.data
+    assert b'data-fixed-viewport="true"' in response.data
+    assert b"height:clamp(640px, 72vh, 960px)" in response.data
+    assert b"data-image-verification-actions" in response.data
+    assert response.data.index(b"data-image-verification-actions") < response.data.index(
+        b'data-fixed-viewport="true"'
+    )
 
 
 def test_verify_encounter_set_document_panel_embeds_pdf(client, auth_client_factory, encounter_set_data, db_session):

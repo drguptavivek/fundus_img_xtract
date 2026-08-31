@@ -270,12 +270,14 @@
 <div class="panel-content image-panel-content">
   <div class="image-panel-grid">
     <div class="image-fields-row">
-      <h3 class="image-fields-heading mb-2">Editable Image Fields</h3>
+      <h3 class="image-fields-heading mb-2" data-image-fields-anchor>Editable Image Fields</h3>
       {% set effective_laterality = (image_descriptor.laterality if image_descriptor else none) or image_metadata.get('laterality') %}
       {% set effective_focus = ((image_descriptor.focus | lower) if image_descriptor and image_descriptor.focus else none) or image_metadata.get('focus') %}
-      {% set image_control_col = 'col-12 col-md-6 col-xl-3' if has_gaze_context else 'col-4' %}
+      {% set compact_control_col = 'col-12 col-sm-3 col-lg-2' %}
+      {% set gaze_control_col = 'col-12 col-sm-6 col-lg-3' %}
+      {% set referral_control_col = 'col-12 col-sm-6 col-lg-5' if has_gaze_context else 'col-12 col-sm-6 col-lg-8' %}
       <div class="row g-2 mb-2">
-        <div class="{{ image_control_col }}">
+        <div class="{{ compact_control_col }}">
           <label class="form-label" for="image_laterality_{{ selected_image.id }}">Laterality{% if 'laterality' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__laterality" value="1">
           <select class="form-select"
@@ -290,7 +292,7 @@
             <option value="unknown" {% if effective_laterality == 'unknown' %}selected{% endif %}>Unknown</option>
           </select>
         </div>
-        <div class="{{ image_control_col }}">
+        <div class="{{ compact_control_col }}">
           <label class="form-label" for="image_focus_{{ selected_image.id }}">Focus{% if 'focus' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__focus" value="1">
           <select class="form-select"
@@ -305,7 +307,7 @@
           </select>
         </div>
         {% if has_gaze_context %}
-        <div class="{{ image_control_col }}">
+        <div class="{{ gaze_control_col }}">
           <label class="form-label" for="image_gaze_{{ selected_image.id }}">Gaze Position</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__gaze_position" value="1">
           <select class="form-select"
@@ -320,7 +322,7 @@
           </select>
         </div>
         {% endif %}
-        <div class="{{ image_control_col }}">
+        <div class="{{ referral_control_col }}">
           <label class="form-label" for="image_referral_{{ selected_image.id }}">Referral Needed / Image Positive</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__referral_needed_or_positive_image" value="1">
           <select class="form-select"
@@ -338,16 +340,8 @@
       {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
       {% endif %}
     </div>
-    <div class="image-viewer-row">
-      {% set viewer_image_url = url_for('media._encounterSetImageByUUID', uuid_str=selected_image.uuid) %}
-      {% set image = selected_image %}
-      {% set image_uuid = selected_image.uuid %}
-      {% set viewer_footer = '' %}
-      {% include "partials/_viewer_card.html" with context %}
-    </div>
-
     {% if not verification_read_only %}
-    <div class="panel-actions">
+    <div class="panel-actions" data-image-verification-actions>
       <a class="btn btn-sm btn-primary js-edit-image" href="{{ url_for('verify_encounter_set.edit_image', uuid=selected_image.uuid) }}">
         <i class="bi bi-pencil-square"></i> Edit Image
       </a>
@@ -379,6 +373,14 @@
     {% if selected_image.not_gradable_reason %}
     <div class="small text-danger">{{ selected_image.not_gradable_reason }}</div>
     {% endif %}
+    <div class="image-viewer-row">
+      {% set viewer_image_url = url_for('media._encounterSetImageByUUID', uuid_str=selected_image.uuid) %}
+      {% set image = selected_image %}
+      {% set image_uuid = selected_image.uuid %}
+      {% set viewer_footer = '' %}
+      {% set viewer_height = 'clamp(640px, 72vh, 960px)' %}
+      {% include "partials/_viewer_card.html" with context %}
+    </div>
   </div>
 </div>
 {% elif panel == 'document' and selected_attachment %}

@@ -125,6 +125,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "flex-wrap: nowrap" in template
     assert "overflow-x: auto" in template
     assert "fa-circle-info" in template
+    assert '<kbd>,</kbd>/<kbd>.</kbd> Brightness down/up' in template
+    assert "<kbd>;</kbd>/<kbd>'</kbd> Contrast down/up" in template
+    assert 'class="d-grid gap-2"' in template
+    assert ".gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; height: auto !important; min-height: 0; }" in template
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template

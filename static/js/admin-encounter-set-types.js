@@ -916,6 +916,127 @@
     serializeAssetRules();
   }
 
+  function applyAssetRules(current, rules) {
+    current.querySelectorAll('[data-est-asset-bool]').forEach(function (input) {
+      const key = input.dataset.estAssetBool;
+      input.checked = Object.prototype.hasOwnProperty.call(rules, key) ? Boolean(rules[key]) : input.checked;
+    });
+    current.querySelectorAll('[data-est-asset-int]').forEach(function (input) {
+      const key = input.dataset.estAssetInt;
+      if (Object.prototype.hasOwnProperty.call(rules, key)) {
+        input.value = rules[key] === null || rules[key] === undefined ? '' : String(rules[key]);
+      }
+    });
+    syncAssetGroups(current);
+    serializeAssetRules();
+  }
+
+  function compatibleMasterFor(field) {
+    return masterFields().find(function (master) {
+      return master.active !== false && master.key === field.key && master.scope === field.scope &&
+        (master.type || master.field_type) === field.type;
+    });
+  }
+
+  function renderCsvSummary(current, payload) {
+    const target = current.querySelector('[data-est-csv-summary]');
+    if (!target) {
+      return;
+    }
+    target.innerHTML = '';
+    target.classList.remove('d-none');
+    const source = payload.source || {};
+    const fields = payload.metadata_schema_json?.fields || [];
+    const mapper = payload.mapper_draft || {};
+    const summary = document.createElement('div');
+    summary.className = 'alert alert-success py-2 mb-2';
+    summary.textContent = [
+      source.row_count || 0, ' rows · ', source.column_count || 0, ' columns · ',
+      fields.length, ' proposed fields · ', (mapper.reserved_columns || []).length, ' reserved controls · ',
+      (mapper.excluded_columns || []).length, ' excluded columns'
+    ].join('');
+    target.appendChild(summary);
+    const warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+    if (warnings.length) {
+      const list = document.createElement('ul');
+      list.className = 'small text-warning-emphasis mb-0';
+      warnings.forEach(function (warning) {
+        const item = document.createElement('li');
+        item.textContent = warning;
+        list.appendChild(item);
+      });
+      target.appendChild(list);
+    }
+  }
+
+  function applyCsvInference(current, payload) {
+    const schema = payload.metadata_schema_json || { fields: [] };
+    current.querySelectorAll('[data-est-field-list]').forEach(function (list) {
+      list.innerHTML = '';
+    });
+    (schema.fields || []).forEach(function (field) {
+      const master = compatibleMasterFor(field);
+      let configured = field;
+      if (master) {
+        configured = Object.assign(fieldPayloadFromMaster(master), {
+          display_order: field.display_order,
+          required_at_upload: Boolean(field.required_at_upload),
+          editable_during_verification: Boolean(field.editable_during_verification),
+          visible_to_grader: Boolean(field.visible_to_grader),
+          is_pii: Boolean(field.is_pii)
+        });
+      }
+      addField(FIELD_SCOPES.includes(configured.scope) ? configured.scope : 'encounter', configured, false);
+    });
+    applyAssetRules(current, payload.asset_rules_json || {});
+    serializeSchema();
+    renderCsvSummary(current, payload);
+  }
+
+  function analyzeCsv(current) {
+    const input = current.querySelector('[data-est-csv-file]');
+    const status = current.querySelector('[data-est-csv-status]');
+    const button = current.querySelector('[data-est-analyze-csv]');
+    const file = input && input.files ? input.files[0] : null;
+    if (!file) {
+      status.textContent = 'Select a CSV file first.';
+      status.className = 'small mt-2 text-danger';
+      return;
+    }
+    if (current.querySelectorAll('[data-est-field]').length &&
+        !window.confirm('Replace the current draft fields with fields inferred from this CSV?')) {
+      return;
+    }
+    const data = new FormData();
+    data.append('file', file);
+    const csrf = current.querySelector('input[name="csrf_token"]')?.value || '';
+    button.disabled = true;
+    status.textContent = 'Analyzing CSV. No rows will be retained.';
+    status.className = 'small mt-2 text-muted';
+    window.fetch(current.dataset.estCsvInferenceUrl, {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin',
+      headers: csrf ? { 'X-CSRFToken': csrf, Accept: 'application/json' } : { Accept: 'application/json' }
+    }).then(function (response) {
+      return response.json().then(function (payload) {
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.error || payload.message || 'CSV analysis failed.');
+        }
+        return payload;
+      });
+    }).then(function (payload) {
+      applyCsvInference(current, payload);
+      status.textContent = payload.message || 'CSV analyzed. Review every field before saving.';
+      status.className = 'small mt-2 text-success';
+    }).catch(function (error) {
+      status.textContent = error.message || 'CSV analysis failed.';
+      status.className = 'small mt-2 text-danger';
+    }).finally(function () {
+      button.disabled = false;
+    });
+  }
+
   function serializeAssetRules() {
     const current = form();
     if (!current) {
@@ -953,6 +1074,14 @@
   });
 
   document.addEventListener('click', function (event) {
+    const analyzeButton = event.target.closest('[data-est-analyze-csv]');
+    if (analyzeButton) {
+      const current = form();
+      if (current) {
+        analyzeCsv(current);
+      }
+      return;
+    }
     const addButton = event.target.closest('[data-est-add-field]');
     if (addButton) {
       addField(addButton.dataset.estAddField, null, true);

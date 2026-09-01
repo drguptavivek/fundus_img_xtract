@@ -31,6 +31,7 @@
             data-json-api-reload-target="#encounter-set-types-workspace"
             data-json-api-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
             data-est-key-check-url="{{ url_for('fundus_api.check_upload_metadata_field_key') }}"
+            data-est-csv-inference-url="{{ url_for('fundus_api.infer_encounter_set_type_from_csv') }}"
             data-est-initial-schema="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}"
             data-est-initial-asset-rules="{{ (edit_row.asset_rules_json if editing else {})|tojson|forceescape }}"
             data-est-editing="{{ '1' if editing else '0' }}"
@@ -39,6 +40,30 @@
         <input type="hidden" name="active" value="{{ '1' if (not editing or edit_row.active) else '0' }}">
         <input type="hidden" name="metadata_schema_json" data-est-schema-input value="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}">
         <input type="hidden" name="asset_rules_json" data-est-asset-rules-input value="{{ (edit_row.asset_rules_json if editing else {})|tojson|forceescape }}">
+        {% if not editing %}
+        <section class="border rounded bg-light p-3 mb-3" data-est-csv-inference>
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+              <div class="fw-semibold">Generate fields from a CSV</div>
+              <div class="small text-muted">
+                Configuration only: the file is analyzed in memory and is not retained. No patients, EncounterSets, images, or tasks are created.
+              </div>
+            </div>
+            <span class="badge text-bg-warning">Admin only</span>
+          </div>
+          <div class="row g-2 align-items-end mt-1">
+            <div class="col-lg-8">
+              <label class="form-label small mb-1" for="est_csv_source">CSV source</label>
+              <input class="form-control" id="est_csv_source" type="file" accept=".csv,text/csv" data-est-csv-file>
+            </div>
+            <div class="col-lg-4 d-grid">
+              <button class="btn btn-outline-primary" type="button" data-est-analyze-csv>Analyze and replace draft fields</button>
+            </div>
+          </div>
+          <div class="small mt-2" data-est-csv-status aria-live="polite"></div>
+          <div class="mt-2 d-none" data-est-csv-summary></div>
+        </section>
+        {% endif %}
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label" for="est_name">Name <span class="text-danger">*</span></label>

@@ -7,7 +7,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 ## Auth
 
 - Requires authenticated browser session.
-- Roles: `admin`, `local_admin`, or `data_manager`.
+- Role: `admin` only.
 - CSRF required for unsafe methods through form `csrf_token` or `X-CSRFToken`.
 - Management requires the manager to have at least one explicitly assigned lab unit.
 
@@ -15,12 +15,85 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 
 - `GET /api/encounter-set-types`
 - `POST /api/encounter-set-types`
+- `POST /api/encounter-set-types/infer-from-csv`
 - `GET /api/encounter-set-types/<type_id>`
 - `GET /api/encounter-set-types/<type_id>/schema`
 - `POST|PATCH /api/encounter-set-types/<type_id>`
 - `POST /api/encounter-set-types/<type_id>/activate`
 - `POST /api/encounter-set-types/<type_id>/deactivate`
 - `POST /api/encounter-set-types/<type_id>/delete`
+
+## CSV Schema Inference
+
+`POST /api/encounter-set-types/infer-from-csv` is an admin-only,
+configuration-only preview. Submit one UTF-8 CSV as multipart field `file` and
+include the normal CSRF token in `X-CSRFToken` or the form body.
+
+The endpoint reads at most 10 MB, 25,000 rows, and 200 columns in memory. It
+does not save the source file, persist any row values, create metadata masters,
+or create patients, EncounterSets, images, or grading tasks. Its response never
+contains source rows or row samples. Distinct low-cardinality values may be
+returned as proposed select options for the admin to review.
+
+It recognizes case-insensitive paired eye suffixes:
+
+- `_od` / `_os`
+- `_rt` / `_lt`
+- `_re` / `_le`
+
+One convention may be used for each base field. A pair such as
+`co_density_re`/`co_density_le` becomes one proposed image field named
+`co_density` plus two mapper entries carrying canonical `OD` and `OS`
+laterality. Mixing conventions for the same base field is rejected. A single
+side is allowed with a warning.
+
+Columns whose populated values are image filenames become reserved clinical
+image references. `instance_id` and `submission_date` are reserved identity
+and capture-time controls. Reserved controls are represented in the mapper
+draft but are not added as ordinary metadata fields. Empty columns are
+reported as excluded.
+
+Response excerpt:
+
+```json
+{
+  "success": true,
+  "source": {
+    "filename": "harmonized.csv",
+    "row_count": 5971,
+    "column_count": 54,
+    "header_fingerprint": "sha256..."
+  },
+  "metadata_schema_json": {"fields": []},
+  "asset_rules_json": {
+    "allow_clinical_images": true,
+    "min_clinical_images": 1,
+    "max_clinical_images": 2
+  },
+  "mapper_draft": {
+    "version": 1,
+    "status": "draft",
+    "column_mappings": [],
+    "reserved_columns": [],
+    "excluded_columns": []
+  },
+  "warnings": [],
+  "privacy": {
+    "rows_persisted": false,
+    "row_samples_returned": false,
+    "distinct_select_options_returned": true,
+    "source_file_persisted": false
+  }
+}
+```
+
+The admin editor replaces its unsaved field draft only after browser
+confirmation. Exact active metadata-master matches with compatible key, scope,
+and type are reused in the browser draft. All proposed fields remain editable
+and must pass the existing EncounterSetType validation before the administrator
+saves the type. The returned `mapper_draft` is a forward contract for the
+separate import-mapper milestone; this endpoint does not persist or finalize a
+mapper.
 
 ## Create/Update Fields
 

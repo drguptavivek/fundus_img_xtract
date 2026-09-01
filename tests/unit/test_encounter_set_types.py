@@ -1,4 +1,5 @@
 import pytest
+import io
 from contextlib import contextmanager
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ from encounter_set_types.service import (
     create_encounter_set_type,
     normalize_metadata_schema,
 )
+from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role, User
 from upload_profiles.models import (
     UploadProfile,
@@ -52,6 +54,7 @@ def encounter_set_type_scope(db_session):
     # The encounter-set-type API routes are admin-only by contract.
     api_admin = User(username=f"est_admin_{suffix}", full_name="EST Admin", password_hash="x", is_active=True)
     api_admin.roles.append(db_session.query(Role).filter_by(name="admin").one())
+    api_admin.lab_units.append(lab)
     db_session.add(api_admin)
     db_session.flush()
     return {
@@ -221,3 +224,66 @@ def test_encounter_set_type_api_rejects_invalid_schema(client, encounter_set_typ
 
     assert response.status_code == 400
     assert response.get_json()["success"] is False
+
+
+def test_encounter_set_type_csv_inference_api_is_admin_only(client, encounter_set_type_scope):
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(encounter_set_type_scope["user"].id)
+        sess["_fresh"] = True
+
+    response = client.post(
+        "/api/encounter-set-types/infer-from-csv",
+        data={"file": (io.BytesIO(b"instance_id,age\nP1,55\n"), "source.csv")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 403
+
+
+def test_encounter_set_type_csv_inference_api_returns_draft_without_writes(
+    client, db_session, encounter_set_type_scope
+):
+    user = encounter_set_type_scope["admin_user"]
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(user.id)
+        sess["_fresh"] = True
+    before_types = db_session.query(EncounterSetType).count()
+    before_masters = db_session.query(UploadMetadataFieldDefinition).count()
+
+    response = client.post(
+        "/api/encounter-set-types/infer-from-csv",
+        data={
+            "file": (
+                io.BytesIO(
+                    b"instance_id,submission_date,age,co_present_re,co_present_le,co_photo_re,co_photo_le\n"
+                    b"P1,2026-01-01T10:00:00Z,55,Present,Absent,right.jpg,left.jpg\n"
+                ),
+                "source.csv",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["privacy"]["rows_persisted"] is False
+    assert payload["mapper_draft"]["status"] == "draft"
+    assert db_session.query(EncounterSetType).count() == before_types
+    assert db_session.query(UploadMetadataFieldDefinition).count() == before_masters
+
+
+def test_encounter_set_type_new_workspace_exposes_configuration_only_csv_analyzer(
+    client, encounter_set_type_scope
+):
+    user = encounter_set_type_scope["admin_user"]
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(user.id)
+        sess["_fresh"] = True
+
+    response = client.get("/admin/encounter-set-types/new")
+
+    assert response.status_code == 200
+    assert b"data-est-csv-inference-url" in response.data
+    assert b"data-est-analyze-csv" in response.data
+    assert b"No patients, EncounterSets, images, or tasks are created" in response.data

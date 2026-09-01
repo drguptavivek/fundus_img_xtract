@@ -9,6 +9,7 @@ from flask import Response, jsonify, request
 from flask_login import current_user
 
 from auth.roles import roles_required
+from encounter_set_types.csv_inference import CsvInferenceError, infer_csv_configuration
 from encounter_set_types import service as encounter_set_type_service
 from upload_profiles.admin_service import MutationResult
 
@@ -35,6 +36,28 @@ def create_encounter_set_type():
         _input_from_request(),
     )
     return _json_result(result)
+
+
+@api_bp.route("/encounter-set-types/infer-from-csv", methods=["POST"])
+@roles_required("admin")
+def infer_encounter_set_type_from_csv():
+    """Return a reviewable EncounterSetType and mapper draft without ingesting data."""
+    upload = request.files.get("file")
+    if upload is None or not (upload.filename or "").strip():
+        return jsonify({"success": False, "error": "Select a CSV file to analyze."}), 400
+    if not str(upload.filename).lower().endswith(".csv"):
+        return jsonify({"success": False, "error": "EncounterSetType analysis accepts CSV files only."}), 400
+    try:
+        result = infer_csv_configuration(upload.stream, upload.filename)
+    except CsvInferenceError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    return jsonify(
+        {
+            "success": True,
+            "message": "CSV analyzed. Review every proposed field before creating the EncounterSetType.",
+            **result.payload,
+        }
+    )
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>", methods=["GET"])

@@ -136,6 +136,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-preset-slots" in template
     assert "data-preset-status" in template
     assert "preset-modal-v2" in template
+    assert "function relocateViewerModals()" in template
+    assert "carouselElement.querySelectorAll('.modal').forEach(modal => document.body.appendChild(modal))" in template
+    assert "relocateViewerModals();" in template
     assert "serial-image-load-v1" in template
     assert "Clear CDR/RDR" in template
     assert "cdr-v2" in template

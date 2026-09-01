@@ -793,7 +793,13 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 
   const carouselElement = root.querySelector('#workbench-panels');
   let carousel = null;
+  function relocateViewerModals() {
+    // Transformed carousel items create a containing/stacking context that can
+    // leave a visible modal unable to receive Bootstrap dismiss interactions.
+    carouselElement.querySelectorAll('.modal').forEach(modal => document.body.appendChild(modal));
+  }
   function initializeCarousel() {
+    relocateViewerModals();
     if (window.bootstrap?.Carousel) {
       carousel = window.bootstrap.Carousel.getOrCreateInstance(
         carouselElement,

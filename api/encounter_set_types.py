@@ -11,6 +11,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from encounter_set_types.csv_inference import CsvInferenceError, infer_csv_configuration
 from encounter_set_types import service as encounter_set_type_service
+from encounter_set_types import import_mappers
 from upload_profiles.admin_service import MutationResult
 
 from . import api_bp
@@ -125,6 +126,42 @@ def delete_encounter_set_type_rest(type_id: int):
     return _json_result(encounter_set_type_service.delete_encounter_set_type(current_user.id, type_id))
 
 
+@api_bp.route("/encounter-set-types/<int:type_id>/import-mappers", methods=["GET", "POST"])
+@roles_required("admin")
+def encounter_set_import_mappers(type_id: int):
+    """List mapper revisions or create a persistent draft revision."""
+    if request.method == "GET":
+        return _json_result(import_mappers.list_revisions(current_user.id, type_id))
+    return _json_result(import_mappers.create_draft(current_user.id, type_id, _mapper_input()))
+
+
+@api_bp.route("/encounter-set-import-mappers/<int:revision_id>", methods=["PATCH", "DELETE"])
+@roles_required("admin")
+def encounter_set_import_mapper_revision(revision_id: int):
+    """Edit or safely delete an unused draft mapper revision."""
+    if request.method == "DELETE":
+        return _json_result(import_mappers.delete_draft(current_user.id, revision_id))
+    return _json_result(import_mappers.update_draft(current_user.id, revision_id, _mapper_input()))
+
+
+@api_bp.route("/encounter-set-import-mappers/<int:revision_id>/finalize", methods=["POST"])
+@roles_required("admin")
+def finalize_encounter_set_import_mapper(revision_id: int):
+    return _json_result(import_mappers.finalize(current_user.id, revision_id))
+
+
+@api_bp.route("/encounter-set-import-mappers/<int:revision_id>/clone", methods=["POST"])
+@roles_required("admin")
+def clone_encounter_set_import_mapper(revision_id: int):
+    return _json_result(import_mappers.clone(current_user.id, revision_id))
+
+
+@api_bp.route("/encounter-set-import-mappers/<int:revision_id>/retire", methods=["POST"])
+@roles_required("admin")
+def retire_encounter_set_import_mapper(revision_id: int):
+    return _json_result(import_mappers.retire(current_user.id, revision_id))
+
+
 def _input_from_request() -> encounter_set_type_service.EncounterSetTypeInput:
     data = _request_data()
     return encounter_set_type_service.EncounterSetTypeInput(
@@ -134,6 +171,15 @@ def _input_from_request() -> encounter_set_type_service.EncounterSetTypeInput:
         metadata_schema_json=data.get("metadata_schema_json") or {"fields": []},
         asset_rules_json=data.get("asset_rules_json"),
         active=_bool_value(data.get("active"), default=True),
+    )
+
+
+def _mapper_input() -> import_mappers.MapperInput:
+    data = _request_data()
+    return import_mappers.MapperInput(
+        name=str(data.get("name") or "").strip(),
+        source_headers=data.get("source_headers") if isinstance(data.get("source_headers"), list) else [],
+        mapping=data.get("mapping") if isinstance(data.get("mapping"), dict) else {},
     )
 
 

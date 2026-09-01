@@ -22,6 +22,11 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 - `POST /api/encounter-set-types/<type_id>/activate`
 - `POST /api/encounter-set-types/<type_id>/deactivate`
 - `POST /api/encounter-set-types/<type_id>/delete`
+- `GET|POST /api/encounter-set-types/<type_id>/import-mappers`
+- `PATCH|DELETE /api/encounter-set-import-mappers/<revision_id>`
+- `POST /api/encounter-set-import-mappers/<revision_id>/finalize`
+- `POST /api/encounter-set-import-mappers/<revision_id>/clone`
+- `POST /api/encounter-set-import-mappers/<revision_id>/retire`
 
 ## CSV Schema Inference
 
@@ -92,8 +97,40 @@ confirmation. Exact active metadata-master matches with compatible key, scope,
 and type are reused in the browser draft. All proposed fields remain editable
 and must pass the existing EncounterSetType validation before the administrator
 saves the type. The returned `mapper_draft` is a forward contract for the
-separate import-mapper milestone; this endpoint does not persist or finalize a
-mapper.
+separate import-mapper API; the inference endpoint itself does not persist or
+finalize a mapper.
+
+## Persistent import mapper revisions
+
+Import mappers are admin-reviewed configuration tied to one EncounterSetType.
+Creating a draft requires `name`, the ordered `source_headers` list, and a
+`mapping` object containing `column_mappings`, `reserved_columns`,
+`excluded_columns`, `defaults`, and `value_mappings`. Every source header must
+appear exactly once as mapped, reserved, or excluded. Exactly one reserved
+`encounter_identity` column is required. Clinical image filename controls must
+declare `OD` or `OS`; eye fields may use `_od/_os`, `_rt/_lt`, or `_re/_le`, but
+must not mix conventions for the same base name.
+
+The server calculates both the ordered source-header fingerprint and a
+canonical EncounterSetType schema fingerprint. Finalization revalidates the
+complete mapping and fails if the type schema has changed. Required metadata
+fields must have either a source mapping or a default.
+
+Lifecycle rules:
+
+- drafts are editable and may be deleted only while their usage count is zero;
+- finalized revisions are immutable and must be cloned to create the next
+  editable revision;
+- finalized revisions may be retired without breaking later import references;
+- each create, update, finalize, clone, retire, and delete operation creates an
+  append-only audit snapshot;
+- none of these endpoints persists CSV rows or creates patients, EncounterSets,
+  images, or grading tasks.
+
+Unsafe requests require `X-CSRFToken`. All endpoints require the `admin` role
+and an assigned lab-unit management scope. JSON errors use the standard
+`{"success": false, "error": "..."}` shape with `400` for invalid mappings,
+`404` for out-of-scope revisions, and `409` for lifecycle conflicts.
 
 ## Create/Update Fields
 

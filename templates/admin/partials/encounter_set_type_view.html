@@ -158,5 +158,51 @@
         {% endfor %}
       </div>
     </div>
+
+    <div class="mt-4" data-est-mappers data-type-id="{{ row.id }}">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <div class="fw-semibold">CSV import mapper revisions</div>
+          <div class="small text-muted">Configuration only. Finalized revisions are immutable and no clinical data is ingested here.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-est-new-mapper>New draft</button>
+      </div>
+      <div class="alert d-none" data-est-mapper-message></div>
+      <form class="border rounded p-3 mb-3 d-none" data-est-mapper-form>
+        {{ csrf_field() }}
+        <div class="row g-2">
+          <div class="col-md-5"><label class="form-label">Mapper name</label><input class="form-control" name="name" maxlength="150" required></div>
+          <div class="col-md-7"><label class="form-label">Source headers (one per line)</label><textarea class="form-control font-monospace" name="source_headers" rows="4" required></textarea></div>
+          <div class="col-12"><label class="form-label">Mapping JSON</label><textarea class="form-control font-monospace" name="mapping" rows="12" required>{
+  "column_mappings": [],
+  "reserved_columns": [],
+  "excluded_columns": [],
+  "defaults": {},
+  "value_mappings": {}
+}</textarea></div>
+        </div>
+        <input type="hidden" name="revision_id">
+        <div class="d-flex justify-content-end gap-2 mt-2"><button class="btn btn-sm btn-outline-secondary" type="button" data-est-cancel-mapper>Cancel</button><button class="btn btn-sm btn-primary" type="submit">Save draft</button></div>
+      </form>
+      <div class="table-responsive border rounded">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Name</th><th>Revision</th><th>Status</th><th>Usage</th><th>Schema fingerprint</th><th class="text-end">Actions</th></tr></thead>
+          <tbody>
+          {% for mapper in mapper_revisions %}
+            <tr data-mapper='{{ mapper|tojson|forceescape }}'>
+              <td>{{ mapper.name }}</td><td>r{{ mapper.revision }}</td>
+              <td><span class="badge {{ 'text-bg-warning' if mapper.status == 'draft' else 'text-bg-success' if mapper.status == 'finalized' else 'text-bg-secondary' }}">{{ mapper.status }}</span></td>
+              <td>{{ mapper.use_count }}</td><td><code title="{{ mapper.schema_fingerprint }}">{{ mapper.schema_fingerprint[:12] }}…</code></td>
+              <td class="text-end text-nowrap">
+                {% if mapper.status == 'draft' %}<button class="btn btn-sm btn-outline-primary" data-est-edit-mapper>Edit</button><button class="btn btn-sm btn-success" data-est-mapper-action="finalize">Finalize</button><button class="btn btn-sm btn-outline-danger" data-est-mapper-action="delete">Delete</button>{% endif %}
+                {% if mapper.status in ['finalized', 'retired'] %}<button class="btn btn-sm btn-outline-primary" data-est-mapper-action="clone">Clone</button>{% endif %}
+                {% if mapper.status == 'finalized' %}<button class="btn btn-sm btn-outline-secondary" data-est-mapper-action="retire">Retire</button>{% endif %}
+              </td>
+            </tr>
+          {% else %}<tr><td colspan="6" class="text-center text-muted py-3">No mapper revisions configured.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </section>

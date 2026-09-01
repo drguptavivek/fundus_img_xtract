@@ -1246,3 +1246,55 @@
     }
   });
 })();
+
+(function () {
+  function root() { return document.querySelector('[data-est-mappers]'); }
+  function form() { return root()?.querySelector('[data-est-mapper-form]'); }
+  function message(text, ok) {
+    const box = root()?.querySelector('[data-est-mapper-message]');
+    if (!box) return;
+    box.textContent = text; box.className = 'alert ' + (ok ? 'alert-success' : 'alert-danger');
+  }
+  function openEditor(mapper) {
+    const target = form(); if (!target) return;
+    target.classList.remove('d-none');
+    target.elements.name.value = mapper?.name || '';
+    target.elements.source_headers.value = (mapper?.source_headers || []).join('\n');
+    target.elements.revision_id.value = mapper?.id || '';
+    if (mapper) target.elements.mapping.value = JSON.stringify(mapper.mapping, null, 2);
+    target.elements.name.focus();
+  }
+  async function request(url, method, body) {
+    const token = form()?.querySelector('[name="csrf_token"]')?.value || '';
+    const response = await fetch(url, {method: method, headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRFToken': token}, body: body ? JSON.stringify(body) : undefined});
+    const payload = await response.json().catch(function () { return {}; });
+    if (!response.ok || payload.success === false) throw new Error(payload.error || payload.message || 'Mapper request failed.');
+    return payload;
+  }
+  document.addEventListener('click', async function (event) {
+    const container = root(); if (!container) return;
+    if (event.target.closest('[data-est-new-mapper]')) return openEditor(null);
+    if (event.target.closest('[data-est-cancel-mapper]')) return form()?.classList.add('d-none');
+    const edit = event.target.closest('[data-est-edit-mapper]');
+    if (edit) return openEditor(JSON.parse(edit.closest('[data-mapper]').dataset.mapper));
+    const button = event.target.closest('[data-est-mapper-action]'); if (!button) return;
+    const mapper = JSON.parse(button.closest('[data-mapper]').dataset.mapper);
+    const action = button.dataset.estMapperAction;
+    if ((action === 'delete' || action === 'retire') && !window.confirm(action === 'delete' ? 'Delete this unused draft?' : 'Retire this finalized revision?')) return;
+    try {
+      await request('/api/encounter-set-import-mappers/' + mapper.id + (action === 'delete' ? '' : '/' + action), action === 'delete' ? 'DELETE' : 'POST');
+      window.location.reload();
+    } catch (error) { message(error.message, false); }
+  });
+  document.addEventListener('submit', async function (event) {
+    if (!event.target.matches('[data-est-mapper-form]')) return;
+    event.preventDefault(); const target = event.target;
+    try {
+      const mapping = JSON.parse(target.elements.mapping.value);
+      const body = {name: target.elements.name.value, source_headers: target.elements.source_headers.value.split(/\r?\n/).map(function (v) { return v.trim(); }).filter(Boolean), mapping: mapping};
+      const revisionId = target.elements.revision_id.value;
+      const url = revisionId ? '/api/encounter-set-import-mappers/' + revisionId : '/api/encounter-set-types/' + root().dataset.typeId + '/import-mappers';
+      await request(url, revisionId ? 'PATCH' : 'POST', body); window.location.reload();
+    } catch (error) { message(error.message, false); }
+  });
+})();

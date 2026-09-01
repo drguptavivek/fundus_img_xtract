@@ -8,6 +8,7 @@ from sqlalchemy import select
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from encounter_set_types import service as encounter_set_type_service
+from encounter_set_types import import_mappers
 from models import Disease
 from upload_metadata import service as upload_metadata_service
 from upload_profiles.service import manager_lab_unit_ids
@@ -100,6 +101,8 @@ def encounter_set_type_view(type_id: int):
     context = _context()
     context["workspace"] = "view"
     context["edit_encounter_set_type"] = result.payload["encounter_set_type"]
+    mapper_result = import_mappers.list_revisions(current_user.id, type_id)
+    context["mapper_revisions"] = (mapper_result.payload or {}).get("mapper_revisions", []) if mapper_result.success else []
     if request.headers.get("HX-Request") == "true":
         return render_template("admin/partials/encounter_set_type_workspace.html", **context)
     return render_template("admin/encounter_set_types.html", **context)

@@ -137,6 +137,7 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert ".gwb-carousel { flex: 1 1 auto; height: auto; overflow: hidden; }" in template
     assert ".gwb-viewer-body .imggr-main { width: 100%; height: 100%; min-width: 0; min-height: 0;" in template
     assert 'data-min-viewport-size="120"' in template
+    assert 'imggr-main-wrap d-flex justify-content-center flex-grow-1 bg-black' in template
     assert 'data-fixed-viewport="true"' not in template
     assert "const minimumSize = Number.isFinite(configuredMinimum)" in grading_viewer
     assert "root.__imggrViewportObserver = new ResizeObserver" in grading_viewer

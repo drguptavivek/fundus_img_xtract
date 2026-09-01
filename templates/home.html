@@ -4,15 +4,11 @@
 
 {% block content %}
 <div class="container py-4">
-
-  <!-- Hero / Welcome -->
   <div class="card card-aurora mb-4">
     <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
       <div class="flex-fill">
         <h1 class="h4 mb-2">Welcome to Eye Image Manager</h1>
-        <p class="mb-0 opacity-75">
-          Upload ZIPs of fundus images, extract reports, and review screenings, upload images, grade them, arbitrate, review, analytics — all in one place.
-        </p>
+        <p class="mb-0 opacity-75">Upload and verify fundus images, grade disease findings, review results, and curate datasets.</p>
       </div>
       {% if not current_user.is_authenticated %}
       <div class="ms-md-3 mt-3 mt-md-0 text-md-end">
@@ -22,467 +18,94 @@
     </div>
   </div>
 
-  <!-- Quick Actions -->
   {% if current_user.is_authenticated %}
-    <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 mb-4">
-      {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload_index') }}">
-          <div class="card card-forest h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Uploads Dashboard</div>
-              <div class="small opacity-75">View upload stats and eligibility</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      {% endif %}
-
-      {% if current_user_has('fileUploader') %}
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
-          <div class="card card-forest h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Upload Remedio ZIP</div>
-              <div class="small opacity-75">Bulk fundus image ingestion</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload') }}">
-          <div class="card card-sea h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Direct Image Upload</div>
-              <div class="small opacity-75">Single images from clinics</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      {% endif %}
-
-      {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('resident') %}
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
-          <div class="card card-violet h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Verify Glaucoma OCR</div>
-              <div class="small opacity-75">Review Remedio glaucoma PDFs</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
-          <div class="card card-sunrise h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Verify DR OCR</div>
-              <div class="small opacity-75">Review Remedio DR PDFs</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('preprocess.anonymization_dashboard') }}">
-          <div class="card card-aurora h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Anonymization Dashboard</div>
-              <div class="small opacity-75">Manage direct image verification</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      {% endif %}
-
-      {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
-      <div class="col">
-        <a class="text-decoration-none" href="{{ url_for('grading.index') }}">
-          <div class="card card-night h-100">
-            <div class="card-body">
-              <div class="fw-semibold">Start Grading</div>
-              <div class="small opacity-75">Dual grading workflows</div>
-            </div>
-          </div>
-        </a>
-      </div>
-      {% endif %}
+  <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 mb-4">
+    {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload_index') }}">
+        <div class="card card-forest h-100"><div class="card-body">
+          <div class="fw-semibold">Uploads Dashboard</div>
+          <div class="small opacity-75">View upload statistics and eligibility</div>
+        </div></div>
+      </a>
     </div>
+    {% endif %}
+
+    {% if current_user_has('fileUploader') %}
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
+        <div class="card card-forest h-100"><div class="card-body">
+          <div class="fw-semibold">Upload Remidio ZIP</div>
+          <div class="small opacity-75">Bulk fundus image ingestion</div>
+        </div></div>
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload') }}">
+        <div class="card card-sea h-100"><div class="card-body">
+          <div class="fw-semibold">Direct Image Upload</div>
+          <div class="small opacity-75">Upload individual clinic images</div>
+        </div></div>
+      </a>
+    </div>
+    {% endif %}
+
+    {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('resident') %}
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
+        <div class="card card-violet h-100"><div class="card-body">
+          <div class="fw-semibold">Verify Glaucoma OCR</div>
+          <div class="small opacity-75">Review Remidio glaucoma reports</div>
+        </div></div>
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
+        <div class="card card-sunrise h-100"><div class="card-body">
+          <div class="fw-semibold">Verify DR OCR</div>
+          <div class="small opacity-75">Review Remidio DR reports</div>
+        </div></div>
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('preprocess.anonymization_dashboard') }}">
+        <div class="card card-aurora h-100"><div class="card-body">
+          <div class="fw-semibold">Anonymization Dashboard</div>
+          <div class="small opacity-75">Manage direct image verification</div>
+        </div></div>
+      </a>
+    </div>
+    {% endif %}
+
+    {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('grading.index') }}">
+        <div class="card card-night h-100"><div class="card-body">
+          <div class="fw-semibold">Start Grading</div>
+          <div class="small opacity-75">Open dual-grading workflows</div>
+        </div></div>
+      </a>
+    </div>
+    {% endif %}
+  </div>
   {% endif %}
 
-  <!-- System KPIs from Materialized Views -->
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--primary h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
-          <div class="display-6 fw-bold" id="home-total-images">-</div>
-          <div class="small opacity-75">
-            <span id="home-verified-images">-</span> verified
-            (<span id="home-verification-rate">-</span>%)
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--info h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Encounters</div>
-          <div class="display-6 fw-bold" id="home-total-encounters">-</div>
-          <div class="small opacity-75">Patient screening sessions</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--success h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
-          <div class="display-6 fw-bold" id="home-total-gradings">-</div>
-          <div class="small opacity-75">
-            <span id="home-ai-gradings">-</span> AI gradings
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--warning h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Medical Reports</div>
-          <div class="display-6 fw-bold" id="home-total-reports">-</div>
-          <div class="small opacity-75">
-            DR: <span id="home-dr-reports">-</span> |
-            Glaucoma: <span id="home-glaucoma-reports">-</span> |
-            EncounterSet PDFs: <span id="home-encounter-set-pdfs">-</span>
-          </div>
-        </div>
-      </div>
+  <div
+    id="public-kpis"
+    hx-get="{{ url_for('fundus_api.public_kpis') }}"
+    hx-trigger="load"
+    hx-swap="innerHTML"
+  >
+    <div class="text-center py-5" role="status">
+      <div class="spinner-border text-primary" aria-hidden="true"></div>
+      <div class="mt-2 text-body-secondary">Loading system statistics…</div>
     </div>
   </div>
 
-  <!-- Image Type Distribution -->
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--purple h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Direct Uploads</div>
-          <div class="display-6 fw-bold" id="home-direct-uploads">-</div>
-          <div class="small opacity-75">Non-pregraded clinic image uploads</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--danger h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">ZIP Uploads</div>
-          <div class="display-6 fw-bold" id="home-zip-uploads">-</div>
-          <div class="small opacity-75">Bulk image processing</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--teal h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Pregraded Images</div>
-          <div class="display-6 fw-bold" id="home-pregraded-uploads">-</div>
-          <div class="small opacity-75">Pre-graded datasets</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--info h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">EncounterSets</div>
-          <div class="display-6 fw-bold" id="home-encounter-set-images">-</div>
-          <div class="small opacity-75">Images grouped by encounter</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Analytics Link -->
-  <div class="text-center mb-4">
-    <a href="/analytics" class="btn btn-outline-primary btn-lg">
-      <i class="fas fa-chart-line me-2"></i>
-      View Detailed Analytics Dashboard
+  <div class="text-center mt-4">
+    <a href="{{ url_for('public.public_analytics') }}" class="btn btn-outline-primary btn-lg">
+      <i class="fas fa-chart-line me-2"></i>View System Analytics
     </a>
   </div>
-
-  <!-- Charts Section (Visible only to logged-in users) -->
-  {% if current_user.is_authenticated %}
-  <div class="row g-4 mb-4">
-    <!-- Image Distribution by Disease -->
-    {% if disease_image_distribution %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Images by Disease</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="diseaseImagesChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Grading Distribution Chart -->
-    {% if grading_distribution %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Grading Distribution</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="gradingChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
-    <!-- VCDR Ranges Chart -->
-    {% if vcdr_ranges %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>VCDR Value Distribution</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="vcdrChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
-    <!-- Ungradable Images Chart -->
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Ungradable Images</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="ungradableChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Images by Lab Unit and Disease Chart -->
-    {% if images_by_lab_unit_disease %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Images by Lab Unit and Disease</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="labUnitDiseaseChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
-    <!-- Verified Images by Lab Unit and Disease Chart -->
-    {% if verified_images_by_lab_unit_disease %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Verified Images by Lab Unit and Disease</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="verifiedLabUnitDiseaseChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
-    <!-- DR Impression Distribution Chart -->
-    {% if dr_impression_distribution %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>DR Impression Distribution</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="drImpressionChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
-    <!-- Glaucoma Finalized Impression Distribution Chart -->
-    {% if glaucoma_impression_distribution %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Glaucoma Finalized Impression Distribution</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="glaucomaImpressionChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
-
 </div>
-{% endblock %}
-
-{% block page_scripts %}
-<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/chartjs-plugin-datalabels.js') }}"></script>
-<script src="{{ url_for('static', filename='js/home-charts.js') }}"></script>
-{% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-  // Pass data to the external JavaScript file through global variables
-  {% if disease_image_distribution %}
-  var diseaseImagesLabels = [{% for item in disease_image_distribution %}"{{ item.disease_name }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  var diseaseImagesData = [{% for item in disease_image_distribution %}{{ item.image_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  {% endif %}
-
-  {% if grading_distribution %}
-  var gradingLabels = [{% for item in grading_distribution %}"{{ item.disease_name }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  var gradingData = [{% for item in grading_distribution %}{{ item.grade_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  {% endif %}
-  
-  {% if vcdr_ranges %}
-  var vcdrData = {
-    normal_right: {{ vcdr_ranges.normal_right or 0 }},
-    borderline_right: {{ vcdr_ranges.borderline_right or 0 }},
-    abnormal_right: {{ vcdr_ranges.abnormal_right or 0 }},
-    severely_abnormal_right: {{ vcdr_ranges.severely_abnormal_right or 0 }},
-    normal_left: {{ vcdr_ranges.normal_left or 0 }},
-    borderline_left: {{ vcdr_ranges.borderline_left or 0 }},
-    abnormal_left: {{ vcdr_ranges.abnormal_left or 0 }},
-    severely_abnormal_left: {{ vcdr_ranges.severely_abnormal_left or 0 }}
-  };
-  {% endif %}
-  
-  var ungradableData = {
-    graded: {{ gradable_images }},
-    ungraded: {{ ungradable_images }}
-  };
-  
-  {% if dr_impression_distribution %}
-  var drImpressionLabels = [{% for item in dr_impression_distribution %}"{{ item.impression }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  var drImpressionData = [{% for item in dr_impression_distribution %}{{ item.grade_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  {% endif %}
-  
-  {% if glaucoma_impression_distribution %}
-  var glaucomaImpressionLabels = [{% for item in glaucoma_impression_distribution %}"{{ item.impression }}"{% if not loop.last %},{% endif %}{% endfor %}];
-  var glaucomaImpressionData = [{% for item in glaucoma_impression_distribution %}{{ item.image_count }}{% if not loop.last %},{% endif %}{% endfor %}];
-  {% endif %}
-  
-  {% if images_by_lab_unit_disease %}
-  var imagesByLabUnitDiseaseData = [
-    {% for item in images_by_lab_unit_disease %}
-    {labUnit: "{{ item.lab_unit_name }}", disease: "{{ item.disease_name }}", count: {{ item.image_count }}},
-    {% endfor %}
-  ];
-  {% endif %}
-  
-  {% if verified_images_by_lab_unit_disease %}
-  var verifiedImagesByLabUnitDiseaseData = [
-    {% for item in verified_images_by_lab_unit_disease %}
-    {labUnit: "{{ item.lab_unit_name }}", disease: "{{ item.disease_name }}", total: {{ item.total_images }}, verified: {{ item.verified_images or 0 }}},
-    {% endfor %}
-  ];
-  {% endif %}
-
-  // Load KPIs from analytics API
-  function loadHomeKPIs() {
-    fetch('/api/analytics/kpi')
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          const summary = data.data.summary;
-          const imageTypes = data.data.image_types;
-          const reportStats = data.data.report_stats;
-
-          // Update summary KPIs
-          document.getElementById('home-total-images').textContent = formatNumber(summary.total_images);
-          document.getElementById('home-verified-images').textContent = formatNumber(summary.total_verified_images);
-          document.getElementById('home-verification-rate').textContent = summary.overall_verification_rate;
-          document.getElementById('home-total-encounters').textContent = formatNumber(summary.total_encounters);
-          document.getElementById('home-total-gradings').textContent = formatNumber(summary.total_gradings);
-          document.getElementById('home-ai-gradings').textContent = formatNumber(summary.total_ai_gradings);
-
-          // Update reports KPIs
-          const totalReports = reportStats.total_reports || 0;
-          document.getElementById('home-total-reports').textContent = formatNumber(totalReports);
-          document.getElementById('home-dr-reports').textContent = formatNumber(reportStats.dr_reports || 0);
-          document.getElementById('home-glaucoma-reports').textContent = formatNumber(reportStats.glaucoma_reports || 0);
-          document.getElementById('home-encounter-set-pdfs').textContent = formatNumber(reportStats.encounter_set_pdfs || 0);
-
-          // Update image type KPIs
-          if (imageTypes.Direct) {
-            document.getElementById('home-direct-uploads').textContent = formatNumber(imageTypes.Direct.total);
-          } else {
-            document.getElementById('home-direct-uploads').textContent = '0';
-          }
-
-          if (imageTypes.ZIP) {
-            document.getElementById('home-zip-uploads').textContent = formatNumber(imageTypes.ZIP.total);
-          } else {
-            document.getElementById('home-zip-uploads').textContent = '0';
-          }
-
-          if (imageTypes.Pregraded) {
-            document.getElementById('home-pregraded-uploads').textContent = formatNumber(imageTypes.Pregraded.total);
-          } else {
-            document.getElementById('home-pregraded-uploads').textContent = '0';
-          }
-
-          if (imageTypes.EncounterSet) {
-            document.getElementById('home-encounter-set-images').textContent = formatNumber(imageTypes.EncounterSet.total);
-          } else {
-            document.getElementById('home-encounter-set-images').textContent = '0';
-          }
-
-        } else {
-          console.error('Failed to load KPIs:', data.error);
-        }
-      })
-      .catch(error => {
-        console.error('Error loading KPIs:', error);
-      });
-  }
-
-  // Helper function to format numbers
-  function formatNumber(num) {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
-  }
-
-  // Load KPIs when page loads
-  document.addEventListener('DOMContentLoaded', loadHomeKPIs);
-
-  // Refresh KPIs every 5 minutes
-  setInterval(loadHomeKPIs, 5 * 60 * 1000);
-</script>
 {% endblock %}

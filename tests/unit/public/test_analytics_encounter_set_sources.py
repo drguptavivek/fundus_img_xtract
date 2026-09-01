@@ -1,15 +1,16 @@
-from public.analytics import (
-    _ANALYTICS_IMAGE_SOURCE_CTE,
-    _IMAGE_TASK_PREDICATE,
-)
+from pathlib import Path
 
 
-def test_public_analytics_image_source_includes_encounter_set_images():
-    assert "FROM encounter_set_images esi" in _ANALYTICS_IMAGE_SOURCE_CTE
-    assert "'EncounterSet'::text AS upload_type" in _ANALYTICS_IMAGE_SOURCE_CTE
-    assert "esi.created_at AS upload_date_utc" in _ANALYTICS_IMAGE_SOURCE_CTE
+def test_public_pages_load_the_shared_kpi_api_with_htmx():
+    root = Path(__file__).resolve().parents[3]
+    for template_name in ("home.html", "public/analytics.html"):
+        template = (root / "templates" / template_name).read_text()
+        assert "fundus_api.public_kpis" in template
+        assert 'hx-trigger="load"' in template
 
 
-def test_public_analytics_image_task_scope_includes_only_image_backed_tasks():
-    assert "gt.encounter_set_image_id IS NOT NULL" in _IMAGE_TASK_PREDICATE
-    assert "gt.patient_encounter_id" not in _IMAGE_TASK_PREDICATE
+def test_deleted_analytics_kpi_endpoint_is_not_referenced_by_public_templates():
+    root = Path(__file__).resolve().parents[3]
+    for template_name in ("home.html", "public/analytics.html"):
+        template = (root / "templates" / template_name).read_text()
+        assert "/api/analytics/kpi" not in template

@@ -23,6 +23,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Discrepancy Review Queue API](discrepancy-review/README.md)
 - [Project Annotation Policy API](project-annotation-policy/README.md)
 - [Analytics APIs](analytics/README.md)
+- [Public KPI API](public-analytics/README.md)
 - [WAI API Statistics API](wai-api-statistics/README.md)
 - [Admin APIs](admin/README.md)
 - [Media APIs](media/README.md)

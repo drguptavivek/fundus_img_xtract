@@ -247,6 +247,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSet Grading API](docs/API/encounter-set-grading/README.md) - Mutable effective policy plans, frozen runtime records, and lazy post-revision reconciliation
 - [Grader Dashboard API](docs/API/grading-dashboard/README.md) - Current-user eligibility, daily mixed grading history, filters, pagination, and session trends
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
+- [Public KPI API](docs/API/public-analytics/README.md) - Cached system-wide JSON and HTMX aggregates for public and mobile consumers
 - [Mobile API and hosted PWA](docs/API/mobile/README.md) - Bearer-auth mobile surface (auth, device enrolment, uploads, field encounter browser) and the `/mobile/` PWA served from `static/mobile-pwa/`
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

@@ -1,0 +1,85 @@
+<div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-xl-3">
+  <div class="col">
+    <div class="card kpi-card kpi--primary h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.total_images) }}</div>
+        <div class="small opacity-75">
+          ZIP {{ "{:,}".format(kpis.zip_images) }} · Direct {{ "{:,}".format(kpis.direct_images) }} · EncounterSet {{ "{:,}".format(kpis.encounter_set_images) }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card kpi-card kpi--info h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">Total Encounters</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.total_encounters) }}</div>
+        <div class="small opacity-75">
+          ZIP {{ "{:,}".format(kpis.zip_encounters) }} · EncounterSet {{ "{:,}".format(kpis.encounter_set_encounters) }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card kpi-card kpi--success h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">AI Gradings</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.total_ai_gradings) }}</div>
+        <div class="small opacity-75">Grades produced in the AI role</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card kpi-card kpi--warning h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.total_gradings) }}</div>
+        <div class="small opacity-75">Human and AI grades</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card kpi-card kpi--purple h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">Active Projects</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.active_projects) }}</div>
+        <div class="small opacity-75">Currently active projects</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card kpi-card kpi--teal h-100">
+      <div class="card-body">
+        <div class="text-uppercase small fw-semibold opacity-75">Total Tasks</div>
+        <div class="display-6 fw-bold">{{ "{:,}".format(kpis.total_tasks) }}</div>
+        <div class="small opacity-75">All grading task targets</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header fw-semibold">Image-level Tasks by Disease</div>
+  <div class="card-body">
+    {% if kpis.disease_task_counts %}
+    <div class="row g-3 row-cols-2 row-cols-md-3 row-cols-xl-4">
+      {% for disease_name, task_count in kpis.disease_task_counts.items() %}
+      <div class="col">
+        <div class="border rounded p-3 h-100">
+          <div class="text-uppercase small text-body-secondary">{{ disease_name }}</div>
+          <div class="h4 mb-0">{{ "{:,}".format(task_count) }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-body-secondary mb-0">No image-level grading tasks are available.</p>
+    {% endif %}
+    <p class="small text-body-secondary mt-3 mb-0">Encounter-level and unified EncounterSet tasks are excluded.</p>
+  </div>
+</div>
+
+<p class="small text-body-secondary mt-3 mb-0">
+  Cached for 5 minutes · Generated {{ kpis.generated_at | user_datetime }}
+</p>

@@ -45,8 +45,7 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/healthz` | GET | healthz | Health check endpoint |
 | `/static/<path:filename>` | GET | static | Serve static files |
 | `/analytics` | GET | public_public_analytics | Public analytics dashboard |
-| `/api/analytics/kpi` | GET | public_api_analytics_kpi | Public KPI API endpoint |
-| `/api/analytics/chart-data` | GET | public_api_analytics_chart_data | Public chart data API endpoint |
+| `/api/public_kpis` | GET | fundus_api.public_kpis | Public JSON or HTMX KPI endpoint |
 
 ---
 

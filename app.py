@@ -595,6 +595,7 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/refresh-captcha",
         "/captcha-audio",
         "/analytics",
+        "/api/public_kpis",
         "/sitemap.xml",
     }
 )

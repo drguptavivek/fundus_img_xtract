@@ -458,7 +458,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v1')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v2')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2-pan-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
@@ -818,6 +818,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     root.querySelectorAll('[data-workbench-target]').forEach((item, index) => {
       item.classList.toggle('active', index === event.to);
     });
+    const activeViewer = panels[event.to]?.querySelector('.imggr-viewer-root');
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      activeViewer?.__imggrState?.refreshViewportSize?.();
+    }));
     updateSubmissionControls();
   });
   root.querySelectorAll('[data-workbench-target]').forEach(button => {

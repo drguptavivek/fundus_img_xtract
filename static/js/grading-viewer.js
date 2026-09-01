@@ -1199,7 +1199,10 @@
       const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
       const rootRect = root.getBoundingClientRect();
       let availableW = (wrapRect && wrapRect.width) ? wrapRect.width : rootRect.width;
-      let availableH = (wrapRect && wrapRect.height) ? wrapRect.height : 0;
+      const measuredHeights = [wrapRect?.height, rootRect.height].filter(
+        value => Number.isFinite(value) && value > 0
+      );
+      let availableH = measuredHeights.length ? Math.min(...measuredHeights) : 0;
 
       if (!Number.isFinite(availableW) || availableW <= 0) {
         availableW = window.innerWidth * 0.92;
@@ -1213,6 +1216,15 @@
       const targetSize = Math.floor(Math.max(minimumSize, Math.min(availableW, availableH, viewportCap)));
       main.style.width = `${targetSize}px`;
       main.style.height = `${targetSize}px`;
+    }
+
+    function refreshViewportSize(){
+      main.style.removeProperty('width');
+      main.style.removeProperty('height');
+      updateViewportSize();
+      clampPanToBounds();
+      applyImagePan();
+      updateZoomDisplay();
     }
 
     const viewportWrap = main.closest('.imggr-main-wrap');
@@ -2454,6 +2466,7 @@
       resetImagePan,
       setZoomLevel,
       fitToContainer,
+      refreshViewportSize,
       setImage,
       hydrateMetadata: fetchAndHydrateMetadata,
       getCurrentZoom: () => currentZoom,

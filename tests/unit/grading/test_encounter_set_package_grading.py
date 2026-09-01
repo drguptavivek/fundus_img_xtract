@@ -141,6 +141,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'data-fixed-viewport="true"' not in template
     assert "const minimumSize = Number.isFinite(configuredMinimum)" in grading_viewer
     assert "root.__imggrViewportObserver = new ResizeObserver" in grading_viewer
+    assert "function refreshViewportSize()" in grading_viewer
+    assert "refreshViewportSize," in grading_viewer
+    assert "activeViewer?.__imggrState?.refreshViewportSize?.();" in template
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template

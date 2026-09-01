@@ -129,6 +129,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "<kbd>;</kbd>/<kbd>'</kbd> Contrast down/up" in template
     assert 'class="d-grid gap-2"' in template
     assert ".gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; height: auto !important; min-height: 0; }" in template
+    assert ".gwb-form { display: flex; flex: 1 1 auto; height: auto; flex-direction: column; }" in template
+    assert ".gwb-carousel { flex: 1 1 auto; height: auto; overflow: hidden; }" in template
+    assert ".gwb-viewer-body .imggr-main { width: 100%; height: 100%; min-width: 0; min-height: 0;" in template
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template

@@ -7,6 +7,7 @@ def test_public_pages_load_the_shared_kpi_api_with_htmx():
         template = (root / "templates" / template_name).read_text()
         assert "fundus_api.public_kpis" in template
         assert 'hx-trigger="load"' in template
+        assert "js/htmx.min.js" in template
 
 
 def test_deleted_analytics_kpi_endpoint_is_not_referenced_by_public_templates():

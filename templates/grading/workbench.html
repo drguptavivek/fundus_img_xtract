@@ -288,7 +288,7 @@
                         </aside>
                         {% endif %}
                         <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
-                          <div class="imggr-main rounded position-relative bg-black" data-fixed-viewport="true">
+                          <div class="imggr-main rounded position-relative bg-black" data-min-viewport-size="120">
                             <img class="imggr-main-img"
                                  {% if loop.first %}src="{{ viewer_media.media_url }}" fetchpriority="high"
                                  {% else %}data-src="{{ viewer_media.media_url }}" fetchpriority="low"{% endif %}
@@ -458,7 +458,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v1')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2-pan-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>

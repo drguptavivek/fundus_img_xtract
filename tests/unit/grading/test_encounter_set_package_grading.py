@@ -45,6 +45,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
         Path(package_transport.__file__).parents[1]
         / "static/js/submission-guard.js"
     ).read_text()
+    grading_viewer = (
+        Path(package_transport.__file__).parents[1]
+        / "static/js/grading-viewer.js"
+    ).read_text()
 
     assert "workbench.panels" in template
     assert "panel.fields.label" in template
@@ -132,6 +136,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert ".gwb-form { display: flex; flex: 1 1 auto; height: auto; flex-direction: column; }" in template
     assert ".gwb-carousel { flex: 1 1 auto; height: auto; overflow: hidden; }" in template
     assert ".gwb-viewer-body .imggr-main { width: 100%; height: 100%; min-width: 0; min-height: 0;" in template
+    assert 'data-min-viewport-size="120"' in template
+    assert 'data-fixed-viewport="true"' not in template
+    assert "const minimumSize = Number.isFinite(configuredMinimum)" in grading_viewer
+    assert "root.__imggrViewportObserver = new ResizeObserver" in grading_viewer
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template

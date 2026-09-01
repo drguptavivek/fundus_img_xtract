@@ -1193,6 +1193,8 @@
       if (main.dataset.fixedViewport === 'true') {
         return;
       }
+      const configuredMinimum = Number.parseFloat(main.dataset.minViewportSize || '260');
+      const minimumSize = Number.isFinite(configuredMinimum) ? Math.max(0, configuredMinimum) : 260;
       const wrap = main.closest('.imggr-main-wrap');
       const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
       const rootRect = root.getBoundingClientRect();
@@ -1207,10 +1209,23 @@
         availableH = window.innerHeight - rootRect.top - approxBottomMargin;
       }
 
-      const viewportCap = Math.max(260, window.innerHeight * 0.72);
-      const targetSize = Math.floor(Math.max(260, Math.min(availableW, availableH, viewportCap)));
+      const viewportCap = Math.max(minimumSize, window.innerHeight * 0.72);
+      const targetSize = Math.floor(Math.max(minimumSize, Math.min(availableW, availableH, viewportCap)));
       main.style.width = `${targetSize}px`;
       main.style.height = `${targetSize}px`;
+    }
+
+    const viewportWrap = main.closest('.imggr-main-wrap');
+    if (viewportWrap && window.ResizeObserver && !root.__imggrViewportObserver) {
+      root.__imggrViewportObserver = new ResizeObserver(() => {
+        window.requestAnimationFrame(() => {
+          updateViewportSize();
+          clampPanToBounds();
+          applyImagePan();
+          updateZoomDisplay();
+        });
+      });
+      root.__imggrViewportObserver.observe(viewportWrap);
     }
 
     function getPanRangePx(zoomPercent = currentZoom){

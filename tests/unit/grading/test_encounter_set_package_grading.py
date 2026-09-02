@@ -51,6 +51,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     ).read_text()
 
     assert "workbench.panels" in template
+    assert "grading_slot_label(workbench.lease.role_slot)" in template
+    assert "grading_state_label(panel.task_state)" in template
+    assert "Initial 1 / Initial 2 match" in template
     assert "panel.fields.label" in template
     assert "data-grade-option" in template
     assert "sanitizeGuidelineHtml" in template
@@ -75,7 +78,7 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "Grade set" not in template
     assert "{{ 'Image' if panel.target_level == 'image' else 'Set' }}:" in template
     assert '<legend class="visually-hidden">Select grade</legend>' in template
-    assert template.index('text-uppercase fw-semibold mb-1">Grade') < template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:")
+    assert 'text-uppercase fw-normal">Grade &middot;' in template
     assert template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:") < template.index('data-image-navigate="prev"')
     assert "const encounterPanels = panels.filter" in template
     assert "document.addEventListener('DOMContentLoaded', initializeCarousel" in template

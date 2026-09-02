@@ -1,3 +1,4 @@
+{% from "grading/_display_labels.html" import grading_slot_label %}
 <div class="card card-aurora shadow-sm mb-4" id="gradingHistoryPanel">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-2">
     <div>
@@ -109,7 +110,7 @@
                 <span class="badge {{ 'text-bg-primary' if item.type == 'encounter_set' else 'text-bg-info' }}">{{ item.type_label }}</span>
                 <span class="badge text-bg-light border text-dark">{{ item.scope_label }}</span>
                 <span class="badge {{ 'text-bg-warning' if item.role_slot == 'arbitrator' else 'text-bg-secondary' }}">
-                  {{ 'Resident 2' if item.role_slot == 'resident2' else ('AI' if item.role_slot == 'ai' else item.role_slot|title) }}
+                  {{ grading_slot_label(item.role_slot) }}
                 </span>
               </div>
               {% if item.is_revision %}<span class="badge text-bg-warning">Revision</span>{% endif %}

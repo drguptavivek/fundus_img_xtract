@@ -2,6 +2,7 @@
 
    Extracted so the Legacy panel's refresh control can swap this out of band in
    the same response, keeping both panels' live counts consistent. #}
+{% from "grading/_display_labels.html" import grading_slot_label %}
 <div id="project-encounter-set-queues"
      hx-get="{{ url_for('grading.project_queues_fragment', refresh=1) }}"
      hx-trigger="refresh-queues from:body"
@@ -20,21 +21,22 @@
         </div>
         <div class="fw-semibold mb-3">{{ queue.target.label }}</div>
         <div class="d-flex flex-wrap gap-2">
-          {% set resident_action = namespace(slot=none, first_package_uuid=none, package_count=0) %}
+          {% set first_level_action = namespace(slot=none, first_package_uuid=none, package_count=0) %}
           {% for slot in queue.slots %}
           {% if slot.slot in ['resident', 'resident2'] %}
-          {% set resident_action.package_count = resident_action.package_count + slot.package_count %}
-          {% if resident_action.slot is none or slot.slot == 'resident2' %}
-          {% set resident_action.slot = slot.slot %}
-          {% set resident_action.first_package_uuid = slot.first_package_uuid %}
+          {% set first_level_action.package_count = first_level_action.package_count + slot.package_count %}
+          {% if first_level_action.slot is none or slot.slot == 'resident2' %}
+          {% set first_level_action.slot = slot.slot %}
+          {% set first_level_action.first_package_uuid = slot.first_package_uuid %}
           {% endif %}
           {% endif %}
           {% endfor %}
-          {% if resident_action.slot %}
+          {% if first_level_action.slot %}
           <a class="btn btn-sm btn-primary"
-             href="{{ url_for('grading.encounter_set_package_grading', package_uuid=resident_action.first_package_uuid, slot_type=resident_action.slot) }}"
-             data-resident-slot="{{ resident_action.slot }}">
-            Resident ({{ resident_action.package_count }} set{{ '' if resident_action.package_count == 1 else 's' }})
+             href="{{ url_for('grading.encounter_set_package_grading', package_uuid=first_level_action.first_package_uuid, slot_type=first_level_action.slot) }}"
+             data-resident-slot="{{ first_level_action.slot }}"
+             title="Start {{ grading_slot_label(first_level_action.slot) }} for {{ queue.target.label }}">
+            {{ grading_slot_label(first_level_action.slot) }} ({{ first_level_action.package_count }} set{{ '' if first_level_action.package_count == 1 else 's' }})
           </a>
           {% endif %}
           {% for slot in queue.slots %}

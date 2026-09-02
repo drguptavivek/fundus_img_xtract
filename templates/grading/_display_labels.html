@@ -1,0 +1,13 @@
+{% macro grading_slot_label(value) -%}
+  {%- if value in ['resident', 'resident2'] -%}First-level grading
+  {%- elif value == 'ai' -%}AI
+  {%- else -%}{{ (value or '')|replace('_', ' ')|title }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro grading_state_label(value) -%}
+  {%- if value == 'resident_done' -%}Initial 1 done
+  {%- elif value == 'resident2_done' -%}Initial 2 done
+  {%- else -%}{{ (value or '')|replace('_', ' ')|title }}
+  {%- endif -%}
+{%- endmacro %}

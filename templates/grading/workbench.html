@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_forms.html" import csrf_field %}
+{% from "grading/_display_labels.html" import grading_slot_label, grading_state_label %}
 
 {% block title %}Grading Workbench{% endblock %}
 
@@ -115,7 +116,7 @@
     <div class="d-flex flex-wrap align-items-baseline gap-2 min-w-0">
       <h1 class="h6 mb-0">Grading Workbench</h1>
       <span class="small text-muted text-truncate gwb-hide-phone">
-        {{ workbench.lease.role_slot|capitalize }}
+        {{ grading_slot_label(workbench.lease.role_slot) }}
         &middot; {{ workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length }} image(s)
       </span>
     </div>
@@ -200,10 +201,10 @@
                   <div class="d-flex align-items-center gap-2">
                     {% if not panel.editable and panel.consensus and panel.consensus.method == 'match' %}
                     <span class="badge text-bg-success">
-                      Resident match{% if panel.consensus.final_grade_name %}: {{ panel.consensus.final_grade_name }}{% endif %}
+                      Initial 1 / Initial 2 match{% if panel.consensus.final_grade_name %}: {{ panel.consensus.final_grade_name }}{% endif %}
                     </span>
                     {% endif %}
-                    <span class="badge text-bg-light border">{{ panel.task_state }}</span>
+                    <span class="badge text-bg-light border">{{ grading_state_label(panel.task_state) }}</span>
                   </div>
                 </div>
                 <div class="card-body p-2 gwb-viewer-body">

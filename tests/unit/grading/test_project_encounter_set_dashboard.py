@@ -1,9 +1,27 @@
-from flask import render_template
+from flask import render_template, render_template_string
 
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectEncounterSetQueueDTO,
 )
+
+
+def test_grading_display_labels_hide_internal_initial_slot_names(app):
+    with app.test_request_context("/grading/"):
+        body = render_template_string(
+            """
+            {% from "grading/_display_labels.html" import grading_slot_label, grading_state_label %}
+            {{ grading_slot_label('resident') }}|
+            {{ grading_slot_label('resident2') }}|
+            {{ grading_state_label('resident_done') }}|
+            {{ grading_state_label('resident2_done') }}
+            """
+        )
+
+    assert body.count("First-level grading|") == 2
+    assert "Initial 1 done|" in body
+    assert "Initial 2 done" in body
+    assert "Resident" not in body
 
 
 def test_grading_dashboard_separates_project_encounter_set_queues(
@@ -68,8 +86,10 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
     assert "ICMR-VG" not in body
     assert "Glaucoma / EncounterSet" in body
     assert "Remidio API Standard Encounter Set" not in body
-    assert "Resident (3 sets)" in body
-    assert "Resident 2" not in body
+    assert "First-level grading (3 sets)" in body
+    assert "Start First-level grading for Glaucoma / EncounterSet" in body
+    assert "Resident (3 sets)" not in body
+    assert 'data-resident-slot="resident"' not in body
     assert 'data-resident-slot="resident2"' in body
     assert "/grading/encounter_set_package/resident2-package-uuid/resident2" in body
     assert "/grading/encounter_set_package/resident-package-uuid/resident" not in body
@@ -113,7 +133,6 @@ def test_project_encounter_set_ui_falls_back_to_internal_resident_slot(app):
             project_encounter_set_queues=[queue.to_dict()],
         )
 
-    assert "Resident (1 set)" in body
-    assert "Resident 2" not in body
+    assert "First-level grading (1 set)" in body
     assert 'data-resident-slot="resident"' in body
     assert "/grading/encounter_set_package/resident-fallback-package/resident" in body

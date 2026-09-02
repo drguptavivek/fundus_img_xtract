@@ -37,10 +37,18 @@ def test_package_workflow_orders_scope_images_then_encounter_targets():
 
 
 def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
-    template = (
-        Path(package_transport.__file__).parents[1]
-        / "templates/grading/workbench.html"
-    ).read_text()
+    # The workbench source is split across the page, its shared body partial,
+    # its stylesheet and its session controller; assert against the union.
+    root = Path(package_transport.__file__).parents[1]
+    template = "\n".join(
+        (root / relative).read_text()
+        for relative in (
+            "templates/grading/workbench.html",
+            "templates/grading/_workbench_body.html",
+            "static/css/grading-workbench.css",
+            "static/js/grading-workbench-session.js",
+        )
+    )
     submission_guard = (
         Path(package_transport.__file__).parents[1]
         / "static/js/submission-guard.js"
@@ -202,7 +210,8 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "error.code = redirectedToLogin ? 'authentication_required' : 'non_json_response'" in template
     assert "if (retryDraft) scheduleDraft(2000)" in template
     assert "Your unsaved draft will retry" in template
-    assert "const submissionIdempotencyKey = {{ submission_idempotency_key|tojson }};" in template
+    assert "const submissionIdempotencyKey = config.submissionIdempotencyKey;" in template
+    assert "'submissionIdempotencyKey': submission_idempotency_key," in template
     assert "idempotency_key: submissionIdempotencyKey" in template
     assert "idempotency_key: crypto.randomUUID()" not in template
     assert "window.SubmissionGuard.reloadOnHistoryRestore();" in template

@@ -39,7 +39,15 @@ def test_encounter_set_verification_uses_shared_guard_for_mutations():
 
 
 def test_grading_workbench_reuses_shared_submission_guard():
-    template = Path("templates/grading/workbench.html").read_text(encoding="utf-8")
+    # Script tags live in the shared body partial; the controller is its own file
+    # loaded after them, so the union preserves the original ordering.
+    template = "\n".join(
+        Path(relative).read_text(encoding="utf-8")
+        for relative in (
+            "templates/grading/_workbench_body.html",
+            "static/js/grading-workbench-session.js",
+        )
+    )
 
     assert "filename='js/submission-guard.js'" in template
     assert "window.SubmissionGuard.acquire(workbenchForm" in template

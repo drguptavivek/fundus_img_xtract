@@ -1,4 +1,4 @@
-import grading.start_grading as start_grading_module
+import grading.workbench_page as workbench_page_module
 from grading.workbench.errors import NoEligibleWork
 from models import EncounterFile, GradingTask, UserDiseaseUnitRole
 from tests.helpers.factories import UserFactory
@@ -32,8 +32,10 @@ class TestNextTaskMessagePreference:
         )
         db_session.flush()
 
+        # Acquisition is owned by the shared workbench_page helpers (also used
+        # by the grader PWA), so the seam to stub is there.
         monkeypatch.setattr(
-            start_grading_module,
+            workbench_page_module,
             "acquire_next_workbench",
             lambda *args, **kwargs: (_ for _ in ()).throw(
                 NoEligibleWork("Resident queue empty")
@@ -55,8 +57,10 @@ class TestNextTaskMessagePreference:
         self, auth_client, ophthalmologist_hospital_a, core_test_data, monkeypatch
     ):
         resident_message = "Resident queue empty"
+        # Acquisition is owned by the shared workbench_page helpers (also used
+        # by the grader PWA), so the seam to stub is there.
         monkeypatch.setattr(
-            start_grading_module,
+            workbench_page_module,
             "acquire_next_workbench",
             lambda *args, **kwargs: (_ for _ in ()).throw(NoEligibleWork(resident_message)),
         )

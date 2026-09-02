@@ -1,0 +1,85 @@
+{# Shared SVG colour filters used by grading-viewer.js and app.css (url(#pswp-*)).
+   Included by base.html and by the grader PWA layout so both hosts render identical filters. #}
+  <!-- Global SVG color filters (hidden) For Images-->
+  <svg width="0" height="0" style="position:absolute;left:-9999px;visibility:hidden" aria-hidden="true"
+    focusable="false">
+    <defs>
+      <!-- Red-free: output R=G, G=G, B=G (green channel as monochrome) -->
+      <filter id="pswp-greenmono" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
+        0 1 0 0 0
+        0 1 0 0 0
+        0 1 0 0 0
+        0 0 0 1 0" />
+      </filter>
+
+      <!-- Green emphasis: keep color, reduce R/B to 50% -->
+      <filter id="pswp-greenboost" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
+        0.5 0   0   0 0
+        0   1.0 0   0 0
+        0   0   0.5 0 0
+        0   0   0   1 0" />
+      </filter>
+
+      <!-- Grayscale (luminosity) -->
+      <filter id="pswp-gray" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
+        0.2126 0.7152 0.0722 0 0
+        0.2126 0.7152 0.0722 0 0
+        0.2126 0.7152 0.0722 0 0
+        0      0      0      1 0" />
+      </filter>
+
+      <!-- High contrast: simple contrast boost -->
+      <filter id="pswp-contrast" color-interpolation-filters="sRGB">
+        <!-- contrast ~1.3 around 0.5 -->
+        <feComponentTransfer>
+          <feFuncR type="linear" slope="1.3" intercept="-0.15" />
+          <feFuncG type="linear" slope="1.3" intercept="-0.15" />
+          <feFuncB type="linear" slope="1.3" intercept="-0.15" />
+        </feComponentTransfer>
+      </filter>
+
+      <!-- Enhance: apply brightness to shadows only (protect luminance > 100) -->
+      <filter id="pswp-enhance" color-interpolation-filters="sRGB">
+        <!-- Luminance map -->
+        <feColorMatrix in="SourceGraphic" type="matrix" result="lum" values="
+          0.2126 0.7152 0.0722 0 0
+          0.2126 0.7152 0.0722 0 0
+          0.2126 0.7152 0.0722 0 0
+          0      0      0      1 0" />
+        <!-- Mask: 1 for shadows (<= ~60), smooth ramp to 0 by ~130 -->
+        <feComponentTransfer in="lum" result="mask">
+          <feFuncR type="table" tableValues="1 1 1 1 1 1 0.85 0.7 0.55 0.4 0.25 0.15 0.08 0.03 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" />
+          <feFuncG type="table" tableValues="1 1 1 1 1 1 0.85 0.7 0.55 0.4 0.25 0.15 0.08 0.03 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" />
+          <feFuncB type="table" tableValues="1 1 1 1 1 1 0.85 0.7 0.55 0.4 0.25 0.15 0.08 0.03 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" />
+        </feComponentTransfer>
+        <!-- Move mask into alpha -->
+        <feColorMatrix in="mask" type="matrix" result="maskAlpha" values="
+          0 0 0 0 0
+          0 0 0 0 0
+          0 0 0 0 0
+          1 0 0 0 0" />
+        <!-- Brightened source (brightness factor set in JS) -->
+        <feComponentTransfer in="SourceGraphic" result="bright">
+          <feFuncR type="linear" slope="1" intercept="0" />
+          <feFuncG type="linear" slope="1" intercept="0" />
+          <feFuncB type="linear" slope="1" intercept="0" />
+        </feComponentTransfer>
+        <!-- Apply mask to brightened image -->
+        <feComposite in="bright" in2="maskAlpha" operator="in" result="brightMasked" />
+        <!-- Composite original over: highlights preserved -->
+        <feComposite in="brightMasked" in2="SourceGraphic" operator="over" />
+      </filter>
+
+      <!-- Blue mono: output R=B, G=B, B=B -->
+      <filter id="pswp-bluemono" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
+      0 0 1 0 0
+      0 0 1 0 0
+      0 0 1 0 0
+      0 0 0 1 0" />
+      </filter>
+    </defs>
+  </svg>

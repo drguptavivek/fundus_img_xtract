@@ -1,0 +1,103 @@
+/* Grading workbench layout. Extracted from templates/grading/workbench.html; shared with the grader PWA. */
+.gwb-shell { width: 100%; height: calc(100dvh - 8rem); min-height: 42rem; padding: .5rem; display: flex; flex-direction: column; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .5rem; }
+.gwb-shell.is-expanded { position: fixed; inset: 0; z-index: 1040; width: auto; max-width: 100%; height: 100dvh; min-height: 0; border: 0; border-radius: 0; overflow: hidden; overscroll-behavior: contain; }
+body.gwb-expanded-lock { overflow: hidden; }
+.gwb-submit-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(var(--bs-body-bg-rgb), .88); backdrop-filter: blur(2px); }
+.gwb-submit-overlay.d-none { display: none; }
+.gwb-loader-mark { position: relative; width: 5rem; height: 5rem; margin: 0 auto 1rem; display: grid; place-items: center; }
+.gwb-loader-mark::before { content: ''; position: absolute; inset: 0; border: .25rem solid transparent; border-top-color: var(--bs-primary); border-left-color: var(--bs-primary); border-radius: 50%; animation: gwb-loader-counter-spin .9s linear infinite; }
+.gwb-loader-logo { width: 3.25rem; height: 3.25rem; object-fit: contain; animation: gwb-loader-logo-spin 2.2s linear infinite; }
+@keyframes gwb-loader-logo-spin { to { transform: rotate(360deg); } }
+@keyframes gwb-loader-counter-spin { to { transform: rotate(-360deg); } }
+.gwb-form, .gwb-carousel, .gwb-carousel .carousel-inner, .gwb-carousel .carousel-item, .gwb-panel-row { min-height: 0; }
+.gwb-form { display: flex; flex: 1 1 auto; height: auto; flex-direction: column; }
+.gwb-carousel { flex: 1 1 auto; height: auto; overflow: hidden; }
+.gwb-carousel .carousel-inner, .gwb-carousel .carousel-item, .gwb-panel-row { height: 100%; }
+.gwb-panel-row > [class*="col-"] { min-height: 0; }
+.gwb-viewer-card, .gwb-grade-card { min-height: 0; overflow: hidden; }
+.gwb-viewer-body { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; height: auto !important; min-height: 0; }
+.gwb-viewer-body .imggr-stage, .gwb-viewer-body .imggr-annot-layout, .gwb-viewer-body .imggr-main-wrap { height: 100%; min-height: 0; }
+.gwb-viewer-body .imggr-main { width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; aspect-ratio: auto; }
+.gwb-grade-card .card-body { overflow-y: auto; }
+.gwb-viewer-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.gwb-toolbar-left, .gwb-toolbar-right { display: flex; align-items: center; gap: .5rem; }
+.gwb-toolbar-left { flex: 1 1 auto; }
+.gwb-toolbar-left { flex-wrap: wrap; }
+.gwb-toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; margin-left: auto; justify-content: flex-end; white-space: nowrap; }
+.gwb-zoom-control { flex: 0 1 16rem; min-width: 11rem; max-width: 16rem; }
+.gwb-adjustment-control { display: flex; flex: 0 0 9rem; width: 9rem; min-width: 9rem; align-items: center; gap: .35rem; }
+.gwb-adjustment-control .imggr-range-wrap { flex: 1 1 auto; width: auto; min-width: 0; }
+.gwb-adjustment-control .imggr-bright,
+.gwb-adjustment-control .imggr-contrast { display: block; width: 100%; min-width: 0; max-width: none; margin: 0; }
+.gwb-encounter-summary { display: grid; flex: 1 1 auto; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; overflow: auto; }
+.gwb-encounter-result { display: flex; align-items: center; gap: .75rem; width: 100%; border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem; color: var(--bs-body-color); background: var(--bs-body-bg); text-align: left; }
+.gwb-encounter-result + .gwb-encounter-result { margin-top: .5rem; }
+.gwb-encounter-result:hover, .gwb-encounter-result:focus-visible { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+.gwb-encounter-result.is-pending { border-color: var(--bs-danger-border-subtle); }
+.gwb-encounter-thumbnail { flex: 0 0 4.5rem; width: 4.5rem; height: 4.5rem; border-radius: .375rem; object-fit: cover; background: var(--bs-secondary-bg); }
+.gwb-footer { flex: 0 0 auto; }
+.gwb-header { flex: 0 0 auto; }
+.gwb-card-header .badge { font-size: .7em; }
+.gwb-viewer-toolbar.mb-2 { margin-bottom: .25rem !important; }
+.gwb-pager { display: flex; gap: .35rem; max-width: min(48vw, 44rem); overflow-x: auto; }
+.gwb-pager .btn { min-width: 2.25rem; }
+.gwb-pager .is-graded { border-color: var(--bs-success); color: var(--bs-success); }
+@media (max-width: 991.98px) {
+  .gwb-panel-row { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .gwb-panel-row > [class*="col-"] { min-height: 0; }
+  .gwb-viewer-card, .gwb-grade-card { height: auto !important; overflow: visible; }
+  .gwb-viewer-body { overflow: visible; }
+  .gwb-viewer-body .imggr-viewer-root { flex: 0 0 auto; }
+  .gwb-viewer-body .imggr-stage, .gwb-viewer-body .imggr-annot-layout, .gwb-viewer-body .imggr-main-wrap { height: auto; }
+  .gwb-viewer-body .imggr-main { height: auto; }
+  .gwb-grade-card .card-body { overflow-y: visible; }
+  .gwb-encounter-summary { grid-template-columns: 1fr; }
+}
+.gwb-short { display: none; }
+@media (max-width: 767.98px) {
+  .gwb-hide-phone { display: none !important; }
+  .gwb-full { display: none; }
+  .gwb-short { display: inline; }
+  .gwb-header { padding-bottom: .25rem !important; margin-bottom: .25rem !important; }
+  .gwb-header .btn-sm, .gwb-header .badge { padding-left: .4rem; padding-right: .4rem; }
+  .gwb-encounter-summary { gap: .5rem; }
+  .gwb-encounter-bucket { padding: .5rem !important; }
+  .gwb-encounter-bucket.is-empty { display: none; }
+  .gwb-encounter-bucket h3 { margin-bottom: .35rem !important; }
+  .gwb-comment { height: 3.5rem; min-height: 3.5rem; }
+  .gwb-encounter-summary { gap: .35rem; }
+  .gwb-encounter-bucket { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; padding: .3rem !important; }
+  .gwb-encounter-bucket h3 { flex: 1 0 100%; margin-bottom: 0 !important; font-size: .8rem; }
+  .gwb-encounter-result { flex: 1 1 calc(33.333% - .2rem); max-width: calc(33.333% - .2rem); flex-direction: column; align-items: center; padding: .2rem; gap: .2rem; text-align: center; }
+  .gwb-encounter-result + .gwb-encounter-result { margin-top: 0; }
+  .gwb-encounter-result > .flex-grow-1 { flex-grow: 0; width: 100%; }
+  .gwb-encounter-result > .fa-chevron-right { display: none; }
+  .gwb-encounter-thumbnail { flex-basis: auto; width: 100%; height: auto; aspect-ratio: 4 / 3; max-width: 7rem; }
+  .gwb-encounter-grade { margin-top: 0 !important; font-size: .65rem; padding: .2em .5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  [data-target-level="encounter"] .gwb-viewer-card .gwb-card-header .text-uppercase { display: none; }
+  .gwb-nav-label { display: none; }
+  .gwb-footer .btn { padding-left: .6rem; padding-right: .6rem; }
+  .gwb-pager { max-width: 60vw; }
+  /* Phones: flatten the toolbar into two rows — filters + loupe/reset/Tools, then the two sliders. */
+  .gwb-toolbar-left, .gwb-toolbar-right { display: contents; }
+  .gwb-viewer-toolbar { gap: .35rem; }
+  .gwb-toolbar-left > .small.text-muted { display: none; }
+  .gwb-viewer-toolbar .imggr-filters { order: 1; flex: 1 1 auto; display: flex; }
+  .gwb-viewer-toolbar .imggr-filters .btn { flex: 1 1 0; min-width: 2.4rem; min-height: 2.4rem; padding-left: .25rem; padding-right: .25rem; }
+  .gwb-viewer-toolbar .imggr-loupe-toggle { display: none; }
+  .gwb-viewer-toolbar .imggr-reset { order: 3; }
+  .gwb-viewer-toolbar .gwb-annot-toggle { order: 4; margin-left: auto; }
+  .gwb-viewer-toolbar .gwb-adjustment-control { order: 5; flex: 1 1 40%; width: auto; min-width: 0; margin-top: .5rem; }
+}
+.gwb-annot-toggle { display: none; }
+@media (max-width: 991.98px) {
+  .gwb-toolbar-right { flex-basis: 100%; width: 100%; overflow-x: auto; padding-bottom: .125rem; }
+  .gwb-viewer-body .imggr-annot-layout { flex-direction: column; }
+  .gwb-viewer-body .imggr-main-wrap { order: 1; flex: 1 1 auto; min-height: 0; }
+  .gwb-viewer-body .imggr-annot-sidebar { order: 2; flex: 0 0 auto; width: 100%; min-width: 0; max-height: min(32dvh, 16rem); overflow-y: auto; }
+  .gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }
+  .gwb-viewer-body .imggr-annot-sidebar .fgx-panel { gap: .25rem; }
+  .gwb-viewer-body .imggr-annot-sidebar .fgx-tool-category { padding: .2rem; }
+  .gwb-annot-toggle { display: inline-flex; }
+}

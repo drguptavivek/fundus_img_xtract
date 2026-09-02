@@ -1212,6 +1212,21 @@
         availableH = window.innerHeight - rootRect.top - approxBottomMargin;
       }
 
+      const fitToWidth = main.dataset.fitMode === 'width'
+        && window.matchMedia('(max-width: 991.98px)').matches;
+      if (fitToWidth) {
+        // Narrow layouts: span the full column width and take only the height
+        // the image needs (capped at a square) so the whole image is visible.
+        const targetW = Math.floor(Math.max(minimumSize, availableW));
+        const natW = mainImg?.naturalWidth || 0;
+        const natH = mainImg?.naturalHeight || 0;
+        const aspect = natW > 0 && natH > 0 ? natH / natW : 1;
+        const targetH = Math.floor(Math.max(minimumSize, Math.min(targetW, targetW * aspect)));
+        main.style.width = `${targetW}px`;
+        main.style.height = `${targetH}px`;
+        return;
+      }
+
       const viewportCap = Math.max(minimumSize, window.innerHeight * 0.72);
       const targetSize = Math.floor(Math.max(minimumSize, Math.min(availableW, availableH, viewportCap)));
       main.style.width = `${targetSize}px`;
@@ -2331,36 +2346,23 @@
       const natDimInfo = card.querySelector('.imggr-natural-dim');
       const zoomSlider = card.querySelector('.imggr-zoom-slider');
       
+      const hasNatural = Boolean(metrics.natW && metrics.natH);
+      // Rendered size comes from the live bounding box, which already includes
+      // the CSS transform scale, so it matches what is actually on screen.
+      const renderedWidth = Math.round(metrics.displayWidth);
+      const renderedHeight = Math.round(metrics.displayHeight);
+      const nativeScale = hasNatural && renderedWidth ? Math.round((renderedWidth / metrics.natW) * 100) : null;
+
       if (zoomInfo) {
-        zoomInfo.textContent = `${currentZoom}%`;
+        zoomInfo.textContent = nativeScale !== null
+          ? `${currentZoom}% (${nativeScale}% of original)`
+          : `${currentZoom}%`;
       }
-      
-      if (dimInfo && metrics.natW && metrics.natH) {
-        // Calculate actual display dimensions based on zoom level
-        const mainDiv = main;
-        if (mainDiv) {
-          const containerRect = mainDiv.getBoundingClientRect();
-          const aspectRatio = metrics.natW / metrics.natH;
-          
-          // Calculate the base display size (without zoom)
-          let baseDisplayWidth, baseDisplayHeight;
-          if (aspectRatio > 1) {
-            // Landscape image
-            baseDisplayWidth = containerRect.width;
-            baseDisplayHeight = containerRect.width / aspectRatio;
-          } else {
-            // Portrait or square image
-            baseDisplayHeight = containerRect.height;
-            baseDisplayWidth = containerRect.height * aspectRatio;
-          }
-          
-          // Apply zoom to get actual display dimensions
-          const scaledWidth = Math.round(baseDisplayWidth * (currentZoom / 100));
-          const scaledHeight = Math.round(baseDisplayHeight * (currentZoom / 100));
-          dimInfo.textContent = `${scaledWidth}×${scaledHeight}`;
-        }
+
+      if (dimInfo && hasNatural && renderedWidth && renderedHeight) {
+        dimInfo.textContent = `${renderedWidth}×${renderedHeight}`;
       }
-      
+
       if (natDimInfo && metrics.natW && metrics.natH) {
         natDimInfo.textContent = `${metrics.natW}×${metrics.natH}`;
       }

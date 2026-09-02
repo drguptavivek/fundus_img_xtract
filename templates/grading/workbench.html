@@ -6,7 +6,8 @@
 {% block content %}
 <style>
   .gwb-shell { width: 100%; height: calc(100dvh - 8rem); min-height: 42rem; padding: .5rem; display: flex; flex-direction: column; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .5rem; }
-  .gwb-shell.is-expanded { position: fixed; inset: 0; z-index: 1040; width: 100vw; height: 100dvh; min-height: 0; border: 0; border-radius: 0; }
+  .gwb-shell.is-expanded { position: fixed; inset: 0; z-index: 1040; width: auto; max-width: 100%; height: 100dvh; min-height: 0; border: 0; border-radius: 0; overflow: hidden; overscroll-behavior: contain; }
+  body.gwb-expanded-lock { overflow: hidden; }
   .gwb-submit-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(var(--bs-body-bg-rgb), .88); backdrop-filter: blur(2px); }
   .gwb-submit-overlay.d-none { display: none; }
   .gwb-loader-mark { position: relative; width: 5rem; height: 5rem; margin: 0 auto 1rem; display: grid; place-items: center; }
@@ -42,40 +43,102 @@
   .gwb-encounter-result.is-pending { border-color: var(--bs-danger-border-subtle); }
   .gwb-encounter-thumbnail { flex: 0 0 4.5rem; width: 4.5rem; height: 4.5rem; border-radius: .375rem; object-fit: cover; background: var(--bs-secondary-bg); }
   .gwb-footer { flex: 0 0 auto; }
+  .gwb-header { flex: 0 0 auto; }
+  .gwb-card-header .badge { font-size: .7em; }
+  .gwb-viewer-toolbar.mb-2 { margin-bottom: .25rem !important; }
   .gwb-pager { display: flex; gap: .35rem; max-width: min(48vw, 44rem); overflow-x: auto; }
   .gwb-pager .btn { min-width: 2.25rem; }
   .gwb-pager .is-graded { border-color: var(--bs-success); color: var(--bs-success); }
-  @media (max-width: 1199.98px) {
-    .gwb-panel-row { overflow-y: auto; }
-    .gwb-panel-row > [class*="col-"] { min-height: 30rem; }
+  @media (max-width: 991.98px) {
+    .gwb-panel-row { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .gwb-panel-row > [class*="col-"] { min-height: 0; }
+    .gwb-viewer-card, .gwb-grade-card { height: auto !important; overflow: visible; }
+    .gwb-viewer-body { overflow: visible; }
+    .gwb-viewer-body .imggr-viewer-root { flex: 0 0 auto; }
+    .gwb-viewer-body .imggr-stage, .gwb-viewer-body .imggr-annot-layout, .gwb-viewer-body .imggr-main-wrap { height: auto; }
+    .gwb-viewer-body .imggr-main { height: auto; }
+    .gwb-grade-card .card-body { overflow-y: visible; }
     .gwb-encounter-summary { grid-template-columns: 1fr; }
   }
+  .gwb-short { display: none; }
+  @media (max-width: 767.98px) {
+    .gwb-hide-phone { display: none !important; }
+    .gwb-full { display: none; }
+    .gwb-short { display: inline; }
+    .gwb-header { padding-bottom: .25rem !important; margin-bottom: .25rem !important; }
+    .gwb-header .btn-sm, .gwb-header .badge { padding-left: .4rem; padding-right: .4rem; }
+    .gwb-encounter-summary { gap: .5rem; }
+    .gwb-encounter-bucket { padding: .5rem !important; }
+    .gwb-encounter-bucket.is-empty { display: none; }
+    .gwb-encounter-bucket h3 { margin-bottom: .35rem !important; }
+    .gwb-comment { height: 3.5rem; min-height: 3.5rem; }
+    .gwb-encounter-summary { gap: .35rem; }
+    .gwb-encounter-bucket { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; padding: .3rem !important; }
+    .gwb-encounter-bucket h3 { flex: 1 0 100%; margin-bottom: 0 !important; font-size: .8rem; }
+    .gwb-encounter-result { flex: 1 1 calc(33.333% - .2rem); max-width: calc(33.333% - .2rem); flex-direction: column; align-items: center; padding: .2rem; gap: .2rem; text-align: center; }
+    .gwb-encounter-result + .gwb-encounter-result { margin-top: 0; }
+    .gwb-encounter-result > .flex-grow-1 { flex-grow: 0; width: 100%; }
+    .gwb-encounter-result > .fa-chevron-right { display: none; }
+    .gwb-encounter-thumbnail { flex-basis: auto; width: 100%; height: auto; aspect-ratio: 4 / 3; max-width: 7rem; }
+    .gwb-encounter-grade { margin-top: 0 !important; font-size: .65rem; padding: .2em .5em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    [data-target-level="encounter"] .gwb-viewer-card .gwb-card-header .text-uppercase { display: none; }
+    .gwb-nav-label { display: none; }
+    .gwb-footer .btn { padding-left: .6rem; padding-right: .6rem; }
+    .gwb-pager { max-width: 60vw; }
+    /* Phones: flatten the toolbar into two rows — filters + loupe/reset/Tools, then the two sliders. */
+    .gwb-toolbar-left, .gwb-toolbar-right { display: contents; }
+    .gwb-viewer-toolbar { gap: .35rem; }
+    .gwb-toolbar-left > .small.text-muted { display: none; }
+    .gwb-viewer-toolbar .imggr-filters { order: 1; flex: 1 1 auto; display: flex; }
+    .gwb-viewer-toolbar .imggr-filters .btn { flex: 1 1 0; min-width: 2.4rem; min-height: 2.4rem; padding-left: .25rem; padding-right: .25rem; }
+    .gwb-viewer-toolbar .imggr-loupe-toggle { display: none; }
+    .gwb-viewer-toolbar .imggr-reset { order: 3; }
+    .gwb-viewer-toolbar .gwb-annot-toggle { order: 4; margin-left: auto; }
+    .gwb-viewer-toolbar .gwb-adjustment-control { order: 5; flex: 1 1 40%; width: auto; min-width: 0; margin-top: .5rem; }
+  }
+  .gwb-annot-toggle { display: none; }
   @media (max-width: 991.98px) {
     .gwb-toolbar-right { flex-basis: 100%; width: 100%; overflow-x: auto; padding-bottom: .125rem; }
+    .gwb-viewer-body .imggr-annot-layout { flex-direction: column; }
+    .gwb-viewer-body .imggr-main-wrap { order: 1; flex: 1 1 auto; min-height: 0; }
+    .gwb-viewer-body .imggr-annot-sidebar { order: 2; flex: 0 0 auto; width: 100%; min-width: 0; max-height: min(32dvh, 16rem); overflow-y: auto; }
+    .gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }
+    .gwb-viewer-body .imggr-annot-sidebar .fgx-panel { gap: .25rem; }
+    .gwb-viewer-body .imggr-annot-sidebar .fgx-tool-category { padding: .2rem; }
+    .gwb-annot-toggle { display: inline-flex; }
   }
 </style>
 <div class="container-fluid gwb-shell is-expanded" id="grading-workbench"
      data-session-uuid="{{ workbench.lease.session_uuid }}"
      data-token-generation="{{ workbench.lease.token_generation }}">
-  <header class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom pb-2 mb-2">
-    <div>
-      <h1 class="h4 mb-1">Grading Workbench</h1>
-      <div class="small text-muted">
-        {{ workbench.workflow_config.package_name or workbench.lease.workflow|capitalize }}
-        &middot; {{ workbench.lease.role_slot|capitalize }}
+  <header class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom pb-1 mb-1 gwb-header">
+    <div class="d-flex flex-wrap align-items-baseline gap-2 min-w-0">
+      <h1 class="h6 mb-0">Grading Workbench</h1>
+      <span class="small text-muted text-truncate gwb-hide-phone">
+        {{ workbench.lease.role_slot|capitalize }}
         &middot; {{ workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length }} image(s)
-      </div>
+      </span>
     </div>
-    <div class="d-flex flex-wrap gap-2">
-      <span class="badge text-bg-light border align-self-center" data-workbench-progress></span>
-      <span class="badge text-bg-light border align-self-center" data-draft-status>Draft ready</span>
-      <span class="badge text-bg-light border align-self-center" data-lease-status></span>
+    <div class="d-flex flex-wrap gap-1 align-items-center">
+      <span class="badge text-bg-light border" data-workbench-progress title="Grading progress">
+        <span class="gwb-full"></span><span class="gwb-short"></span>
+      </span>
+      <span class="badge text-bg-light border" data-draft-status title="Draft status">
+        <span class="gwb-full">Draft ready</span><i class="gwb-short fa-solid fa-check" aria-hidden="true"></i>
+      </span>
+      <span class="badge text-bg-light border" data-lease-status title="Time remaining">
+        <span class="gwb-full"></span><span class="gwb-short"><i class="fa-regular fa-clock me-1" aria-hidden="true"></i><span data-lease-short></span></span>
+      </span>
       <button class="btn btn-sm btn-outline-secondary" type="button" data-workbench-expand
               title="Restore grading view" aria-label="Restore grading view" aria-pressed="true">
         <i class="fa-solid fa-compress" aria-hidden="true" data-workbench-expand-icon></i>
       </button>
-      <button class="btn btn-sm btn-outline-danger" type="button" data-release-workbench>Release</button>
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}" data-workbench-dashboard>Dashboard</a>
+      <button class="btn btn-sm btn-outline-danger" type="button" data-release-workbench title="Release this package" aria-label="Release this package">
+        <i class="fa-solid fa-unlock" aria-hidden="true"></i><span class="gwb-nav-label ms-1">Release</span>
+      </button>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}" data-workbench-dashboard title="Grading dashboard" aria-label="Grading dashboard">
+        <i class="fa-solid fa-table-columns" aria-hidden="true"></i><span class="gwb-nav-label ms-1">Dashboard</span>
+      </a>
     </div>
   </header>
 
@@ -94,7 +157,8 @@
     <div id="workbench-panels"
          class="carousel slide gwb-carousel{% if workbench.lease.workflow == 'linked' %} linked-grading-carousel{% endif %}"
          data-linked-mode="{{ 'true' if workbench.lease.workflow == 'linked' else 'false' }}"
-         data-bs-interval="false">
+         data-bs-interval="false"
+         data-bs-touch="false">
       <div class="carousel-inner">
         {% set image_panels = workbench.panels|selectattr('target_level', 'equalto', 'image')|list %}
         {% set encounter_panels = workbench.panels|selectattr('target_level', 'equalto', 'encounter')|list %}
@@ -118,21 +182,21 @@
           <input type="hidden" name="{{ panel.fields.annotation_policy_revision }}"
                  value="{{ panel.annotation.policy_revision }}">
           <div class="row g-2 gwb-panel-row">
-            <div class="col-12 col-xl-8">
+            <div class="col-12 col-lg-8">
               <div class="card h-100 gwb-viewer-card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                  <div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2 py-1 gwb-card-header">
+                  <h2 class="h6 mb-0 d-flex flex-wrap align-items-baseline gap-2 min-w-0">
                     {% if panel.target_level == 'encounter' or set_context.enabled %}
-                    <span class="small text-muted text-uppercase">
+                    <span class="small text-muted text-uppercase fw-normal">
                       {% if panel.target_level == 'image' and set_context.enabled %}
-                        Image target &middot; Image {{ image_nav.index }} of {{ workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length }}
+                        Image {{ image_nav.index }} of {{ workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length }}
                       {% else %}
                         Encounter target
                       {% endif %}
                     </span>
                     {% endif %}
-                    <h2 class="h6 mb-0">{{ panel.disease_name }}</h2>
-                  </div>
+                    <span>{{ panel.disease_name }}</span>
+                  </h2>
                   <div class="d-flex align-items-center gap-2">
                     {% if not panel.editable and panel.consensus and panel.consensus.method == 'match' %}
                     <span class="badge text-bg-success">
@@ -145,9 +209,17 @@
                 <div class="card-body p-2 gwb-viewer-body">
                   {% if panel.target_level == 'encounter' %}
                   <div class="gwb-encounter-summary" aria-label="Image grading results for this encounter">
-                    {% for bucket, bucket_label in [('od', 'OD / Right'), ('os', 'OS / Left'), ('unknown', 'Other')] %}
-                    <section class="border rounded bg-body-tertiary p-3">
-                      <h3 class="h6 mb-2">{{ bucket_label }}</h3>
+                    {% for bucket, bucket_label, bucket_short in [('od', 'OD / Right', 'OD'), ('os', 'OS / Left', 'OS'), ('unknown', 'Other', 'Other')] %}
+                    {% set precount = namespace(count=0) %}
+                    {% for image_panel in workbench.panels %}
+                      {% set laterality = (image_panel.media.laterality or '')|lower if image_panel.media else '' %}
+                      {% if laterality in ['od', 'right', 'right eye', 'r'] %}{% set image_bucket = 'od' %}
+                      {% elif laterality in ['os', 'left', 'left eye', 'l'] %}{% set image_bucket = 'os' %}
+                      {% else %}{% set image_bucket = 'unknown' %}{% endif %}
+                      {% if image_panel.target_level == 'image' and image_panel.scope_id == panel.scope_id and image_bucket == bucket %}{% set precount.count = precount.count + 1 %}{% endif %}
+                    {% endfor %}
+                    <section class="border rounded bg-body-tertiary p-3 gwb-encounter-bucket{% if precount.count == 0 %} is-empty{% endif %}">
+                      <h3 class="h6 mb-2"><span class="gwb-full">{{ bucket_label }}</span><span class="gwb-short">{{ bucket_short }}</span></h3>
                       {% set ns = namespace(count=0) %}
                       {% for image_panel in workbench.panels %}
                         {% set laterality = (image_panel.media.laterality or '')|lower if image_panel.media else '' %}
@@ -174,11 +246,11 @@
                                  loading="lazy">
                             {% endif %}
                             <span class="flex-grow-1 min-w-0">
-                              <span class="d-flex justify-content-between gap-2">
+                              <span class="d-flex justify-content-between gap-2 gwb-hide-phone">
                                 <span class="fw-semibold">Image {{ image_panel.image_position or ns.count }}</span>
                                 <span class="small text-muted text-end">{{ image_panel.disease_name }}</span>
                               </span>
-                              <span class="badge rounded-pill mt-2 {{ 'text-bg-success' if image_observation and image_observation.disease_grading_id else 'text-bg-danger' }}"
+                              <span class="badge rounded-pill mt-2 gwb-encounter-grade {{ 'text-bg-success' if image_observation and image_observation.disease_grading_id else 'text-bg-danger' }}"
                                     data-encounter-image-grade
                                     data-source-task-uuid="{{ image_panel.task_uuid }}">{{ selected.label }}</span>
                             </span>
@@ -230,27 +302,29 @@
                       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset" title="Reset filters and view">/</button>
                     </div>
                     <div class="gwb-toolbar-right">
-                      <div class="d-flex align-items-center gap-2 gwb-zoom-control">
+                      <div class="d-flex align-items-center gap-2 gwb-zoom-control gwb-hide-phone">
                         <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ panel.task_uuid }}">Zoom</label>
                         <input id="imggr-zoom-slider-{{ panel.task_uuid }}" class="form-range imggr-zoom-slider flex-grow-1"
                                type="range" min="10" max="400" step="5" value="100">
                         <button type="button" class="btn btn-sm btn-outline-secondary imggr-zoom-fit">Fit</button>
                       </div>
-                      <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
+                      <button type="button" class="btn btn-outline-secondary btn-sm gwb-annot-toggle active"
+                              data-annot-toggle aria-pressed="true" aria-label="Show or hide annotation tools">Tools</button>
+                      <div class="btn-group btn-group-sm gwb-hide-phone" role="group" aria-label="CDR and RDR measurement tools">
                         <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle"
                                 aria-pressed="false" title="Measure cup-to-disc and rim-to-disc ratios">
                           CDR/RDR
                         </button>
                       </div>
-                      <div class="btn-group btn-group-sm" role="group" aria-label="Viewer presets">
+                      <div class="btn-group btn-group-sm gwb-hide-phone" role="group" aria-label="Viewer presets">
                         {% for preset in [1, 2, 3, 4, 5] %}
                         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="{{ preset }}">{{ preset }}</button>
                         {% endfor %}
                       </div>
-                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset"
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset gwb-hide-phone"
                               data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ panel.task_uuid }}"
                               id="imggr-preset-save-button-{{ panel.task_uuid }}">Save</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger gwb-hide-phone"
                               data-bs-toggle="modal" data-bs-target="#imggr-shortcuts-modal-{{ panel.task_uuid }}"
                               aria-label="Viewer information and keyboard shortcuts" title="Viewer information and keyboard shortcuts">
                         <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
@@ -288,7 +362,7 @@
                         </aside>
                         {% endif %}
                         <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1 bg-black">
-                          <div class="imggr-main rounded position-relative bg-black" data-min-viewport-size="120">
+                          <div class="imggr-main rounded position-relative bg-black" data-min-viewport-size="120" data-fit-mode="width">
                             <img class="imggr-main-img"
                                  {% if loop.first %}src="{{ viewer_media.media_url }}" fetchpriority="high"
                                  {% else %}data-src="{{ viewer_media.media_url }}" fetchpriority="low"{% endif %}
@@ -301,7 +375,7 @@
                       <div class="imggr-loupe" aria-hidden="true"></div>
                     </div>
                   </div>
-                  <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2">
+                  <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2 gwb-hide-phone">
                     <span class="imggr-zoom-info"><span class="imggr-zoom-level">100%</span> zoom</span>
                     <span class="imggr-dim-info">Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span></span>
                   </div>
@@ -351,13 +425,12 @@
                 </div>
               </div>
             </div>
-            <div class="col-12 col-xl-4">
+            <div class="col-12 col-lg-4">
               <div class="card h-100 gwb-grade-card">
-                <div class="card-header">
-                  <div class="small text-muted text-uppercase fw-semibold mb-1">Grade</div>
+                <div class="card-header py-1 gwb-card-header">
                   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <h2 class="h6 mb-0">
-                      <span class="text-muted text-uppercase">{{ 'Image' if panel.target_level == 'image' else 'Set' }}:</span>
+                      <span class="small text-muted text-uppercase fw-normal">Grade &middot; {{ 'Image' if panel.target_level == 'image' else 'Set' }}:</span>
                       {{ panel.disease_name }}
                     </h2>
                     {% if panel.target_level == 'image' and set_context.enabled %}
@@ -392,17 +465,17 @@
                     {% endfor %}
                     </div>
                   </fieldset>
-                  <div class="text-end mb-3">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-clear-selection
-                            {% if not panel.editable %}disabled{% endif %}>Clear selection</button>
-                  </div>
                   <div class="form-text mb-3" data-grade-guidelines></div>
                   <fieldset class="mb-3 d-none" data-feature-fieldset data-features-section>
                     <legend class="h6">Relevant features</legend>
                     <div class="vstack gap-2" data-feature-options data-features-container></div>
                   </fieldset>
-                  <label class="form-label" for="comment-{{ panel.task_uuid }}">Comment</label>
-                  <textarea class="form-control" id="comment-{{ panel.task_uuid }}"
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label mb-0" for="comment-{{ panel.task_uuid }}">Comment</label>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-clear-selection
+                            {% if not panel.editable %}disabled{% endif %}>Clear selection</button>
+                  </div>
+                  <textarea class="form-control gwb-comment" id="comment-{{ panel.task_uuid }}"
                             name="{{ panel.fields.comment }}" rows="4"
                             {% if not panel.editable %}disabled{% endif %}>{{ saved_observation.comment if saved_observation else '' }}</textarea>
                   <div class="d-flex gap-2 justify-content-end mt-3 d-none" data-workbench-submit-actions>
@@ -433,8 +506,12 @@
         {% endfor %}
       </div>
       <div class="btn-group" role="group" aria-label="Workbench navigation">
-        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="prev">Previous</button>
-        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="next">Next</button>
+        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="prev" title="Previous target">
+          <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="gwb-nav-label ms-1">Previous</span>
+        </button>
+        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="next" title="Next target">
+          <span class="gwb-nav-label me-1">Next</span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>
       </div>
     </footer>
     {% endif %}
@@ -458,7 +535,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v2')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2-pan-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
@@ -485,6 +562,19 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
   const submitOverlayMessage = root.querySelector('[data-workbench-submit-overlay-message]');
   const draftStatus = root.querySelector('[data-draft-status]');
+  const draftStatusIcons = {
+    'Draft ready': 'fa-solid fa-check',
+    'Draft saved': 'fa-solid fa-check',
+    'Draft restored': 'fa-solid fa-check',
+    'Saving draft…': 'fa-solid fa-spinner fa-spin',
+    'Unsaved changes': 'fa-solid fa-pen',
+    'Draft not saved': 'fa-solid fa-triangle-exclamation text-danger',
+  };
+  function setDraftStatus(text) {
+    draftStatus.querySelector('.gwb-full').textContent = text;
+    draftStatus.querySelector('.gwb-short').className = `gwb-short ${draftStatusIcons[text] || 'fa-solid fa-circle-info'}`;
+    draftStatus.title = text;
+  }
   const workbenchForm = root.querySelector('[data-workbench-form]');
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const headers = {
@@ -552,9 +642,9 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   let draftTimer = null;
   let draftSavePromise = null;
 
-  draftStatus.textContent = panels.some(
+  setDraftStatus(panels.some(
     panel => window.linkedGradingData[panel.dataset.taskUuid]?.hasDraft
-  ) ? 'Draft restored' : 'Draft ready';
+  ) ? 'Draft restored' : 'Draft ready');
 
   function collectObservations() {
     const observations = {};
@@ -587,7 +677,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       return;
     }
     draftDirty = false;
-    draftStatus.textContent = 'Saving draft…';
+    setDraftStatus('Saving draft…');
     const body = {
       configuration_fingerprint: fingerprint,
       observations: collectObservations()
@@ -600,12 +690,12 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     let retryDraft = false;
     try {
       await draftSavePromise;
-      draftStatus.textContent = 'Draft saved';
+      setDraftStatus('Draft saved');
     } catch (error) {
       saveFailed = true;
       retryDraft = Boolean(error.transient);
       draftDirty = true;
-      draftStatus.textContent = 'Draft not saved';
+      setDraftStatus('Draft not saved');
       showMessage(error.message, 'warning');
       if (error.reloadRequired) reloadForConfigurationChange(error.message);
     } finally {
@@ -620,7 +710,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   function scheduleDraft(delay = 450) {
     if (submitting) return;
     draftDirty = true;
-    draftStatus.textContent = 'Unsaved changes';
+    setDraftStatus('Unsaved changes');
     window.clearTimeout(draftTimer);
     draftTimer = window.setTimeout(flushDraft, delay);
   }
@@ -682,8 +772,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     const graded = editablePanels.filter(panel => Boolean(selectedGrade(panel))).length;
     const total = editablePanels.length;
     const gradedImages = editableImagePanels.filter(panel => Boolean(selectedGrade(panel))).length;
-    root.querySelector('[data-workbench-progress]').textContent =
+    const progressBadge = root.querySelector('[data-workbench-progress]');
+    progressBadge.querySelector('.gwb-full').textContent =
       `${gradedImages} of ${editableImagePanels.length} images graded · ${editableImagePanels.length - gradedImages} pending · ${graded} of ${total} targets`;
+    progressBadge.querySelector('.gwb-short').textContent = `${gradedImages}/${editableImagePanels.length}`;
     panels.forEach((panel, index) => {
       root.querySelector(`[data-workbench-target="${index}"]`)?.classList.toggle('is-graded', Boolean(selectedGrade(panel)));
       const grade = window.linkedGradingData[panel.dataset.taskUuid]?.features.find(
@@ -729,6 +821,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
         window.linkedGradingData[panel.dataset.taskUuid].existingSelectedFeatures = [];
         renderFeatures(panel);
         updateProgress();
+        const fieldset = panel.querySelector('[data-feature-fieldset]');
+        if (fieldset && !fieldset.classList.contains('d-none')) {
+          window.requestAnimationFrame(() => fieldset.scrollIntoView({block: 'nearest', behavior: 'smooth'}));
+        }
       });
     });
     renderFeatures(panel);
@@ -804,7 +900,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     if (window.bootstrap?.Carousel) {
       carousel = window.bootstrap.Carousel.getOrCreateInstance(
         carouselElement,
-        {interval: false, wrap: false}
+        {interval: false, wrap: false, touch: false}
       );
     }
   }
@@ -817,6 +913,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     activePanelIndex = event.to;
     root.querySelectorAll('[data-workbench-target]').forEach((item, index) => {
       item.classList.toggle('active', index === event.to);
+      if (index === event.to) {
+        const pager = item.parentElement;
+        pager.scrollTo({left: item.offsetLeft - (pager.clientWidth - item.offsetWidth) / 2, behavior: 'smooth'});
+      }
     });
     const activeViewer = panels[event.to]?.querySelector('.imggr-viewer-root');
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
@@ -826,6 +926,39 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   });
   root.querySelectorAll('[data-workbench-target]').forEach(button => {
     button.addEventListener('click', () => carousel?.to(Number(button.dataset.workbenchTarget)));
+  });
+  const narrowLayout = window.matchMedia('(max-width: 991.98px)');
+  function scrollImageIntoView(panel, behavior = 'smooth') {
+    if (!narrowLayout.matches) return;
+    const target = panel?.querySelector('.imggr-main-wrap');
+    const row = target?.closest('.gwb-panel-row');
+    if (!target || !row) return;
+    const offset = target.getBoundingClientRect().top - row.getBoundingClientRect().top + row.scrollTop;
+    row.scrollTo({top: offset, behavior});
+  }
+  window.addEventListener('load', () => scrollImageIntoView(panels[activePanelIndex]), {once: true});
+  // Pre-position the incoming panel while it is still sliding in so the
+  // image top is already in view when the transition ends, with no visible jump.
+  carouselElement.addEventListener('slide.bs.carousel', event => {
+    window.requestAnimationFrame(() => scrollImageIntoView(panels[event.to], 'auto'));
+  });
+  if (window.matchMedia('(max-width: 767.98px)').matches) {
+    root.querySelectorAll('.imggr-annot-sidebar').forEach(sidebar => sidebar.classList.add('is-collapsed'));
+    root.querySelectorAll('[data-annot-toggle]').forEach(button => {
+      button.setAttribute('aria-pressed', 'false');
+      button.classList.remove('active');
+    });
+  }
+  root.querySelectorAll('[data-annot-toggle]').forEach(button => {
+    button.addEventListener('click', () => {
+      const viewer = button.closest('.linked-grading-panel')?.querySelector('.imggr-viewer-root');
+      const sidebar = viewer?.querySelector('.imggr-annot-sidebar');
+      if (!sidebar) return;
+      const collapsed = sidebar.classList.toggle('is-collapsed');
+      button.setAttribute('aria-pressed', String(!collapsed));
+      button.classList.toggle('active', !collapsed);
+      window.requestAnimationFrame(() => viewer.__imggrState?.refreshViewportSize?.());
+    });
   });
   root.querySelectorAll('[data-image-navigate]').forEach(button => {
     button.addEventListener('click', () => {
@@ -860,8 +993,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   });
 
   const expandButton = root.querySelector('[data-workbench-expand]');
+  document.body.classList.toggle('gwb-expanded-lock', root.classList.contains('is-expanded'));
   expandButton.addEventListener('click', () => {
     const expanded = root.classList.toggle('is-expanded');
+    document.body.classList.toggle('gwb-expanded-lock', expanded);
     expandButton.setAttribute('aria-pressed', expanded ? 'true' : 'false');
     expandButton.setAttribute('aria-label', expanded ? 'Restore grading view' : 'Expand grading view');
     expandButton.title = expanded ? 'Restore grading view' : 'Expand grading view';
@@ -1003,7 +1138,8 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const absoluteExpiry = new Date({{ workbench.lease.absolute_expires_at|tojson }});
   function updateStatus() {
     const minutes = Math.max(0, Math.ceil((absoluteExpiry - new Date()) / 60000));
-    status.textContent = `${minutes} min maximum remaining`;
+    status.querySelector('.gwb-full').textContent = `${minutes} min maximum remaining`;
+    status.querySelector('[data-lease-short]').textContent = `${minutes}m`;
   }
   updateStatus();
   setInterval(updateStatus, 30000);

@@ -143,16 +143,6 @@ Success response: `200 OK`
       "camera_ids": [3],
       "area_ids": [4],
       "upload_kinds": ["direct_image"],
-      "ai_workflows": [
-        {
-          "id": 8,
-          "disease_id": 2,
-          "ai_model_id": 5,
-          "ai_model_name": "Glaucoma Screening MOHFW Wadhwani AI Model",
-          "upload_kind": "direct_image",
-          "active": true
-        }
-      ],
       "allow_mydriatic": true,
       "allow_non_mydriatic": true,
       "default_is_mydriatic": false
@@ -160,6 +150,12 @@ Success response: `200 OK`
   ]
 }
 ```
+
+Not yet emitted: a per-profile `ai_workflows` array (`upload_profile_ai_workflows`
+exists as a table but is not modelled or serialized). Clients must treat it as
+absent; the Flutter app parses it defensively and does not depend on it. Which
+AI workflows a *project* enables is available from `/field/projects` and
+`/context/me` (`projects[].ai_workflows`).
 
 The response is built from active upload profiles and explicit lab-unit assignment. Admin, local-admin, and data-manager roles do not add upload profiles without an explicit lab-unit assignment. Filters trim `profiles` first, then rebuild the option arrays from the remaining profiles so clients do not display stale projects, lab units, diseases, cameras, or areas.
 

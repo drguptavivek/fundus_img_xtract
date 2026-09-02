@@ -13,6 +13,8 @@ land back on the requested case after sign-in.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from flask import (
     Blueprint,
     current_app,
@@ -31,6 +33,7 @@ from db_transaction_manager import transaction_scope
 from grading.dashboard_service import grading_history_page
 from grading.queue_cards import disease_queue_card, grader_queue_overview
 from grading.workbench.service import list_active_sessions
+from grader_pwa.demo import build_demo_workbench
 from grading.workbench_page import (
     open_linked_followup_workbench,
     open_next_workbench,
@@ -46,9 +49,9 @@ GRADING_ROLES = ("ophthalmologist", "field_ophthalmologist")
 ROLE_SLOTS = frozenset({"resident", "resident2", "arbitrator"})
 HISTORY_PER_PAGE = 20
 
-# Colours mirror the dark Bootstrap build (``--bs-body-bg``) so the splash and
-# title bar match the page; the viewer stage itself stays black.
-THEME_COLOR = "#212529"
+# Mirrors ``--bs-body-bg`` of the dark Bootstrap build (static/css/bootstrap.min.css)
+# so the splash and title bar match the page; the viewer stage itself stays black.
+THEME_COLOR = "#151c20"
 
 
 def _endpoints() -> dict[str, str]:
@@ -72,7 +75,7 @@ def shell_assets() -> dict[str, str]:
     version bump can never leave the worker caching a URL the pages no longer use.
     """
     version = current_app.config.get("ASSETS_VERSION", "") or ""
-    pwa_version = f"{version}-grader-pwa-v1"
+    pwa_version = f"{version}-grader-pwa-v2"
 
     def static(filename: str, v: str = version) -> str:
         return url_for("static", filename=filename, v=v)
@@ -165,6 +168,26 @@ def service_worker():
 @bp.get("/offline")
 def offline():
     return render_template("grader_pwa/offline.html")
+
+
+@bp.get("/demo")
+def demo_page():
+    """Public demo: the real workbench over a synthetic encounter set; nothing is saved."""
+    with transaction_scope() as db:
+        workbench = build_demo_workbench(db).to_dict()
+    response = make_response(
+        render_template(
+            "grader_pwa/workbench.html",
+            workbench=workbench,
+            session_token="demo",
+            submission_idempotency_key=str(uuid4()),
+            workbench_dashboard_url=url_for("grader_pwa.demo_page"),
+            workbench_url_template=None,
+            demo=True,
+        )
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # --------------------------------------------------------------------------- #

@@ -69,6 +69,23 @@ body.gpwa label.btn {
 .gpwa-tabbar a.active { color: var(--bs-primary); font-weight: 600; }
 .gpwa-history-item { border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .75rem; }
 
+/* ---- Demo banner ---- */
+.gpwa-demo-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(.5rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 2100;
+  padding: .3rem .75rem;
+  border-radius: 999px;
+  background: var(--bs-warning);
+  color: #000;
+  font-size: .75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* ---- Workbench host ---- */
 body.gpwa-workbench { overflow: hidden; }
 body.gpwa-workbench .gwb-shell.is-expanded {
@@ -157,13 +174,96 @@ body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
     background: var(--bs-border-color);
   }
 
-  /* Annotate mode: the sheet steps aside; the editor's own sidebar becomes the tool panel. */
+  /* Annotate mode: the sheet steps aside and the editor's own sidebar is laid
+     over the image - tools on a right-edge rail, class / instance / actions as
+     translucent strips top-left, sliders bottom-left, Done along the bottom.
+     Only placement changes; every control is the editor's, untouched. */
   body.gpwa-workbench .gpwa-annotating .gwb-grade-card,
   body.gpwa-workbench .gpwa-annotating .gwb-footer { display: none !important; }
-  body.gpwa-workbench .imggr-annot-sidebar { max-height: 42dvh; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: auto !important;
+    max-height: none;
+    padding: .35rem 3.9rem 3.3rem .35rem !important;
+    border: 0 !important;
+    background: transparent !important;
+    overflow: hidden;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .35rem;
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-panel { display: contents !important; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar > *,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-panel > * { pointer-events: auto; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-feature-row:has(> .fw-semibold) { display: none; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-annotation-placeholder],
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-policy-status],
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-feature-row,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-ann-actions,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-slider-row {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    color: #dee2e6;
+    background: rgba(33,37,41,.85);
+    border-radius: .5rem;
+    padding: .25rem .4rem;
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-feature-row .fgx-block-label { display: none; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .form-select { min-height: 40px; flex: 1 1 auto; min-width: 0; max-width: 14rem; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-ann-actions .btn { width: 44px; height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-slider-row:nth-child(1 of .fgx-slider-row) { margin-top: auto; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-panel > .w-100 { display: none; }
+  /* The rail: pointer / assert / undo, then box, then the segmentation tools. */
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category {
+    position: absolute;
+    right: .35rem;
+    width: 3.25rem;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: .15rem;
+    padding: .25rem !important;
+    border: 0 !important;
+    border-radius: .75rem;
+    background: rgba(33,37,41,.85);
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row { top: .35rem; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-tool-category="bounding-box"] { top: calc(.7rem + 145px); }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-tool-category="segmentation"] {
+    top: calc(1.05rem + 197px);
+    max-height: calc(100% - 1.4rem - 197px);
+    overflow-y: auto;
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .fgx-block-label { display: none; }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row .btn,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: .5rem;
+    background: transparent;
+    color: #dee2e6;
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row .btn.active,
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .btn.active {
+    background: var(--bs-primary);
+    color: #fff;
+  }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .btn .ms-1 { display: none; }
+  .gpwa-annotate-done { position: absolute; left: .35rem; right: 3.9rem; bottom: .35rem; min-height: 44px; margin-top: 0 !important; }
   body.gpwa-workbench .imggr-annot-sidebar .btn { min-width: 44px; min-height: 44px; }
   body.gpwa-workbench .imggr-annot-sidebar .form-select { min-height: 44px; }
-  .gpwa-annotate-done { width: 100%; min-height: 44px; }
 }
 
 /* Tablets and up: the desktop workbench with touch-sized controls. */

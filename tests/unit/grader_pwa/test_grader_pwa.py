@@ -39,7 +39,7 @@ def test_manifest_is_public_and_scoped_to_grader(client):
     assert manifest["scope"] == "/grader/"
     assert manifest["start_url"].startswith("/grader/")
     assert manifest["display"] == "standalone"
-    assert manifest["theme_color"] == manifest["background_color"] == "#212529"
+    assert manifest["theme_color"] == manifest["background_color"] == "#151c20"
     purposes = {icon.get("purpose", "any") for icon in manifest["icons"]}
     assert {"any", "maskable"} <= purposes
     for icon in manifest["icons"]:
@@ -316,3 +316,89 @@ def test_pwa_and_web_workbench_templates_render_the_same_body(app, db_session, o
     assert '"dashboardUrl": "/grading/"' in web
     assert '"workbenchUrlTemplate": null' in web
     assert "navbar" not in pwa and "navbar" in web
+
+
+# --------------------------------------------------------------------------- #
+# Demo mode
+# --------------------------------------------------------------------------- #
+
+
+def test_demo_is_public_and_renders_a_full_encounter_set(client):
+    response = client.get("/grader/demo")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    page = response.get_data(as_text=True)
+    # Two disease scopes, each with four image targets and one encounter target.
+    assert page.count('data-target-level="image"') == 8
+    assert page.count('data-target-level="encounter"') == 2
+    assert page.count('data-scope-id="1"') == 5 and page.count('data-scope-id="2"') == 5
+    assert '"demo": true' in page
+    assert "Demo · synthetic images · nothing is saved" in page
+    assert "window.currentUserId = null;" in page
+    for name in ("od-disc.png", "od-macula.png", "os-disc.png", "os-macula.png"):
+        assert f"/static/grader-pwa/demo/{name}" in page
+        assert (ROOT / "static/grader-pwa/demo" / name).is_file()
+
+
+def test_demo_uses_configured_schemes_when_present(app, db_session, monkeypatch):
+    import grader_pwa.demo as demo_module
+    from models import Disease, DiseaseGrading
+
+    image_disease = Disease(name="PWA Demo Image", grading_scope="image")
+    encounter_disease = Disease(name="PWA Demo Encounter", grading_scope="encounter")
+    db_session.add_all([image_disease, encounter_disease])
+    db_session.flush()
+    db_session.add_all([
+        DiseaseGrading(disease_id=image_disease.id, impression="Configured image grade", display_order=1, is_active=True),
+        DiseaseGrading(disease_id=image_disease.id, impression="Retired grade", display_order=2, is_active=False),
+        DiseaseGrading(disease_id=encounter_disease.id, impression="Configured set grade", display_order=1, is_active=True),
+    ])
+    db_session.flush()
+    monkeypatch.setattr(
+        demo_module,
+        "DEMO_SCOPES",
+        (("PWA Demo Image", "PWA Demo Encounter"), ("Glaucoma", "Glaucoma Encounter Status")),
+    )
+
+    with app.test_request_context("/grader/demo"):
+        workbench = demo_module.build_demo_workbench(db_session)
+
+    configured = [panel for panel in workbench.panels if panel.scope_id == 1]
+    assert [grade.impression for grade in configured[0].grades] == ["Configured image grade"]
+    assert [grade.impression for grade in configured[-1].grades] == ["Configured set grade"]
+    assert configured[0].disease_id == image_disease.id
+    assert configured[-1].disease_id == encounter_disease.id
+    # "Glaucoma Encounter Status" is not seeded here, so that target uses the fallback.
+    glaucoma = [panel for panel in workbench.panels if panel.scope_id == 2]
+    assert glaucoma[-1].grades[0].id < 0
+    assert [grade.impression for grade in glaucoma[-1].grades] == ["Normal", "Glaucoma/Suspect", "Cannot Grade"]
+
+
+def test_session_controller_answers_api_locally_in_demo_mode():
+    controller = (ROOT / "static/js/grading-workbench-session.js").read_text()
+
+    assert "if (config.demo) return demoApi(path, options);" in controller
+    assert "next_workbench: null" in controller
+
+
+def test_overlay_canvas_is_viewport_clipped_and_capped():
+    """Coordinate/memory audit (2026-09-02): the annotation overlay must cover
+    only the visible part of the image, carry the offset in the context
+    transform, and cap its backing store - a zoomed 4K image previously
+    allocated a canvas the size of the whole scaled image."""
+    editor = (ROOT / "static/js/feature-geometry-editor.js").read_text()
+
+    assert "const MAX_CANVAS_SCALE = 2;" in editor
+    assert "const MAX_CANVAS_PIXELS = 4096 * 4096;" in editor
+    assert "const visLeft = Math.max(m.drawRect.left, m.mainRect.left);" in editor
+    assert "state.ctx.setTransform(scale, 0, 0, scale, -offsetX * scale, -offsetY * scale);" in editor
+    assert "state.ctx.clearRect(0, 0, state.canvas.width, state.canvas.height);" in editor
+    # Coordinate projections stay in CSS pixels, independent of devicePixelRatio.
+    assert "const x = ((clientX - m.drawRect.left) / m.drawRect.width) * m.naturalWidth;" in editor
+
+
+def test_encounter_targets_never_mount_into_another_sidebar():
+    editor = (ROOT / "static/js/feature-geometry-editor.js").read_text()
+
+    assert 'return panelRoot.querySelector("[data-geometry-sidebar-host]");' in editor

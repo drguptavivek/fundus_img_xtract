@@ -1,7 +1,7 @@
 /* Grader PWA service worker (rendered by Flask so asset versions match the layout).
  * Caches the app shell only. Every /api/ call, every image, and every authenticated
  * page goes to the network - no PHI ever enters CacheStorage. */
-const VERSION = {{ (config.get('ASSETS_VERSION', '') ~ '-grader-pwa-v1')|tojson }};
+const VERSION = {{ (config.get('ASSETS_VERSION', '') ~ '-grader-pwa-v2')|tojson }};
 const SHELL_CACHE = `grader-shell-${VERSION}`;
 const OFFLINE_URL = {{ offline_url|tojson }};
 const SHELL_ASSETS = {{ shell_assets|tojson }};

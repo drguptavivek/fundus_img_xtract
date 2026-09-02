@@ -113,7 +113,11 @@
     });
   }
 
-  if (phone.matches) {
+  function setupPhoneLayout() {
     panels.forEach(panel => { setupSheet(panel); setupAnnotateMode(panel); });
   }
+  if (phone.matches) setupPhoneLayout();
+  // Rotating a tablet or resizing a window can cross the phone breakpoint after
+  // load; both setups are idempotent, so re-run them when it does.
+  phone.addEventListener('change', event => { if (event.matches) setupPhoneLayout(); });
 })();

@@ -603,6 +603,7 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/grader/manifest.webmanifest",
         "/grader/sw.js",
         "/grader/offline",
+        "/grader/demo",
     }
 )
 PUBLIC_SESSION_PREFIXES = ("/static/", "/help")

@@ -5,5 +5,10 @@
 <link rel="stylesheet" href="{{ pwa_assets.workbench_css }}">
 {% endblock %}
 {% block content %}
+{% if demo %}
+<div class="gpwa-demo-banner" role="status">
+  <i class="fa-solid fa-flask me-1" aria-hidden="true"></i>Demo · synthetic images · nothing is saved
+</div>
+{% endif %}
 {% include "grading/_workbench_body.html" %}
 {% endblock %}

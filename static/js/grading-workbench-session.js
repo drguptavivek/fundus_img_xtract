@@ -475,7 +475,23 @@
     });
   });
 
+  // Demo mode (grader PWA /grader/demo): the workbench runs against a synthetic
+  // encounter set with no server lease, so every API call is answered locally.
+  function demoApi(path, options) {
+    const delay = 250 + Math.random() * 250;
+    return new Promise(resolve => window.setTimeout(() => {
+      if (path.endsWith('/submit')) {
+        resolve({ success: true, event_uuid: 'demo', idempotent_replay: false, next_workbench: null });
+      } else if (path.endsWith('/draft')) {
+        resolve({ success: true, draft: { saved_at: new Date().toISOString(), demo: true } });
+      } else {
+        resolve({ success: true, lease: {} });
+      }
+    }, delay));
+  }
+
   async function api(path, options) {
+    if (config.demo) return demoApi(path, options);
     let response;
     try {
       response = await fetch(path, {...options, headers});

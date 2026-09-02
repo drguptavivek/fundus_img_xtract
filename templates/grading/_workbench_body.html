@@ -420,7 +420,8 @@
     'dashboardUrl': workbench_dashboard_url|default(url_for('grading.index')),
     'workbenchUrlTemplate': workbench_url_template|default(none),
     'absoluteExpiresAt': workbench.lease.absolute_expires_at,
-    'heartbeatIntervalSeconds': workbench.lease.heartbeat_interval_seconds
+    'heartbeatIntervalSeconds': workbench.lease.heartbeat_interval_seconds,
+    'demo': demo|default(false)
   }|tojson }}</script>
 </div>
 
@@ -438,13 +439,13 @@ window.linkedGradingData = {
   }{% if not loop.last %},{% endif %}
   {% endfor %}
 };
-window.currentUserId = {{ current_user.id|tojson }};
+window.currentUserId = {{ (current_user.id if current_user.is_authenticated else none)|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4')) }}" defer></script>
-{% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2-pan-v1' %}
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5')) }}" defer></script>
+{% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v3-viewport-canvas-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>
-<script src="{{ url_for('static', filename='js/grading-workbench-session.js', v=(config.get('ASSETS_VERSION','') ~ '-workbench-session-v1')) }}"></script>
+<script src="{{ url_for('static', filename='js/grading-workbench-session.js', v=(config.get('ASSETS_VERSION','') ~ '-workbench-session-v2')) }}"></script>

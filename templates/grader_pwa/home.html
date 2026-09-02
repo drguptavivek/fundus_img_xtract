@@ -63,6 +63,16 @@
     {% endfor %}
   </section>
 
+  <section class="mb-4" aria-label="Demo">
+    <a class="gpwa-queue text-decoration-none text-body" href="{{ url_for('grader_pwa.demo_page') }}">
+      <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold">Try the demo</div>
+        <div class="small text-body-secondary">A synthetic encounter set to practise grading and annotation. Nothing is saved.</div>
+      </div>
+      <i class="fa-solid fa-chevron-right text-body-secondary" aria-hidden="true"></i>
+    </a>
+  </section>
+
   {% if project_queues %}
   <section class="mb-4" aria-label="Project encounter sets">
     <h2 class="gpwa-section">Project encounter sets</h2>

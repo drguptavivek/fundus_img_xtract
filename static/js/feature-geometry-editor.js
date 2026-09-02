@@ -1217,11 +1217,13 @@
 
   function resolveSidebarHost(ctx) {
     if (!ctx) return null;
-    // Linked grading: mount controls inside this context's own panel.
+    // Linked grading: mount controls inside this context's own panel. A panel
+    // without a host (an encounter-level target has no image) gets no
+    // controls at all - falling through would mount them into another
+    // target's sidebar.
     const panelRoot = ctx.sectionEl?.closest(".linked-grading-panel");
     if (panelRoot) {
-      const host = panelRoot.querySelector("[data-geometry-sidebar-host]");
-      if (host) return host;
+      return panelRoot.querySelector("[data-geometry-sidebar-host]");
     }
     // Single grading: mount within current viewer root when present.
     const viewerHost = state.viewerRoot?.querySelector("[data-geometry-sidebar-host]");
@@ -3232,26 +3234,44 @@
     return [[minX, minY], [maxX, maxY]];
   }
 
+  // Backing-store limits for the overlay canvas. Above 2x the extra device
+  // pixels are invisible for 2px strokes, and the area cap keeps a zoomed-in
+  // 4K image from allocating hundreds of megabytes on a phone.
+  const MAX_CANVAS_SCALE = 2;
+  const MAX_CANVAS_PIXELS = 4096 * 4096;
+
   function ensureCanvasSize() {
     if (!state.canvas || !state.main || !state.mainImg) return;
     const m = getImageMetrics();
     if (!m) return;
-    const left = m.drawRect.left - m.mainRect.left;
-    const top = m.drawRect.top - m.mainRect.top;
-    const cssW = Math.max(1, m.drawRect.width);
-    const cssH = Math.max(1, m.drawRect.height);
-    state.canvas.style.left = `${left}px`;
-    state.canvas.style.top = `${top}px`;
+    // The canvas covers only the part of the drawn image that is inside the
+    // viewer (the rest is clipped by .imggr-main anyway). Drawing code keeps
+    // working in draw-rect coordinates: the context transform carries the
+    // offset, so zooming to 400% no longer allocates a canvas the size of the
+    // whole scaled image, and panning never reallocates it.
+    const visLeft = Math.max(m.drawRect.left, m.mainRect.left);
+    const visTop = Math.max(m.drawRect.top, m.mainRect.top);
+    const visRight = Math.min(m.drawRect.left + m.drawRect.width, m.mainRect.left + m.mainRect.width);
+    const visBottom = Math.min(m.drawRect.top + m.drawRect.height, m.mainRect.top + m.mainRect.height);
+    const cssW = Math.max(1, visRight - visLeft);
+    const cssH = Math.max(1, visBottom - visTop);
+    const offsetX = visLeft - m.drawRect.left;
+    const offsetY = visTop - m.drawRect.top;
+    state.canvas.style.left = `${visLeft - m.mainRect.left}px`;
+    state.canvas.style.top = `${visTop - m.mainRect.top}px`;
     state.canvas.style.width = `${cssW}px`;
     state.canvas.style.height = `${cssH}px`;
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(cssW * dpr));
-    const h = Math.max(1, Math.round(cssH * dpr));
+    let scale = Math.min(window.devicePixelRatio || 1, MAX_CANVAS_SCALE);
+    if (cssW * cssH * scale * scale > MAX_CANVAS_PIXELS) {
+      scale = Math.sqrt(MAX_CANVAS_PIXELS / (cssW * cssH));
+    }
+    const w = Math.max(1, Math.round(cssW * scale));
+    const h = Math.max(1, Math.round(cssH * scale));
     if (state.canvas.width !== w || state.canvas.height !== h) {
       state.canvas.width = w;
       state.canvas.height = h;
     }
-    state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.ctx.setTransform(scale, 0, 0, scale, -offsetX * scale, -offsetY * scale);
   }
 
   function redraw() {
@@ -3274,8 +3294,11 @@
   function drawNow() {
     if (!state.ctx || !state.canvas) return;
     ensureCanvasSize();
-    const canvasRect = state.canvas.getBoundingClientRect();
-    state.ctx.clearRect(0, 0, canvasRect.width, canvasRect.height);
+    // Clear in device pixels: the live transform is offset to the visible area.
+    state.ctx.save();
+    state.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    state.ctx.clearRect(0, 0, state.canvas.width, state.canvas.height);
+    state.ctx.restore();
     hideBoxActions();
     clearLoupeOverlay();
 

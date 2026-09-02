@@ -1,0 +1,119 @@
+/* Grader PWA shell behaviour: service worker + update prompt, screen wake lock
+ * while a session is open, and the phone bottom-sheet / annotate mode over the
+ * shared workbench markup. Grading logic lives in grading-workbench-session.js. */
+(function () {
+  const body = document.body;
+
+  // ---- Service worker: app shell only; prompt to reload when a new build lands ----
+  if ('serviceWorker' in navigator && body.dataset.swUrl) {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker.register(body.dataset.swUrl, { scope: body.dataset.swScope || '/grader/' })
+      .then(registration => {
+        const offerUpdate = worker => {
+          if (!navigator.serviceWorker.controller || !worker) return;
+          const container = document.getElementById('flash-toasts');
+          if (!container) return;
+          const toast = document.createElement('div');
+          toast.className = 'toast text-bg-info border-0 shadow-sm small';
+          toast.setAttribute('role', 'status');
+          toast.innerHTML = '<div class="d-flex align-items-center"><div class="toast-body py-1">A new version is ready.</div>'
+            + '<button type="button" class="btn btn-sm btn-light ms-auto me-2" data-pwa-reload>Reload</button></div>';
+          toast.querySelector('[data-pwa-reload]').addEventListener('click', () => worker.postMessage({ type: 'SKIP_WAITING' }));
+          container.appendChild(toast);
+          if (window.bootstrap?.Toast) window.bootstrap.Toast.getOrCreateInstance(toast, { autohide: false }).show();
+        };
+        if (registration.waiting) offerUpdate(registration.waiting);
+        registration.addEventListener('updatefound', () => {
+          const worker = registration.installing;
+          worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed') offerUpdate(registration.waiting || worker);
+          });
+        });
+      })
+      .catch(() => undefined);
+  }
+
+  const workbench = document.getElementById('grading-workbench');
+  if (!workbench) return;
+
+  // ---- Keep the screen (and the lease heartbeat) alive while grading ----
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator) || document.hidden) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (_) { wakeLock = null; }
+  }
+  requestWakeLock();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !wakeLock) requestWakeLock();
+  });
+
+  // ---- Phone layout: grade card as a bottom sheet, sidebar as annotate mode ----
+  const phone = window.matchMedia('(max-width: 767.98px)');
+  const panels = Array.from(workbench.querySelectorAll('[data-task-uuid]'));
+
+  function setupSheet(panel) {
+    const card = panel.querySelector('.gwb-grade-card');
+    const header = card?.querySelector('.card-header');
+    if (!card || !header || card.querySelector('.gpwa-sheet-handle')) return;
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'gpwa-sheet-handle';
+    handle.setAttribute('aria-label', 'Show or hide features and comment');
+    handle.setAttribute('aria-expanded', 'false');
+    header.prepend(handle);
+    card.classList.add('is-peek');
+    const setOpen = open => {
+      card.classList.toggle('is-peek', !open);
+      handle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const viewer = panel.querySelector('.imggr-viewer-root');
+      window.requestAnimationFrame(() => viewer?.__imggrState?.refreshViewportSize?.());
+    };
+    handle.addEventListener('click', () => setOpen(card.classList.contains('is-peek')));
+    // Choosing a grade that carries features opens the sheet so they are not missed.
+    panel.querySelectorAll('[data-grade-option]').forEach(option => {
+      option.addEventListener('change', () => {
+        window.requestAnimationFrame(() => {
+          const fieldset = panel.querySelector('[data-feature-fieldset]');
+          if (fieldset && !fieldset.classList.contains('d-none')) setOpen(true);
+        });
+      });
+    });
+  }
+
+  function setupAnnotateMode(panel) {
+    const toggle = panel.querySelector('[data-annot-toggle]');
+    const host = panel.querySelector('[data-geometry-sidebar-host]');
+    if (!toggle || !host || host.querySelector('.gpwa-annotate-done')) return;
+    const done = document.createElement('button');
+    done.type = 'button';
+    done.className = 'btn btn-success gpwa-annotate-done mt-2';
+    done.innerHTML = '<i class="fa-solid fa-check me-1" aria-hidden="true"></i>Done annotating';
+    host.appendChild(done);
+    // The Tools toggle already shows/hides the editor sidebar; annotate mode
+    // additionally hides the grade sheet so the image keeps the screen.
+    toggle.addEventListener('click', () => {
+      window.requestAnimationFrame(() => {
+        const sidebar = panel.querySelector('.imggr-annot-sidebar');
+        const open = sidebar && !sidebar.classList.contains('is-collapsed');
+        panel.classList.toggle('gpwa-annotating', Boolean(open) && phone.matches);
+      });
+    });
+    done.addEventListener('click', () => {
+      panel.classList.remove('gpwa-annotating');
+      const sidebar = panel.querySelector('.imggr-annot-sidebar');
+      if (sidebar && !sidebar.classList.contains('is-collapsed')) toggle.click();
+    });
+  }
+
+  if (phone.matches) {
+    panels.forEach(panel => { setupSheet(panel); setupAnnotateMode(panel); });
+  }
+})();

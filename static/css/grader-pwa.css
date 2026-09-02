@@ -1,0 +1,174 @@
+/* Grader PWA shell. Dark-only; layered over app.css and grading-workbench.css.
+   Nothing here restyles the image filters, grade options or annotation tools -
+   only where they sit and how large the touch targets are. */
+
+body.gpwa {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+body.gpwa .btn,
+body.gpwa button,
+body.gpwa label.btn {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- Pages (home, history, offline) ---- */
+.gpwa-page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: calc(.75rem + env(safe-area-inset-top)) 1rem calc(4.75rem + env(safe-area-inset-bottom));
+}
+.gpwa-section {
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin-bottom: .5rem;
+}
+.gpwa-resume {
+  border: 1px solid var(--bs-primary-border-subtle);
+  background: var(--bs-primary-bg-subtle);
+  border-radius: .5rem;
+  padding: .75rem .875rem;
+}
+.gpwa-queue {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: .5rem;
+}
+.gpwa-queue .btn { min-height: 44px; white-space: nowrap; }
+.gpwa-tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 1030;
+  display: flex;
+  border-top: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  padding: .25rem .5rem calc(.25rem + env(safe-area-inset-bottom));
+}
+.gpwa-tabbar a {
+  flex: 1 1 0;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .15rem;
+  font-size: .7rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+.gpwa-tabbar a i { font-size: 1.15rem; }
+.gpwa-tabbar a.active { color: var(--bs-primary); font-weight: 600; }
+.gpwa-history-item { border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .75rem; }
+
+/* ---- Workbench host ---- */
+body.gpwa-workbench { overflow: hidden; }
+body.gpwa-workbench .gwb-shell.is-expanded {
+  padding: calc(.25rem + env(safe-area-inset-top)) .25rem calc(.25rem + env(safe-area-inset-bottom));
+}
+body.gpwa-workbench [data-workbench-expand] { display: none; }
+body.gpwa-workbench .imggr-main { touch-action: none; }
+body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
+
+/* Phones: the image takes every pixel the grade sheet does not. */
+@media (max-width: 767.98px) {
+  body.gpwa-workbench .gwb-panel-row {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+  }
+  body.gpwa-workbench .gwb-panel-row > [class*="col-"] {
+    padding: 0;
+    min-height: 0;
+  }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-8 {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-4 { flex: 0 0 auto; }
+  body.gpwa-workbench .gwb-viewer-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100% !important;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: #000;
+  }
+  body.gpwa-workbench .gwb-viewer-card > .card-header { display: none; }
+  body.gpwa-workbench .gwb-viewer-body { overflow: hidden; }
+  body.gpwa-workbench .gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; }
+  body.gpwa-workbench .gwb-viewer-body .imggr-stage,
+  body.gpwa-workbench .gwb-viewer-body .imggr-annot-layout,
+  body.gpwa-workbench .gwb-viewer-body .imggr-main-wrap { height: 100%; }
+  body.gpwa-workbench .gwb-viewer-body .imggr-main { height: 100%; }
+  body.gpwa-workbench .gwb-viewer-toolbar { order: 2; margin-top: .35rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-filters .btn { min-height: 2.75rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-loupe-toggle { display: inline-flex; }
+
+  /* Grade card as a bottom sheet: peeked shows grade options + actions only. */
+  body.gpwa-workbench .gwb-grade-card {
+    display: flex;
+    flex-direction: column;
+    max-height: 68dvh;
+    height: auto !important;
+    border: 0;
+    border-top: 1px solid var(--bs-border-color);
+    border-radius: .875rem .875rem 0 0;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, .35);
+    overflow: hidden;
+  }
+  body.gpwa-workbench .gwb-grade-card .card-header { padding-top: 0 !important; padding-bottom: 0 !important; }
+  body.gpwa-workbench .gwb-grade-card .card-body { overflow-y: auto; padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom)); }
+  body.gpwa-workbench .gwb-grade-card [data-grade-options] label.btn { min-height: 44px; }
+  body.gpwa-workbench .gwb-grade-card.is-peek [data-feature-fieldset],
+  body.gpwa-workbench .gwb-grade-card.is-peek [data-grade-guidelines],
+  body.gpwa-workbench .gwb-grade-card.is-peek .gwb-comment,
+  body.gpwa-workbench .gwb-grade-card.is-peek label[for^="comment-"],
+  body.gpwa-workbench .gwb-grade-card.is-peek [data-clear-selection] { display: none !important; }
+  body.gpwa-workbench .gwb-grade-card.is-peek [data-workbench-submit-actions] { margin-top: .5rem !important; }
+  .gpwa-sheet-handle {
+    display: flex;
+    width: 100%;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--bs-secondary-color);
+  }
+  .gpwa-sheet-handle::before {
+    content: '';
+    width: 36px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--bs-border-color);
+  }
+
+  /* Annotate mode: the sheet steps aside; the editor's own sidebar becomes the tool panel. */
+  body.gpwa-workbench .gpwa-annotating .gwb-grade-card,
+  body.gpwa-workbench .gpwa-annotating .gwb-footer { display: none !important; }
+  body.gpwa-workbench .imggr-annot-sidebar { max-height: 42dvh; }
+  body.gpwa-workbench .imggr-annot-sidebar .btn { min-width: 44px; min-height: 44px; }
+  body.gpwa-workbench .imggr-annot-sidebar .form-select { min-height: 44px; }
+  .gpwa-annotate-done { width: 100%; min-height: 44px; }
+}
+
+/* Tablets and up: the desktop workbench with touch-sized controls. */
+@media (min-width: 768px) {
+  body.gpwa-workbench .btn-sm { min-height: 2.25rem; }
+  body.gpwa-workbench [data-grade-options] label.btn { min-height: 44px; }
+  body.gpwa-workbench .gwb-footer .btn { min-height: 44px; }
+}

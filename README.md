@@ -244,6 +244,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Project Annotation Policy and GPU Grading Workbench](docs/16-NewFeature/imageMarking/06-project-annotation-policy.md) - Approved React, TypeScript, PixiJS, and WebGL2 grading-workbench plan with project-resolved tools, normalized annotations, and full-resolution segmentation masks
 - [Project Annotation Policy API](docs/API/project-annotation-policy/README.md) - Implemented project-owned annotation tools/classes, schema exports, and enforcement in the existing HTML grading workflows
 - [Project Grader Allocation](docs/16-NewFeature/grading_allocation/00-overview.md) - Project-scoped resident/arbitrator allocation derived from active Upload & Grading Profile targets, with legacy projectless-task compatibility
+- [Grader PWA](docs/16-NewFeature/grader_pwa/README.md) - Installable same-origin grading client at `/grader/` that reuses the workbench body, filters and session controller; plan in `PLAN.md`
 - [Project Grader Allocation API](docs/API/grading-allocation/README.md) - REST contract, authorization, target shapes, coverage, activation, and error behavior
 - [EncounterSet Grading API](docs/API/encounter-set-grading/README.md) - Mutable effective policy plans, frozen runtime records, and lazy post-revision reconciliation
 - [Grader Dashboard API](docs/API/grading-dashboard/README.md) - Current-user eligibility, daily mixed grading history, filters, pagination, and session trends

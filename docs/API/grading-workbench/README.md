@@ -220,3 +220,21 @@ projection for the existing UI and exports.
 Common conflict codes include `active_session_exists`, `lease_conflict`,
 `session_expired`, `session_superseded`, `configuration_changed`, and
 `annotation_policy_changed`.
+
+## Clients
+
+Two server-rendered hosts consume this API with the same session controller
+(`static/js/grading-workbench-session.js`) and the same body partial
+(`templates/grading/_workbench_body.html`):
+
+- the web workbench at `/grading/workbench/<session_uuid>`;
+- the grader PWA at `/grader/workbench/<session_uuid>` (see
+  `docs/16-NewFeature/grader_pwa/README.md`).
+
+Both authenticate with the normal session cookie and send `X-CSRFToken`,
+`X-Workbench-Token` and `X-Workbench-Generation` on every mutation. The
+`submit` response's `next_workbench.workbench_url` always points at the web
+page; a host that wants Save & Next to stay inside itself passes
+`workbench_url_template` (for example `/grader/workbench/{uuid}`) to the body
+partial and the controller builds the next URL from
+`next_workbench.workbench.lease.session_uuid`.

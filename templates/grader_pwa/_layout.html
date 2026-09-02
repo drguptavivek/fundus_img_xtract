@@ -1,0 +1,53 @@
+{# Grader PWA layout: chrome-less, dark-only, installable. Shares the viewer
+   filter definitions with base.html so every image filter renders identically. #}
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Grader{% endblock %} · Eye Image Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="theme-color" content="{{ pwa_theme_color }}">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Grader">
+  <meta name="robots" content="noindex">
+  <link rel="manifest" href="{{ pwa_manifest_url }}">
+  <link rel="icon" href="{{ pwa_assets.icon_192 }}" type="image/png">
+  <link rel="apple-touch-icon" href="{{ pwa_assets.icon_192 }}">
+  <link rel="stylesheet" href="{{ pwa_assets.bootstrap_css }}">
+  <link rel="stylesheet" href="{{ pwa_assets.fontawesome_css }}">
+  <link rel="stylesheet" href="{{ pwa_assets.app_css }}">
+  {% block extra_styles %}{% endblock %}
+  <link rel="stylesheet" href="{{ pwa_assets.pwa_css }}">
+</head>
+<body class="gpwa bg-body {% block body_classes %}{% endblock %}"
+      data-sw-url="{{ pwa_sw_url }}" data-sw-scope="{{ pwa_scope }}">
+  {# Flash toasts: same container and markup as base.html so flash-toasts.js applies. #}
+  <div id="flash-toasts" class="toast-container position-fixed end-0 p-3"
+       style="z-index:1200; top: calc(env(safe-area-inset-top) + .5rem); --bs-toast-max-width: 300px; --bs-toast-padding-x: .5rem; --bs-toast-padding-y: .25rem;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    {% set cls = {'error': 'danger', 'message': 'info'}.get(category, category) %}
+    <div class="toast text-bg-{{ cls }} border-0 shadow-sm small" role="alert" aria-live="polite" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body py-1">{{ message }}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+    {% endfor %}
+    {% endwith %}
+  </div>
+
+  {% block content %}{% endblock %}
+
+  {% include "_viewer_filter_defs.html" %}
+
+  <script src="{{ pwa_assets.bootstrap_js }}"></script>
+  <script src="{{ pwa_assets.flash_toasts_js }}" defer></script>
+  {% block page_scripts %}{% endblock %}
+  <script src="{{ pwa_assets.pwa_js }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{% extends "grader_pwa/_layout.html" %}
+{% block title %}Offline{% endblock %}
+{% block content %}
+<main class="gpwa-page d-flex flex-column align-items-center justify-content-center text-center" style="min-height: 100dvh;">
+  <img src="{{ pwa_assets.logo }}" alt="" width="72" height="72" class="mb-3">
+  <h1 class="h4 mb-2">You're offline</h1>
+  <p class="text-body-secondary mb-4">Grading holds a live lease on the server, so it needs a connection. Your last draft was saved when the screen was still online.</p>
+  <a class="btn btn-primary" href="{{ url_for('grader_pwa.home') }}">Try again</a>
+</main>
+{% endblock %}

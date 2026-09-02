@@ -1,0 +1,61 @@
+{% extends "grader_pwa/_layout.html" %}
+{% from "grading/_display_labels.html" import grading_slot_label %}
+{% block title %}History{% endblock %}
+{% block content %}
+<main class="gpwa-page">
+  <header class="d-flex align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h4 mb-0">History</h1>
+      <div class="small text-body-secondary">{{ history.selected_date }}{% if history.used_latest_fallback %} · latest grading day{% endif %}</div>
+    </div>
+    <div class="btn-group" role="group" aria-label="Grading day">
+      <a class="btn btn-outline-secondary {{ '' if history.previous_date else 'disabled' }}" href="{{ url_for('grader_pwa.history', date=history.previous_date, type=history.history_type, disease_id=history.disease_id) if history.previous_date else '#' }}" aria-label="Previous day"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></a>
+      <a class="btn btn-outline-secondary {{ '' if history.next_date else 'disabled' }}" href="{{ url_for('grader_pwa.history', date=history.next_date, type=history.history_type, disease_id=history.disease_id) if history.next_date else '#' }}" aria-label="Next day"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
+    </div>
+  </header>
+
+  <form class="d-flex gap-2 mb-3" method="get" action="{{ url_for('grader_pwa.history') }}">
+    <input class="form-control" type="date" name="date" value="{{ history.selected_date }}" aria-label="Grading day">
+    <select class="form-select" name="disease_id" aria-label="Disease">
+      <option value="">All diseases</option>
+      {% for disease in history.available_diseases %}
+      <option value="{{ disease.id }}" {% if disease.id == history.disease_id %}selected{% endif %}>{{ disease.name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-outline-secondary" type="submit">Go</button>
+  </form>
+
+  <div class="small text-body-secondary mb-2">{{ history.total_tasks }} target{{ '' if history.total_tasks == 1 else 's' }} · {{ history.total_images }} image{{ '' if history.total_images == 1 else 's' }}</div>
+
+  {% for item in history.items %}
+  <article class="gpwa-history-item mb-2">
+    <div class="d-flex justify-content-between align-items-baseline gap-2">
+      <div class="fw-semibold text-truncate">{{ item.package_name or item.name or item.type_label }}</div>
+      <div class="small text-body-secondary text-nowrap">{{ item.timestamp | user_datetime }}</div>
+    </div>
+    <div class="small text-body-secondary mb-1">{{ item.type_label }} · {{ grading_slot_label(item.role_slot) }}{% if item.is_revision %} · revision{% endif %}</div>
+    {% for grade in item.set_grades or [] %}
+    <div class="small"><span class="text-body-secondary">Set · {{ grade.disease_name }}:</span> {{ grade.grade or 'Pending' }}</div>
+    {% endfor %}
+    {% for grade in item.image_grades or [] %}
+    <div class="small"><span class="text-body-secondary">Image · {{ grade.disease_name }}:</span> {{ grade.grade or 'Pending' }}</div>
+    {% endfor %}
+    {% if item.grade is defined and not item.set_grades and not item.image_grades %}
+    <div class="small"><span class="text-body-secondary">{{ item.disease_name }}:</span> {{ item.grade or 'Pending' }}</div>
+    {% endif %}
+    {% if item.comment %}<div class="small fst-italic mt-1">{{ item.comment }}</div>{% endif %}
+  </article>
+  {% else %}
+  <div class="alert alert-secondary">No grading on this day.</div>
+  {% endfor %}
+
+  {% if history.total_pages > 1 %}
+  <nav class="d-flex justify-content-between mt-3" aria-label="Pages">
+    <a class="btn btn-outline-secondary {{ '' if history.page > 1 else 'disabled' }}" href="{{ url_for('grader_pwa.history', date=history.selected_date, type=history.history_type, disease_id=history.disease_id, page=history.page - 1) }}">Previous</a>
+    <span class="small text-body-secondary align-self-center">{{ history.page }} / {{ history.total_pages }}</span>
+    <a class="btn btn-outline-secondary {{ '' if history.page < history.total_pages else 'disabled' }}" href="{{ url_for('grader_pwa.history', date=history.selected_date, type=history.history_type, disease_id=history.disease_id, page=history.page + 1) }}">Next</a>
+  </nav>
+  {% endif %}
+</main>
+{% include "grader_pwa/_tabbar.html" %}
+{% endblock %}

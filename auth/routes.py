@@ -352,6 +352,13 @@ def login():
                     sanitize_log_value(user.id),
                 )
 
+                # A same-origin `next` (Flask-Login adds it for protected pages,
+                # e.g. a grader PWA deep link) wins over the role-based landing.
+                from utils.security_middleware import is_safe_url
+                requested_next = request.args.get("next") or request.form.get("next")
+                if requested_next and is_safe_url(requested_next):
+                    return redirect(requested_next)
+
                 # Role-based landing pages
                 if user.has_role('ophthalmologist'):
                     return redirect(url_for("grading.index"))

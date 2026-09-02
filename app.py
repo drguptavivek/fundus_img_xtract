@@ -527,6 +527,7 @@ def _register_blueprints(app: Flask) -> None:
     from dashboard import dashboard_bp
     from api import api_bp
     from api.mobile import mobile_api_bp
+    from grader_pwa import bp as grader_pwa_bp
     from docs import docs_bp
     from datasets import bp as datasets_bp
     from glaucoma_ai import bp as glaucoma_ai_bp
@@ -565,6 +566,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(api_bp)
     csrf.exempt(mobile_api_bp)
     app.register_blueprint(mobile_api_bp)
+    app.register_blueprint(grader_pwa_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(datasets_bp)
     app.register_blueprint(glaucoma_ai_bp)
@@ -597,6 +599,10 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/analytics",
         "/api/public_kpis",
         "/sitemap.xml",
+        # Grader PWA install surface: no PHI, must load before sign-in.
+        "/grader/manifest.webmanifest",
+        "/grader/sw.js",
+        "/grader/offline",
     }
 )
 PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
@@ -646,6 +652,11 @@ def _register_login_guard(app: Flask) -> None:
             session.clear()
             session.modified = True
             mark_session_ended(prior_session_id)
+            # Carry the requested page so a direct link (e.g. into the grader
+            # PWA) lands back where it pointed after sign-in. Only the local
+            # path is passed; the login route re-checks it with is_safe_url.
+            if request.method in ("GET", "HEAD"):
+                return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
             return redirect(url_for("auth.login"))
         if getattr(current_user, "is_active", True) is False:
             cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")

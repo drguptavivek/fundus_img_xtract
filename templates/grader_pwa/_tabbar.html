@@ -1,0 +1,14 @@
+<nav class="gpwa-tabbar" aria-label="Grader navigation">
+  <a href="{{ url_for('grader_pwa.home') }}" class="{{ 'active' if request.endpoint == 'grader_pwa.home' else '' }}">
+    <i class="fa-solid fa-list-check" aria-hidden="true"></i><span>Queues</span>
+  </a>
+  <a href="{{ url_for('grader_pwa.history') }}" class="{{ 'active' if request.endpoint == 'grader_pwa.history' else '' }}">
+    <i class="fa-regular fa-clock" aria-hidden="true"></i><span>History</span>
+  </a>
+  <a href="{{ url_for('grading.index') }}">
+    <i class="fa-solid fa-desktop" aria-hidden="true"></i><span>Web app</span>
+  </a>
+  <a href="{{ url_for('auth.logout') }}">
+    <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i><span>Sign out</span>
+  </a>
+</nav>

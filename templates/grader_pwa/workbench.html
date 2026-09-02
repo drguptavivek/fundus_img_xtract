@@ -1,0 +1,9 @@
+{% extends "grader_pwa/_layout.html" %}
+{% block title %}Grading{% endblock %}
+{% block body_classes %}gpwa-workbench{% endblock %}
+{% block extra_styles %}
+<link rel="stylesheet" href="{{ pwa_assets.workbench_css }}">
+{% endblock %}
+{% block content %}
+{% include "grading/_workbench_body.html" %}
+{% endblock %}

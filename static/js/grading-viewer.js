@@ -2169,7 +2169,11 @@
       if (cdrActive) {
         return;
       }
-      if (isPanLocked()) {
+      // The annotation editor locks one-finger panning while a drawing tool is
+      // active so a finger draws; two fingers always pan and pinch-zoom, and the
+      // editor reads the multi-touch flag to keep the stroke out of the gesture.
+      root.dataset.imggrMultiTouch = e.touches.length >= 2 ? 'true' : 'false';
+      if (isPanLocked() && e.touches.length === 1) {
         return;
       }
       if (e.touches.length === 1) {
@@ -2192,7 +2196,8 @@
       if (cdrActive) {
         return;
       }
-      if (isPanLocked()) {
+      if (e.touches.length >= 2) root.dataset.imggrMultiTouch = 'true';
+      if (isPanLocked() && e.touches.length === 1) {
         return;
       }
       if (e.touches.length === 1 && isDragging) {
@@ -2208,10 +2213,6 @@
         // Save settings to localStorage for rapid loading
         saveViewerSettingsToStorage();
       } else if (e.touches.length === 2) {
-        if (isPanLocked()) {
-          e.preventDefault();
-          return;
-        }
         // Two touches - pinch zoom
         const currentDistance = getTouchDistance(e.touches);
         if (touchStartDistance > 0) {
@@ -2226,6 +2227,7 @@
     function handleTouchEnd(e) {
       isDragging = false;
       touchStartDistance = 0;
+      if (!e.touches || e.touches.length === 0) root.dataset.imggrMultiTouch = 'false';
       if (isLiteMode) {
         saveViewerSettingsToStorage();
       }

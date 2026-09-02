@@ -1,0 +1,91 @@
+{% extends "grader_pwa/_layout.html" %}
+{% from "grading/_display_labels.html" import grading_slot_label %}
+{% block title %}Queues{% endblock %}
+{% block content %}
+<main class="gpwa-page">
+  <header class="d-flex align-items-center justify-content-between gap-3 mb-3">
+    <div class="min-w-0">
+      <h1 class="h4 mb-0">Grading</h1>
+      <div class="small text-body-secondary text-truncate">{{ current_user.username }}</div>
+    </div>
+    <img src="{{ pwa_assets.logo }}" alt="" width="40" height="40">
+  </header>
+
+  {% if sessions %}
+  <section class="mb-4" aria-label="Sessions in progress">
+    {% for item in sessions %}
+    <div class="gpwa-resume mb-2">
+      <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+        <span class="small fw-semibold text-uppercase text-primary-emphasis">Session in progress</span>
+        <span class="small text-body-secondary"><i class="fa-regular fa-clock me-1" aria-hidden="true"></i>until {{ item.absolute_expires_at | user_datetime }}</span>
+      </div>
+      <div class="fw-semibold">{{ grading_slot_label(item.role_slot) }} · {{ item.target_count }} target{{ '' if item.target_count == 1 else 's' }}</div>
+      <a class="btn btn-primary w-100 mt-2" href="{{ url_for('grader_pwa.resume', session_uuid=item.session_uuid) }}">Resume</a>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="mb-4" aria-label="Your queues">
+    <h2 class="gpwa-section">Your queues</h2>
+    {% for card in queues %}
+    <div class="gpwa-queue mb-2">
+      <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold">{{ card.disease.name }}</div>
+        <div class="small text-body-secondary">
+          {{ card.combined_pending }} waiting
+          {% if card.can_arbitrate %}· {{ card.arbitration_pending }} for arbitration{% endif %}
+        </div>
+        {% if card.linked_followups %}
+        <div class="d-flex flex-wrap gap-1 mt-2">
+          {% for item in card.linked_followups %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grader_pwa.linked_followup', primary_disease_id=card.disease.id, linked_disease_id=item.id) }}">
+            {{ item.name }} follow-up ({{ item.count }})
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="d-flex flex-column gap-1">
+        {% if card.combined_pending > 0 %}
+        <a class="btn btn-primary" href="{{ url_for('grader_pwa.start', disease_id=card.disease.id, role_slot='resident') }}">Grade</a>
+        {% endif %}
+        {% if card.can_arbitrate and card.arbitration_pending > 0 %}
+        <a class="btn btn-warning" href="{{ url_for('grader_pwa.start', disease_id=card.disease.id, role_slot='arbitrator') }}">Arbitrate</a>
+        {% endif %}
+        {% if not card.has_work %}
+        <span class="btn btn-outline-secondary disabled" aria-disabled="true">Nothing pending</span>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-secondary mb-0">No grading queues are allocated to you.</div>
+    {% endfor %}
+  </section>
+
+  {% if project_queues %}
+  <section class="mb-4" aria-label="Project encounter sets">
+    <h2 class="gpwa-section">Project encounter sets</h2>
+    {% for queue in project_queues %}
+    <div class="gpwa-queue mb-2">
+      <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold">{{ queue.project.title }}</div>
+        <div class="small text-body-secondary">{{ queue.target.label }}</div>
+      </div>
+      <div class="d-flex flex-column gap-1">
+        {% for slot in queue.slots %}
+        {% if slot.package_count > 0 %}
+        <a class="btn {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
+           href="{{ url_for('grader_pwa.open_package', package_uuid=slot.first_package_uuid, role_slot=slot.slot) }}">
+          {{ grading_slot_label(slot.slot) }} ({{ slot.package_count }})
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+</main>
+{% include "grader_pwa/_tabbar.html" %}
+{% endblock %}

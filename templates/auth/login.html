@@ -38,7 +38,7 @@
             </div>
           {% endif %}
 
-          <form method="post" action="{{ url_for('auth.login') }}" novalidate>
+          <form method="post" action="{{ url_for('auth.login', next=request.args.get('next') or none) }}" novalidate>
             
             {{ csrf_field() }}
 

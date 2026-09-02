@@ -2472,9 +2472,18 @@
     }
   }
 
+  function isSecondaryTouch(event) {
+    // A second finger hands the gesture to the viewer (pan / pinch); the editor
+    // neither starts nor extends a stroke while it is down.
+    if (!event || event.pointerType !== "touch") return false;
+    if (event.isPrimary === false) return true;
+    return state.viewerRoot?.dataset?.imggrMultiTouch === "true";
+  }
+
   function handlePointerDown(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
+    if (isSecondaryTouch(event)) return;
     const mode = effectiveMode();
 
     const point = clientToPixel(event.clientX, event.clientY);
@@ -2739,6 +2748,7 @@
   }
 
   function handlePointerMove(event) {
+    if (isSecondaryTouch(event)) return;
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
     const mode = effectiveMode();

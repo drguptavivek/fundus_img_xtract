@@ -161,6 +161,16 @@ def _b64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
+def _public_key_options(options) -> dict[str, Any]:
+    """The WebAuthn JSON the browser wants: fido2 wraps it as ``{"publicKey": ...}``.
+
+    ``PublicKeyCredential.parseCreationOptionsFromJSON`` / ``parseRequestOptionsFromJSON``
+    take the inner object (challenge and ids already base64url strings).
+    """
+    payload = dict(options)
+    return dict(payload.get("publicKey", payload))
+
+
 def _credentials_for(db, user_id: int) -> list[MobilePasskey]:
     return list(
         db.execute(
@@ -215,7 +225,7 @@ def begin_registration(db, *, user: User) -> dict[str, Any]:
         resident_key_requirement=ResidentKeyRequirement.PREFERRED,
     )
     challenge_id = _store_state("register", state, user.id)
-    return {"challenge_id": challenge_id, "options": dict(options)}
+    return {"challenge_id": challenge_id, "options": _public_key_options(options)}
 
 
 def complete_registration(db, *, user: User, challenge_id: str, credential: dict[str, Any],
@@ -257,7 +267,7 @@ def begin_assertion(db, *, user: User) -> dict[str, Any]:
         user_verification=UserVerificationRequirement.REQUIRED,
     )
     challenge_id = _store_state("assert", state, user.id)
-    return {"challenge_id": challenge_id, "options": dict(options)}
+    return {"challenge_id": challenge_id, "options": _public_key_options(options)}
 
 
 def complete_assertion(db, *, user: User, challenge_id: str, credential: dict[str, Any]) -> MobilePasskey:

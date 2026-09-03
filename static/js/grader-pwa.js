@@ -48,7 +48,9 @@
     });
   });
   const passkeyCard = document.querySelector('[data-passkey-enrol]');
-  if (passkeyCard && auth) {
+  // Passkeys belong to a token sign-in; a web-session visit to /grader/ has no
+  // token to bind one to, so the card stays hidden there.
+  if (passkeyCard && auth && auth.isSignedIn()) {
     const stored = auth.read();
     auth.platformAuthenticatorAvailable().then(ok => {
       if (!ok || stored?.has_passkey) return;

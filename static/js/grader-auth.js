@@ -108,15 +108,20 @@
   async function platformAuthenticatorAvailable() {
     try { return passkeysSupported() && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (_) { return false; }
   }
+  function unwrap(options) {
+    return options && options.publicKey ? options.publicKey : options;
+  }
   function parseCreation(options) {
+    const inner = unwrap(options);
     return PublicKeyCredential.parseCreationOptionsFromJSON
-      ? PublicKeyCredential.parseCreationOptionsFromJSON(options)
-      : decodeOptions(options, ['challenge', 'user.id'], 'excludeCredentials');
+      ? PublicKeyCredential.parseCreationOptionsFromJSON(inner)
+      : decodeOptions(inner, ['challenge', 'user.id'], 'excludeCredentials');
   }
   function parseRequest(options) {
+    const inner = unwrap(options);
     return PublicKeyCredential.parseRequestOptionsFromJSON
-      ? PublicKeyCredential.parseRequestOptionsFromJSON(options)
-      : decodeOptions(options, ['challenge'], 'allowCredentials');
+      ? PublicKeyCredential.parseRequestOptionsFromJSON(inner)
+      : decodeOptions(inner, ['challenge'], 'allowCredentials');
   }
   function b64urlToBytes(value) {
     const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);

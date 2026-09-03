@@ -99,3 +99,39 @@ def test_account_register_options_need_recent_sudo_then_return_webauthn_json(app
     assert "publicKey" not in options
     assert isinstance(options["challenge"], str)
     assert options["authenticatorSelection"]["userVerification"] == "required"
+
+
+def test_passkey_options_for_a_user_with_a_passkey(client, db_session, ophthalmologist_user):
+    """Options come back and the pending ceremony is parked in the session."""
+    from fido2 import cbor
+
+    from passkeys.models import MobilePasskey
+
+    db_session.add(
+        MobilePasskey(
+            user_id=ophthalmologist_user.id,
+            credential_id="dGVzdC1jcmVkZW50aWFs",
+            public_key=cbor.encode({1: 2, 3: -7, -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}),
+            sign_count=0,
+            aaguid="AAAAAAAAAAAAAAAAAAAAAA",
+            label="Test authenticator",
+        )
+    )
+    db_session.flush()
+    db_session.commit()
+    headers = {"X-CSRFToken": _csrf(client)}
+    _prime_captcha(client)
+
+    response = client.post(
+        "/login/passkey/options", json={"username": ophthalmologist_user.username, "captcha": CAPTCHA}, headers=headers
+    )
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["challenge_id"]
+    assert isinstance(payload["options"]["challenge"], str)
+    assert payload["options"]["allowCredentials"][0]["id"] == "dGVzdC1jcmVkZW50aWFs"
+    with client.session_transaction() as sess:
+        pending = sess["passkey_login"]
+        assert pending["user_id"] == ophthalmologist_user.id
+        assert pending["challenge_id"] == payload["challenge_id"]

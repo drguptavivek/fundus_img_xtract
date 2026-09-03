@@ -528,8 +528,9 @@ def login_passkey_options():
             ceremony = passkey_service.begin_assertion(db, user=user)
         except PasskeyError:
             return no_passkey, 404
+        user_id = user.id  # read inside the transaction; the row detaches on exit
     session[PASSKEY_LOGIN_SESSION_KEY] = {
-        "user_id": user.id,
+        "user_id": user_id,
         "username": username,
         "challenge_id": ceremony["challenge_id"],
         "issued_at": int(time.time()),

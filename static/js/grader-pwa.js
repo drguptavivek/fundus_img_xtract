@@ -72,6 +72,9 @@
           await auth.registerPasskey();
           passkeyCard.querySelector('[data-passkey-enrol-status]').textContent = 'Passkey added. You can use it to confirm your identity after a break.';
           button.hidden = true;
+          passkeyCard.querySelector('[data-passkey-enrol-dismiss]')?.setAttribute('hidden', '');
+          // The job is done: let the confirmation read, then take the card away.
+          window.setTimeout(() => { passkeyCard.hidden = true; }, 2500);
         } catch (error) {
           passkeyCard.querySelector('[data-passkey-enrol-status]').textContent = error.message || 'Could not add a passkey.';
           button.disabled = false;

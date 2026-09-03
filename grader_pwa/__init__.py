@@ -53,6 +53,12 @@ HISTORY_PER_PAGE = 20
 # Mirrors ``--bs-body-bg`` of the dark Bootstrap build (static/css/bootstrap.min.css)
 # so the splash and title bar match the page; the viewer stage itself stays black.
 THEME_COLOR = "#151c20"
+PWA_RELEASE = "v12"
+
+
+def pwa_version() -> str:
+    version = current_app.config.get("ASSETS_VERSION", "") or ""
+    return f"{version}-grader-pwa-{PWA_RELEASE}"
 
 
 def _endpoints() -> dict[str, str]:
@@ -76,7 +82,7 @@ def shell_assets() -> dict[str, str]:
     version bump can never leave the worker caching a URL the pages no longer use.
     """
     version = current_app.config.get("ASSETS_VERSION", "") or ""
-    pwa_version = f"{version}-grader-pwa-v11"
+    release_version = pwa_version()
 
     def static(filename: str, v: str = version) -> str:
         return url_for("static", filename=filename, v=v)
@@ -86,12 +92,12 @@ def shell_assets() -> dict[str, str]:
         "fontawesome_css": static("css/fa_7.0.1.all.min.css"),
         "app_css": static("css/app.css"),
         "workbench_css": static("css/grading-workbench.css", f"{version}-workbench-css-v1"),
-        "pwa_css": static("css/grader-pwa.css", pwa_version),
+        "pwa_css": static("css/grader-pwa.css", release_version),
         "bootstrap_js": static("js/bootstrap.bundle.min.js"),
         "flash_toasts_js": static("js/flash-toasts.js"),
-        "pwa_js": static("js/grader-pwa.js", pwa_version),
-        "webauthn_js": static("js/webauthn.js", pwa_version),
-        "auth_js": static("js/grader-auth.js", pwa_version),
+        "pwa_js": static("js/grader-pwa.js", release_version),
+        "webauthn_js": static("js/webauthn.js", release_version),
+        "auth_js": static("js/grader-auth.js", release_version),
         "logo": static("retina_svg_logo.svg"),
         "icon_192": static("grader-pwa/icons/icon-192.png"),
         "icon_512": static("grader-pwa/icons/icon-512.png"),
@@ -105,8 +111,8 @@ def _pwa_context():
     return {
         "pwa_assets": shell_assets(),
         "pwa_theme_color": THEME_COLOR,
-        "pwa_manifest_url": url_for("grader_pwa.manifest"),
-        "pwa_sw_url": url_for("grader_pwa.service_worker"),
+        "pwa_manifest_url": url_for("grader_pwa.manifest", v=pwa_version()),
+        "pwa_sw_url": url_for("grader_pwa.service_worker", v=pwa_version()),
         "pwa_scope": url_for("grader_pwa.home"),
     }
 
@@ -161,6 +167,7 @@ def service_worker():
         scope=url_for("grader_pwa.home"),
         login_url=url_for("grader_pwa.login"),
         mobile_refresh_url=url_for("mobile_api.refresh"),
+        pwa_version=pwa_version(),
     )
     response = make_response(body)
     response.mimetype = "application/javascript"

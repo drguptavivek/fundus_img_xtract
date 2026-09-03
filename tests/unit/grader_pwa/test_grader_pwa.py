@@ -60,11 +60,28 @@ def test_service_worker_is_public_scoped_and_caches_shell_only(client):
     assert response.headers["Service-Worker-Allowed"] == "/grader/"
     assert response.headers["Cache-Control"] == "no-cache"
     body = response.get_data(as_text=True)
+    expected_version = f'{client.application.config.get("ASSETS_VERSION", "")}-grader-pwa-{grader_pwa.PWA_RELEASE}'
+    assert f'const VERSION = "{expected_version}"' in body
     assert '"/grader/offline"' in body
     # Only versioned static files may be cached; API, media and pages are network-only.
     assert "url.pathname.startsWith('/static/')" in body
     assert "request.mode === 'navigate'" in body
+    # Chromium navigation requests use a browser-managed redirect mode. If the
+    # worker follows a route's 302 itself, respondWith() rejects the redirected
+    # response and Edge reports a FetchEvent network error.
+    assert "redirect: request.redirect" in body
+    assert "redirect: 'follow'" not in body
     assert "/api/" not in json.loads(re.search(r"const SHELL_ASSETS = (\[.*?\]);", body, re.S).group(1)).__str__()
+
+
+def test_pwa_pages_version_worker_registration_and_bypass_http_cache(client):
+    page = client.get("/grader/offline").get_data(as_text=True)
+    expected_version = f'{client.application.config.get("ASSETS_VERSION", "")}-grader-pwa-{grader_pwa.PWA_RELEASE}'
+
+    assert f'data-sw-url="/grader/sw.js?v={expected_version}"' in page
+    assert f'rel="manifest" href="/grader/manifest.webmanifest?v={expected_version}"' in page
+    assert "updateViaCache: 'none'" in (ROOT / "static/js/grader-pwa.js").read_text()
+    assert "updateViaCache: 'none'" in (ROOT / "static/js/grader-auth.js").read_text()
 
 
 def test_offline_page_is_public(client):

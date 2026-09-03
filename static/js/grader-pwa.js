@@ -12,7 +12,10 @@
       refreshing = true;
       window.location.reload();
     });
-    navigator.serviceWorker.register(body.dataset.swUrl, { scope: body.dataset.swScope || '/grader/' })
+    navigator.serviceWorker.register(body.dataset.swUrl, {
+      scope: body.dataset.swScope || '/grader/',
+      updateViaCache: 'none',
+    })
       .then(registration => {
         const offerUpdate = worker => {
           if (!navigator.serviceWorker.controller || !worker) return;

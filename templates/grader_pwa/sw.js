@@ -1,7 +1,7 @@
 /* Grader PWA service worker (rendered by Flask so asset versions match the layout).
  * Caches the app shell only. Every /api/ call, every image, and every authenticated
  * page goes to the network - no PHI ever enters CacheStorage. */
-const VERSION = {{ (config.get('ASSETS_VERSION', '') ~ '-grader-pwa-v2')|tojson }};
+const VERSION = {{ pwa_version|tojson }};
 const SHELL_CACHE = `grader-shell-${VERSION}`;
 const OFFLINE_URL = {{ offline_url|tojson }};
 const SHELL_ASSETS = {{ shell_assets|tojson }};
@@ -93,7 +93,11 @@ function needsAuth(url, request) {
 async function withAuth(request, current) {
   const headers = new Headers(request.headers);
   headers.set('Authorization', 'Bearer ' + current.access_token);
-  const init = {method: request.method, headers, credentials: 'same-origin', redirect: 'follow', cache: request.cache};
+  // Navigation requests use browser-managed redirects (``manual`` in Edge and
+  // other Chromium browsers).  Preserve that mode: following the redirect
+  // inside the worker produces a redirected Response that respondWith() is
+  // forbidden to use for the original navigation request.
+  const init = {method: request.method, headers, credentials: 'same-origin', redirect: request.redirect, cache: request.cache};
   if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.clone().arrayBuffer();
   return new Request(request.url, init);
 }

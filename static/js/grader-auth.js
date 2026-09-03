@@ -228,7 +228,7 @@
   async function ensureWorker(url, scope) {
     if (!('serviceWorker' in navigator)) return null;
     try {
-      const registration = await navigator.serviceWorker.register(url, { scope });
+      const registration = await navigator.serviceWorker.register(url, { scope, updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
       syncWorker();
       return registration;

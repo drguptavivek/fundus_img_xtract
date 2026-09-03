@@ -50,13 +50,21 @@
   const passkeyCard = document.querySelector('[data-passkey-enrol]');
   // Passkeys belong to a token sign-in; a web-session visit to /grader/ has no
   // token to bind one to, so the card stays hidden there.
-  if (passkeyCard && auth && auth.isSignedIn()) {
-    Promise.all([auth.platformAuthenticatorAvailable(), auth.listPasskeys()]).then(([ok, passkeys]) => {
-      if (!ok || passkeys === null || passkeys.length > 0) {
-        if (passkeys && passkeys.length) auth.write({ ...auth.read(), has_passkey: true });
-        return;
-      }
+  // Passkeys are per browser: the account may already hold one from Safari
+  // that Chrome cannot use. "has_passkey" is therefore a local fact - set only
+  // when a passkey was created or used in THIS browser - and the card is
+  // offered until then, unless dismissed here.
+  const DISMISS_KEY = 'grader.passkey_offer_dismissed';
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(DISMISS_KEY) === '1'; } catch (_) {}
+  if (passkeyCard && auth && auth.isSignedIn() && !dismissed) {
+    auth.platformAuthenticatorAvailable().then(ok => {
+      if (!ok || auth.read()?.has_passkey) return;
       passkeyCard.hidden = false;
+      passkeyCard.querySelector('[data-passkey-enrol-dismiss]')?.addEventListener('click', () => {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (_) {}
+        passkeyCard.hidden = true;
+      });
       passkeyCard.querySelector('[data-passkey-enrol-button]').addEventListener('click', async event => {
         const button = event.currentTarget;
         button.disabled = true;

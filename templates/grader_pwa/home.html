@@ -43,6 +43,12 @@
           {{ grading_slot_label(slot.slot) }} ({{ slot.package_count }})
         </a>
         {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
 
   <section class="mb-4" aria-label="Passkey" data-passkey-enrol hidden>
     <div class="gpwa-resume">
@@ -99,12 +105,6 @@
     <div class="alert alert-secondary mb-0">No grading queues are allocated to you.</div>
     {% endfor %}
   </section>
-        {% endfor %}
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
 </main>
 {% include "grader_pwa/_tabbar.html" %}
 {% endblock %}

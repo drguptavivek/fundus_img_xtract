@@ -31,3 +31,9 @@ web session cookie. What this changes, and what it does not:
   (`/api/mobile/v1/auth/passkeys/reauth/*`, WebAuthn verified server-side).
   Lease heartbeats are not activity. Passkey enrolment needs a password proof
   within 30 minutes.
+
+- **Web passkeys.** The web login also accepts a passkey after username +
+  CAPTCHA (`/login/passkey/*`, see `docs/API/auth.md`). Enrolment lives at
+  `/account/passkeys` behind the confirm-password step, and a passkey login
+  never sets `last_sudo_time`, so step-up checks keep demanding the password.
+  Shared client helper: `static/js/webauthn.js`.

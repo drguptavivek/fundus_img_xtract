@@ -76,7 +76,7 @@ def shell_assets() -> dict[str, str]:
     version bump can never leave the worker caching a URL the pages no longer use.
     """
     version = current_app.config.get("ASSETS_VERSION", "") or ""
-    pwa_version = f"{version}-grader-pwa-v4"
+    pwa_version = f"{version}-grader-pwa-v5"
 
     def static(filename: str, v: str = version) -> str:
         return url_for("static", filename=filename, v=v)
@@ -90,6 +90,7 @@ def shell_assets() -> dict[str, str]:
         "bootstrap_js": static("js/bootstrap.bundle.min.js"),
         "flash_toasts_js": static("js/flash-toasts.js"),
         "pwa_js": static("js/grader-pwa.js", pwa_version),
+        "webauthn_js": static("js/webauthn.js", pwa_version),
         "auth_js": static("js/grader-auth.js", pwa_version),
         "logo": static("retina_svg_logo.svg"),
         "icon_192": static("grader-pwa/icons/icon-192.png"),

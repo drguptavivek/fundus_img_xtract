@@ -58,3 +58,29 @@ CSRF:
 
 - The HTML login, forgot-password, reset-password, and confirm-password routes are page forms, not JSON APIs.
 - These helpers are intended for browser clients that need lightweight JSON or SSE status without a full page reload.
+
+
+## Passkey sign-in (web session)
+
+Username + CAPTCHA first, then a WebAuthn assertion instead of the password.
+Both endpoints are public, JSON, and need the page's CSRF token (`X-CSRFToken`).
+
+### `POST /login/passkey/options`
+
+Body: `{"username": "...", "captcha": "..."}`. Validates the CAPTCHA exactly as
+the password form does and applies the same lockout windows. Returns
+`{"challenge_id", "options"}` (WebAuthn request options JSON). An unknown
+username and a username without a passkey both answer `404 no_passkey`.
+
+### `POST /login/passkey/verify`
+
+Body: `{"challenge_id", "credential"}` (the `PublicKeyCredential.toJSON()` of
+`navigator.credentials.get`). On success the web session is opened exactly as
+after a password login and `{"redirect": "..."}` is returned. Failures count
+toward the username lockout. The pending ceremony lives in the session for
+five minutes and is single-use.
+
+Passkeys are managed at `/account/passkeys` (behind the confirm-password
+step; `POST /account/passkeys/register/options|verify`,
+`POST /account/passkeys/<id>/delete`). A passkey login does **not** refresh
+`last_sudo_time`: sensitive operations still require the password.

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import time
 import logging
 import base64
-from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response
+from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response, jsonify
 from flask_login import login_user, logout_user, LoginManager, login_required, current_user
 from sqlalchemy.orm import noload, selectinload
 from sqlalchemy import func, select
@@ -390,47 +390,7 @@ def login():
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
-
-                # Rotate the anonymous/pre-authentication server-side session ID.
-                # This prevents session fixation without signing the user out of
-                # their other browsers; the concurrent-session limit handles
-                # excess authenticated sessions separately.
-                regenerate_session = getattr(current_app.session_interface, "regenerate", None)
-                if callable(regenerate_session):
-                    regenerate_session(session)
-                login_user(user)
-
-                # Start sliding inactivity window
-                session.permanent = True  # enable cookie expiration control
-                session["last_active"] = int(time.time())
-
-                session.modified = True
-
-                # Log successful login with session ID
-                session_id = session.get('_id', 'unknown')
-                auth_logger.info(
-                    "User login successful - User: %s, IP: %s, SessionID: %s, UserID: %s",
-                    sanitize_log_value(username),
-                    sanitize_log_value(ip),
-                    sanitize_log_value(session_id),
-                    sanitize_log_value(user.id),
-                )
-
-                # A same-origin `next` (Flask-Login adds it for protected pages,
-                # e.g. a grader PWA deep link) wins over the role-based landing.
-                from utils.security_middleware import is_safe_url
-                requested_next = request.args.get("next") or request.form.get("next")
-                if requested_next and is_safe_url(requested_next):
-                    return redirect(requested_next)
-
-                # Role-based landing pages
-                if user.has_role('ophthalmologist'):
-                    return redirect(url_for("grading.index"))
-                if user.has_role('fileUploader') or user.has_role('optometrist'):
-                    return redirect(url_for("direct_uploads.upload_index"))
-
-                # Optional: rotate session / set remember as needed
-                return redirect(url_for("homepage"))
+                return _complete_web_login(user, username=username, ip=ip)
 
             # Failure path
             _record_attempt(db, username, ip, success=False)
@@ -479,6 +439,141 @@ def login():
         auth_logger.info(f"GET request - Session cookie will be set")
 
         return render_template("auth/login.html")
+
+def _complete_web_login(user, *, username: str, ip: str):
+    """Everything a successful credential check does for a web session.
+
+    Shared by the password form and the passkey ceremony: session rotation,
+    the sliding inactivity window, audit logging, and the landing redirect.
+    Deliberately does NOT set ``last_sudo_time``: sensitive operations keep
+    asking for a fresh password proof regardless of how the session began.
+    """
+    regenerate_session = getattr(current_app.session_interface, "regenerate", None)
+    if callable(regenerate_session):
+        regenerate_session(session)
+    login_user(user)
+    session.permanent = True
+    session["last_active"] = int(time.time())
+    session.modified = True
+    auth_logger.info(
+        "User login successful - User: %s, IP: %s, SessionID: %s, UserID: %s",
+        sanitize_log_value(username),
+        sanitize_log_value(ip),
+        sanitize_log_value(session.get("_id", "unknown")),
+        sanitize_log_value(user.id),
+    )
+    from utils.security_middleware import is_safe_url
+
+    requested_next = request.args.get("next") or request.form.get("next")
+    if requested_next and is_safe_url(requested_next):
+        return redirect(requested_next)
+    if user.has_role("ophthalmologist"):
+        return redirect(url_for("grading.index"))
+    if user.has_role("fileUploader") or user.has_role("optometrist"):
+        return redirect(url_for("direct_uploads.upload_index"))
+    return redirect(url_for("homepage"))
+
+
+def _web_login_gate(db, username: str, ip: str):
+    """Lock checks shared by password and passkey sign-in; returns an error message or None."""
+    if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
+        user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+        if user:
+            _lock_user(db, user)
+            _record_attempt(db, username, ip, success=False)
+            return "User locked due to repeated failures."
+    if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
+        _lock_ip(db, ip)
+        _record_attempt(db, username, ip, success=False)
+        return "This IP is locked due to repeated failures."
+    return None
+
+
+PASSKEY_LOGIN_SESSION_KEY = "passkey_login"
+
+
+@auth_bp.route("/login/passkey/options", methods=["POST"])
+@rate_limit_with_feedback("20 per minute", show_warning=False)
+def login_passkey_options():
+    """Step one of passkey sign-in: username + CAPTCHA -> WebAuthn request options.
+
+    The CAPTCHA is validated exactly as for the password form; the lockout
+    windows apply. A username without a passkey and an unknown username get
+    the same answer so the endpoint cannot be used to enumerate accounts.
+    """
+    from utils.captcha import captcha_manager
+
+    from passkeys import service as passkey_service
+    from passkeys.service import PasskeyError
+
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    captcha_input = (payload.get("captcha") or "").strip()
+    ip = get_client_ip()
+    if not username:
+        return jsonify({"error": "username_required", "message": "Enter your username first."}), 400
+    captcha_valid, captcha_message = captcha_manager.validate_captcha(captcha_input)
+    if not captcha_valid:
+        return jsonify({"error": "captcha_invalid", "message": captcha_message}), 400
+
+    no_passkey = jsonify({"error": "no_passkey", "message": "No passkey is registered for this username."})
+    with transaction_scope() as db:
+        locked = _web_login_gate(db, username, ip)
+        if locked:
+            return jsonify({"error": "locked", "message": locked}), 403
+        user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+        if user is None or not user.is_active:
+            return no_passkey, 404
+        try:
+            ceremony = passkey_service.begin_assertion(db, user=user)
+        except PasskeyError:
+            return no_passkey, 404
+    session[PASSKEY_LOGIN_SESSION_KEY] = {
+        "user_id": user.id,
+        "username": username,
+        "challenge_id": ceremony["challenge_id"],
+        "issued_at": int(time.time()),
+    }
+    session.modified = True
+    return jsonify(ceremony)
+
+
+@auth_bp.route("/login/passkey/verify", methods=["POST"])
+@rate_limit_with_feedback("20 per minute", show_warning=False)
+def login_passkey_verify():
+    """Step two of passkey sign-in: verify the assertion and open the web session."""
+    from passkeys import service as passkey_service
+    from passkeys.service import PasskeyError
+
+    pending = session.pop(PASSKEY_LOGIN_SESSION_KEY, None)
+    session.modified = True
+    payload = request.get_json(silent=True) or {}
+    credential = payload.get("credential")
+    ip = get_client_ip()
+    if not pending or not isinstance(credential, dict):
+        return jsonify({"error": "passkey_session_missing", "message": "Start the passkey sign-in again."}), 400
+    if int(time.time()) - int(pending.get("issued_at") or 0) > 300:
+        return jsonify({"error": "challenge_expired", "message": "This passkey request has expired. Try again."}), 400
+    username = pending["username"]
+    with transaction_scope() as db:
+        user = db.execute(select(User).where(User.id == pending["user_id"], User.is_active.is_(True))).scalar_one_or_none()
+        if user is None:
+            _record_attempt(db, username, ip, success=False)
+            return jsonify({"error": "invalid_credentials", "message": "Passkey sign-in failed."}), 401
+        try:
+            passkey_service.complete_assertion(
+                db, user=user, challenge_id=str(pending["challenge_id"]), credential=credential
+            )
+        except PasskeyError as exc:
+            _record_attempt(db, username, ip, success=False)
+            if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
+                _lock_user(db, user)
+            return jsonify({"error": exc.code, "message": exc.message}), 401
+        _record_attempt(db, username, ip, success=True)
+        auth_logger.info("Passkey login user=%s ip=%s", sanitize_log_value(username), sanitize_log_value(ip))
+        response = _complete_web_login(user, username=username, ip=ip)
+    return jsonify({"redirect": response.headers.get("Location") or url_for("homepage")})
+
 
 @auth_bp.route("/refresh-captcha")
 @rate_limit("10 per minute")

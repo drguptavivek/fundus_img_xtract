@@ -102,68 +102,20 @@
     return payload;
   }
 
-  function passkeysSupported() {
-    return Boolean(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
-  }
-  async function platformAuthenticatorAvailable() {
-    try { return passkeysSupported() && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (_) { return false; }
-  }
-  function unwrap(options) {
-    return options && options.publicKey ? options.publicKey : options;
-  }
-  function parseCreation(options) {
-    const inner = unwrap(options);
-    return PublicKeyCredential.parseCreationOptionsFromJSON
-      ? PublicKeyCredential.parseCreationOptionsFromJSON(inner)
-      : decodeOptions(inner, ['challenge', 'user.id'], 'excludeCredentials');
-  }
-  function parseRequest(options) {
-    const inner = unwrap(options);
-    return PublicKeyCredential.parseRequestOptionsFromJSON
-      ? PublicKeyCredential.parseRequestOptionsFromJSON(inner)
-      : decodeOptions(inner, ['challenge'], 'allowCredentials');
-  }
-  function b64urlToBytes(value) {
-    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
-    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
-  }
-  function bytesToB64url(buffer) {
-    return btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function decodeOptions(options, paths, listKey) {
-    const copy = JSON.parse(JSON.stringify(options));
-    paths.forEach(path => {
-      const parts = path.split('.');
-      let target = copy;
-      for (let i = 0; i < parts.length - 1; i += 1) target = target[parts[i]];
-      target[parts[parts.length - 1]] = b64urlToBytes(target[parts[parts.length - 1]]);
-    });
-    (copy[listKey] || []).forEach(item => { item.id = b64urlToBytes(item.id); });
-    return copy;
-  }
-  function credentialToJSON(credential) {
-    if (credential.toJSON) return credential.toJSON();
-    const response = credential.response;
-    const out = { id: credential.id, rawId: bytesToB64url(credential.rawId), type: credential.type, response: {
-      clientDataJSON: bytesToB64url(response.clientDataJSON) } };
-    if (response.attestationObject) out.response.attestationObject = bytesToB64url(response.attestationObject);
-    if (response.authenticatorData) out.response.authenticatorData = bytesToB64url(response.authenticatorData);
-    if (response.signature) out.response.signature = bytesToB64url(response.signature);
-    if (response.userHandle) out.response.userHandle = bytesToB64url(response.userHandle);
-    if (response.getTransports) out.response.transports = response.getTransports();
-    return out;
-  }
+  const webauthn = () => window.WebAuthnJSON;
+  function passkeysSupported() { return Boolean(webauthn() && webauthn().supported()); }
+  function platformAuthenticatorAvailable() { return webauthn() ? webauthn().platformAuthenticatorAvailable() : Promise.resolve(false); }
   async function registerPasskey(label) {
     const { challenge_id, options } = await postJson('/auth/passkeys/register/options', {}, { auth: true });
-    const credential = await navigator.credentials.create({ publicKey: parseCreation(options) });
-    const payload = await postJson('/auth/passkeys/register/verify', { challenge_id, credential: credentialToJSON(credential), label: label || deviceName() }, { auth: true });
+    const credential = await webauthn().create(options);
+    const payload = await postJson('/auth/passkeys/register/verify', { challenge_id, credential, label: label || deviceName() }, { auth: true });
     write({ ...read(), has_passkey: true });
     return payload.passkey;
   }
   async function reauthPasskey() {
     const { challenge_id, options } = await postJson('/auth/passkeys/reauth/options', {}, { auth: true });
-    const credential = await navigator.credentials.get({ publicKey: parseRequest(options) });
-    const payload = await postJson('/auth/passkeys/reauth/verify', { challenge_id, credential: credentialToJSON(credential) }, { auth: true });
+    const credential = await webauthn().get(options);
+    const payload = await postJson('/auth/passkeys/reauth/verify', { challenge_id, credential }, { auth: true });
     write({ ...read(), access_token: payload.access_token, expires_at: Date.now() + (Number(payload.expires_in) || 900) * 1000, auth_time: payload.auth_time, has_passkey: true });
     return payload;
   }

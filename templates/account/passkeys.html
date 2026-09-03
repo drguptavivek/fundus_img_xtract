@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+{% block title %}Passkeys{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 44rem;">
+  <h1 class="h4 mb-1">Passkeys</h1>
+  <p class="text-muted small mb-3">Sign in with Face ID, Touch ID or Windows Hello instead of your password. Sensitive actions still ask for your password.</p>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      {% if passkeys %}
+      <ul class="list-group list-group-flush">
+        {% for item in passkeys %}
+        <li class="list-group-item d-flex align-items-center justify-content-between gap-3 px-0">
+          <div>
+            <div class="fw-semibold"><i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>{{ item.label or 'Passkey' }}</div>
+            <div class="small text-muted">Added {{ item.created_at | user_datetime }}{% if item.last_used_at %} · last used {{ item.last_used_at | user_datetime }}{% endif %}</div>
+          </div>
+          <form method="post" action="{{ url_for('account.passkey_delete', passkey_id=item.id) }}">
+            {{ csrf_field() }}
+            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted mb-0">You have no passkeys yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <button type="button" class="btn btn-primary d-none" id="add-passkey-btn"
+            data-options-url="{{ url_for('account.passkey_register_options') }}"
+            data-verify-url="{{ url_for('account.passkey_register_verify') }}">
+      <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Add a passkey for this device
+    </button>
+    <span class="small text-muted d-none" id="passkey-unsupported">This browser or device does not offer a platform passkey (Face ID / Touch ID / Windows Hello).</span>
+    <a class="btn btn-link" href="{{ url_for('account.profile') }}">Back to profile</a>
+  </div>
+  <div class="alert alert-danger py-2 small mt-3 d-none" id="passkey-error" role="alert"></div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v1') }}"></script>
+<script>
+(function () {
+  const button = document.getElementById('add-passkey-btn');
+  const unsupported = document.getElementById('passkey-unsupported');
+  const errorBox = document.getElementById('passkey-error');
+  const helper = window.WebAuthnJSON;
+  if (!helper || !helper.supported()) { unsupported.classList.remove('d-none'); return; }
+  helper.platformAuthenticatorAvailable().then(ok => (ok ? button : unsupported).classList.remove('d-none'));
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const post = async (url, body) => {
+    const response = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify(body),
+    });
+    let payload = {};
+    try { payload = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (HTTP ${response.status})`);
+    return payload;
+  };
+  button.addEventListener('click', async () => {
+    errorBox.classList.add('d-none');
+    button.disabled = true;
+    try {
+      const { challenge_id, options } = await post(button.dataset.optionsUrl, {});
+      const credential = await helper.create(options);
+      await post(button.dataset.verifyUrl, { challenge_id, credential, label: navigator.platform || 'This device' });
+      window.location.reload();
+    } catch (error) {
+      errorBox.textContent = error.message || 'Could not add the passkey.';
+      errorBox.classList.remove('d-none');
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

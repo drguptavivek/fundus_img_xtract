@@ -630,6 +630,8 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/grader/offline",
         "/grader/demo",
         "/grader/login",
+        "/login/passkey/options",
+        "/login/passkey/verify",
     }
 )
 PUBLIC_SESSION_PREFIXES = ("/static/", "/help")

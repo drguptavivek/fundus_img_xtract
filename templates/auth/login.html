@@ -118,6 +118,13 @@
             #}
 
             <button class="btn btn-primary w-100" type="submit" id="signin-btn" disabled>Sign in</button>
+            <button class="btn btn-outline-primary w-100 mt-2 d-none" type="button" id="passkey-btn" data-passkey-login
+                    data-options-url="{{ url_for('auth.login_passkey_options') }}"
+                    data-verify-url="{{ url_for('auth.login_passkey_verify', next=request.args.get('next') or none) }}">
+              <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Sign in with a passkey
+            </button>
+            <div class="form-text mt-1 d-none" id="passkey-hint">Enter your username and the CAPTCHA, then use Face ID, Touch ID or Windows Hello instead of your password.</div>
+            <div class="alert alert-danger py-2 small mt-2 d-none" role="alert" id="passkey-error"></div>
           </form>
 
         </div>
@@ -139,11 +146,63 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v1') }}"></script>
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
 {% else %}
 <script>
 {% endif %}
+(function () {
+  // Passkey sign-in: username + CAPTCHA first (same checks as the password
+  // form), then a WebAuthn assertion instead of the password.
+  const button = document.getElementById('passkey-btn');
+  const hint = document.getElementById('passkey-hint');
+  const errorBox = document.getElementById('passkey-error');
+  const form = button && button.closest('form');
+  const helper = window.WebAuthnJSON;
+  if (button && helper && helper.supported()) {
+    helper.platformAuthenticatorAvailable().then(ok => {
+      if (!ok) return;
+      button.classList.remove('d-none');
+      hint.classList.remove('d-none');
+    });
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const post = async (url, body) => {
+      const response = await fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify(body),
+      });
+      let payload = {};
+      try { payload = await response.json(); } catch (_) {}
+      if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (HTTP ${response.status})`);
+      return payload;
+    };
+    button.addEventListener('click', async () => {
+      errorBox.classList.add('d-none');
+      const username = form.username.value.trim();
+      const captcha = form.captcha.value.trim();
+      if (!username || !captcha) {
+        errorBox.textContent = 'Enter your username and the CAPTCHA code first.';
+        errorBox.classList.remove('d-none');
+        return;
+      }
+      button.disabled = true;
+      try {
+        const { challenge_id, options } = await post(button.dataset.optionsUrl, { username, captcha });
+        const credential = await helper.get(options);
+        const result = await post(button.dataset.verifyUrl, { challenge_id, credential });
+        window.location.assign(result.redirect || '/');
+      } catch (error) {
+        errorBox.textContent = error.message || 'Passkey sign-in failed.';
+        errorBox.classList.remove('d-none');
+        button.disabled = false;
+        // The CAPTCHA was consumed; fetch a fresh one for the next attempt.
+        document.getElementById('refresh-captcha-btn')?.click();
+      }
+    });
+  }
+})();
 (function () {
   try {
     if (!window.localStorage) return;

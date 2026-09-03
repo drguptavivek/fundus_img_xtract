@@ -241,3 +241,113 @@ def password_changed():
         flash("No email address on file. Please share the password securely.", "warning")
 
     return render_template("account/password_changed.html", info=info)
+
+
+# --------------------------------------------------------------------------- #
+# Passkeys (WebAuthn) for the web session
+# --------------------------------------------------------------------------- #
+
+PASSKEY_SUDO_MAX_AGE_SECONDS = 30 * 60
+
+
+def _sudo_is_fresh() -> bool:
+    """Password confirmed within the last 30 minutes (``/confirm-password``)."""
+    import time
+
+    last_sudo = session.get("last_sudo_time")
+    return bool(last_sudo) and (int(time.time()) - int(last_sudo)) <= PASSKEY_SUDO_MAX_AGE_SECONDS
+
+
+@account_bp.route("/passkeys", methods=["GET"])
+@login_required
+def passkeys():
+    """List and manage the user's passkeys.
+
+    Adding one requires a recent password proof, so the page itself sits
+    behind the confirm-password step; the JSON endpoints re-check it.
+    """
+    from auth.decorators import require_recent_reauthentication
+    from passkeys import service as passkey_service
+
+    step_up = require_recent_reauthentication(timeout=PASSKEY_SUDO_MAX_AGE_SECONDS)
+    if step_up is not None:
+        return step_up
+    with get_db_session() as db:
+        items = [item.to_dict() for item in passkey_service.list_passkeys(db, user_id=current_user.id)]
+    return render_template("account/passkeys.html", passkeys=items)
+
+
+def _sudo_required_json():
+    if _sudo_is_fresh():
+        return None
+    from flask import jsonify
+
+    return jsonify({"error": "reauth_required", "message": "Confirm your password before changing passkeys."}), 401
+
+
+@account_bp.route("/passkeys/register/options", methods=["POST"])
+@login_required
+@rate_limit("10 per minute")
+def passkey_register_options():
+    from flask import jsonify
+
+    from passkeys import service as passkey_service
+    from passkeys.service import PasskeyError
+
+    denied = _sudo_required_json()
+    if denied:
+        return denied
+    try:
+        with get_db_session() as db:
+            user = db.get(User, current_user.id)
+            return jsonify(passkey_service.begin_registration(db, user=user))
+    except PasskeyError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@account_bp.route("/passkeys/register/verify", methods=["POST"])
+@login_required
+@rate_limit("10 per minute")
+def passkey_register_verify():
+    from flask import jsonify
+
+    from passkeys import service as passkey_service
+    from passkeys.service import PasskeyError
+
+    denied = _sudo_required_json()
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    credential = payload.get("credential")
+    if not isinstance(credential, dict):
+        return jsonify({"error": "credential_required", "message": "credential is required."}), 400
+    try:
+        with get_db_session() as db:
+            user = db.get(User, current_user.id)
+            passkey = passkey_service.complete_registration(
+                db,
+                user=user,
+                challenge_id=str(payload.get("challenge_id") or ""),
+                credential=credential,
+                label=payload.get("label"),
+                device_id=None,
+            )
+            db.commit()
+            return jsonify({"passkey": passkey.to_dict()}), 201
+    except PasskeyError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@account_bp.route("/passkeys/<int:passkey_id>/delete", methods=["POST"])
+@login_required
+@rate_limit("10 per minute")
+def passkey_delete(passkey_id: int):
+    from passkeys import service as passkey_service
+
+    if not _sudo_is_fresh():
+        return redirect(url_for("auth.confirm_password", next=url_for("account.passkeys")))
+    with get_db_session() as db:
+        removed = passkey_service.delete_passkey(db, user_id=current_user.id, passkey_id=passkey_id)
+        db.commit()
+    flash("Passkey removed." if removed else "Passkey not found.", "success" if removed else "warning")
+    return redirect(url_for("account.passkeys"))

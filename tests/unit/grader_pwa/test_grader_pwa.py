@@ -7,10 +7,15 @@ from inspect import unwrap
 from pathlib import Path
 from types import SimpleNamespace
 
+from flask import render_template
 from flask import session as flask_session
 
 import grader_pwa
 import grading.workbench_page as workbench_page
+from grading_allocation.dtos import (
+    EncounterSetQueueSlotDTO,
+    ProjectEncounterSetQueueDTO,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -138,6 +143,81 @@ def test_home_renders_queues_without_caching(app, db_session, ophthalmologist_us
     assert 'data-bs-theme="dark"' in page
     assert 'rel="manifest"' in page
     assert "Your queues" in page
+
+
+def test_home_combines_project_first_level_slots_and_keeps_arbitration_separate(app):
+    queue = ProjectEncounterSetQueueDTO(
+        project_id=3,
+        project_title="Integrated DR Glaucoma Screening",
+        project_code="ICMR-VG",
+        target_key="disease_encounter:1:15",
+        target_label="DR / EncounterSet",
+        encounter_set_type_name="Encounter Set",
+        slots=(
+            EncounterSetQueueSlotDTO(
+                slot="resident",
+                package_count=1,
+                task_count=1,
+                first_package_uuid="resident-package-uuid",
+            ),
+            EncounterSetQueueSlotDTO(
+                slot="resident2",
+                package_count=2,
+                task_count=2,
+                first_package_uuid="resident2-package-uuid",
+            ),
+            EncounterSetQueueSlotDTO(
+                slot="arbitrator",
+                package_count=1,
+                task_count=1,
+                first_package_uuid="arbitrator-package-uuid",
+            ),
+        ),
+    )
+
+    with app.test_request_context("/grader/"):
+        body = render_template(
+            "grader_pwa/home.html",
+            queues=[],
+            project_queues=[queue.to_dict()],
+            sessions=[],
+        )
+
+    assert body.count("Initial grading (3)") == 1
+    assert "/grader/open/package/resident2-package-uuid/resident2" in body
+    assert "/grader/open/package/resident-package-uuid/resident" not in body
+    assert "Arbitration (1)" in body
+    assert "/grader/open/package/arbitrator-package-uuid/arbitrator" in body
+
+
+def test_home_project_first_level_action_falls_back_to_resident(app):
+    queue = ProjectEncounterSetQueueDTO(
+        project_id=3,
+        project_title="Resident Fallback Project",
+        project_code="FALLBACK",
+        target_key="disease_encounter:1:15",
+        target_label="DR / EncounterSet",
+        encounter_set_type_name="Encounter Set",
+        slots=(
+            EncounterSetQueueSlotDTO(
+                slot="resident",
+                package_count=1,
+                task_count=1,
+                first_package_uuid="resident-package-uuid",
+            ),
+        ),
+    )
+
+    with app.test_request_context("/grader/"):
+        body = render_template(
+            "grader_pwa/home.html",
+            queues=[],
+            project_queues=[queue.to_dict()],
+            sessions=[],
+        )
+
+    assert body.count("Initial grading (1)") == 1
+    assert "/grader/open/package/resident-package-uuid/resident" in body
 
 
 # --------------------------------------------------------------------------- #

@@ -1,5 +1,6 @@
 {% macro grading_slot_label(value) -%}
-  {%- if value in ['resident', 'resident2'] -%}First-level grading
+  {%- if value in ['resident', 'resident2'] -%}Initial grading
+  {%- elif value == 'arbitrator' -%}Arbitration
   {%- elif value == 'ai' -%}AI
   {%- else -%}{{ (value or '')|replace('_', ' ')|title }}
   {%- endif -%}

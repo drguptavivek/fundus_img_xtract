@@ -52,7 +52,7 @@
         {% if first_level.slot and first_level.package_count > 0 %}
         <a class="btn btn-primary"
            href="{{ url_for('grader_pwa.open_package', package_uuid=first_level.first_package_uuid, role_slot=first_level.slot) }}">
-          First-level grading ({{ first_level.package_count }})
+          {{ grading_slot_label(first_level.slot) }} ({{ first_level.package_count }})
         </a>
         {% endif %}
         {% for slot in queue.slots %}

@@ -44,7 +44,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v2') }}"></script>
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v3') }}"></script>
 <script>
 (function () {
   const button = document.getElementById('add-passkey-btn');

@@ -87,15 +87,16 @@ def refresh():
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 
 
-def require_web_captcha(platform: str | None, captcha_input):
+def require_web_captcha(platform: str | None, captcha_input, *, consume: bool = True):
     """Browsers (``platform == "web"``) must solve the session CAPTCHA on
     sign-in, exactly as the web login form does; native apps are unchanged.
-    Returns an error response or ``None``."""
+    ``consume=False`` peeks (the passkey lookup), leaving the CAPTCHA for the
+    credential step. Returns an error response or ``None``."""
     if platform != "web":
         return None
     from utils.captcha import captcha_manager
 
-    valid, message = captcha_manager.validate_captcha((captcha_input or "").strip())
+    valid, message = captcha_manager.validate_captcha((captcha_input or "").strip(), consume=consume)
     if not valid:
         return jsonify({"error": "captcha_invalid", "message": message}), 400
     return None

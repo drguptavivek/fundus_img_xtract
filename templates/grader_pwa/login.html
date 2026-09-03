@@ -43,7 +43,7 @@
     <div data-login-step="2" class="d-none d-flex flex-column gap-3">
       <div class="small text-body-secondary">Signing in as <strong data-login-username></strong> · <a href="#" data-login-back>change</a></div>
       <button type="button" class="btn btn-primary btn-lg w-100 d-none" data-login-passkey>
-        <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
+        <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Try passkey again
       </button>
       <p class="small text-body-secondary mb-0 d-none" data-login-passkey-hint>Passkeys are stored per browser (Safari uses iCloud Keychain, Chrome its own store). No passkey here? Sign in with your password and add one from the home screen, or pick "use a phone" in the passkey dialog.</p>
       <div>
@@ -118,18 +118,35 @@
   const step2 = form.querySelector('[data-login-step="2"]');
   const passkeyButton = form.querySelector('[data-login-passkey]');
   const submit = form.querySelector('[data-login-submit]');
-  function toStep2() {
+  const nextButton = form.querySelector('[data-login-next]');
+  function showStep2(withPasskey) {
+    form.querySelector('[data-login-username]').textContent = form.username.value.trim();
+    step1.classList.add('d-none'); step2.classList.remove('d-none');
+    passkeyButton.classList.toggle('d-none', !withPasskey);
+    form.querySelector('[data-login-passkey-hint]').classList.toggle('d-none', !withPasskey);
+    form.password.focus();
+  }
+  async function toStep2() {
     errorBox.classList.add('d-none');
     if (!form.username.value.trim()) { form.username.reportValidity(); return; }
     if (!form.captcha.value.trim()) { form.captcha.reportValidity(); return; }
-    form.querySelector('[data-login-username]').textContent = form.username.value.trim();
-    step1.classList.add('d-none'); step2.classList.remove('d-none');
-    auth.platformAuthenticatorAvailable().then(ok => {
-      if (!ok) return;
-      passkeyButton.classList.remove('d-none');
-      form.querySelector('[data-login-passkey-hint]').classList.remove('d-none');
-    });
-    form.password.focus();
+    nextButton.disabled = true;
+    const username = form.username.value.trim();
+    const captcha = form.captcha.value.trim();
+    try {
+      // Ask the server whether this account has a passkey; if so go straight
+      // to it and skip the password (the CAPTCHA is kept for a fallback).
+      const usable = await auth.platformAuthenticatorAvailable();
+      const ceremony = usable ? await auth.passkeyLoginOptions(username, captcha) : null;
+      if (ceremony) {
+        try { await auth.loginWithPasskey(username, captcha, ceremony); await proceed(); return; }
+        catch (error) { fail(error.message || 'Passkey sign-in failed'); showStep2(true); return; }
+      }
+      showStep2(false);
+    } catch (error) {
+      fail(error.message || 'Sign in failed');
+      if (/captcha/i.test(error.message || '')) refreshCaptcha();
+    } finally { nextButton.disabled = false; }
   }
   function toStep1() {
     step2.classList.add('d-none'); step1.classList.remove('d-none');

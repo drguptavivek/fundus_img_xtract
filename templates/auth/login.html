@@ -130,7 +130,7 @@
             <button class="btn btn-outline-primary w-100 mt-2 d-none" type="button" id="passkey-btn" data-passkey-login
                     data-options-url="{{ url_for('auth.login_passkey_options') }}"
                     data-verify-url="{{ url_for('auth.login_passkey_verify', next=request.args.get('next') or none) }}">
-              <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Sign in with a passkey
+              <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Try passkey again
             </button>
             <div class="form-text mt-1 d-none" id="passkey-hint">Enter your username and the CAPTCHA, then use Face ID, Touch ID or Windows Hello instead of your password.</div>
             <div class="alert alert-danger py-2 small mt-2 d-none" role="alert" id="passkey-error"></div>
@@ -156,7 +156,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v2') }}"></script>
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v3') }}"></script>
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
 {% else %}
@@ -173,12 +173,20 @@
   const usernameBox = form.querySelector('[data-login-username]');
   const nextButton = document.getElementById('next-btn');
   const show = (nodes, on) => nodes.forEach(node => node.classList.toggle('d-none', !on));
-  const goStep2 = () => {
+  const goStep2 = async () => {
     const username = form.username.value.trim();
     const captcha = form.captcha.value.trim();
     if (!username) { form.username.focus(); form.username.reportValidity(); return; }
     if (!captcha) { form.captcha.focus(); form.captcha.reportValidity(); return; }
     usernameBox.textContent = username;
+    // Google-style: if the account has a passkey usable here, go straight to it.
+    if (window.__tryPasskeyFirst) {
+      nextButton.disabled = true;
+      try {
+        const outcome = await window.__tryPasskeyFirst(username, captcha);
+        if (outcome === 'signed-in') return;
+      } finally { nextButton.disabled = false; }
+    }
     show(step1, false); show(step2, true);
     form.password.focus();
   };
@@ -218,6 +226,25 @@
       if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (HTTP ${response.status})`);
       return payload;
     };
+    const runPasskey = async (username, captcha) => {
+      const { challenge_id, options } = await post(button.dataset.optionsUrl, { username, captcha });
+      const credential = await helper.get(options);
+      const result = await post(button.dataset.verifyUrl, { challenge_id, credential });
+      window.location.assign(result.redirect || '/');
+      return 'signed-in';
+    };
+    // Called by the step switcher: 'signed-in', or 'no-passkey' / 'cancelled'
+    // so the password step is shown instead (the CAPTCHA is still valid).
+    window.__tryPasskeyFirst = async (username, captcha) => {
+      try {
+        return await runPasskey(username, captcha);
+      } catch (error) {
+        if (/no passkey/i.test(error.message || '')) return 'no-passkey';
+        errorBox.textContent = error.message || 'Passkey sign-in failed.';
+        errorBox.classList.remove('d-none');
+        return 'cancelled';
+      }
+    };
     button.addEventListener('click', async () => {
       errorBox.classList.add('d-none');
       const username = form.username.value.trim();
@@ -228,17 +255,12 @@
         return;
       }
       button.disabled = true;
-      try {
-        const { challenge_id, options } = await post(button.dataset.optionsUrl, { username, captcha });
-        const credential = await helper.get(options);
-        const result = await post(button.dataset.verifyUrl, { challenge_id, credential });
-        window.location.assign(result.redirect || '/');
-      } catch (error) {
+      try { await runPasskey(username, captcha); }
+      catch (error) {
         errorBox.textContent = error.message || 'Passkey sign-in failed.';
         errorBox.classList.remove('d-none');
         button.disabled = false;
-        // The CAPTCHA was consumed; fetch a fresh one for the next attempt.
-        document.getElementById('refresh-captcha-btn')?.click();
+        if (/captcha/i.test(error.message || '')) document.getElementById('refresh-captcha-btn')?.click();
       }
     });
   }

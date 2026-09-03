@@ -124,7 +124,7 @@ def test_passkey_login_options_require_captcha_for_web(client, db_session, monke
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
     _seed_passkey(db_session, user, credential_id="Y2FwdGNoYS10ZXN0")
-    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value, **kwargs: (False, "Invalid CAPTCHA. Please try again."))
 
     response = client.post(
         "/api/mobile/v1/auth/passkeys/login/options", json={"username": user.username, "platform": "web", "captcha": "WRONG"}

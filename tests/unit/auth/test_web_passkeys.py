@@ -28,7 +28,7 @@ def test_passkey_options_require_captcha(client, monkeypatch):
     harness bypasses CAPTCHA globally, so the validator is pinned here."""
     from utils.captcha import captcha_manager
 
-    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value, **kwargs: (False, "Invalid CAPTCHA. Please try again."))
     headers = {"X-CSRFToken": _csrf(client)}
 
     response = client.post("/login/passkey/options", json={"username": "someone", "captcha": "WRONG"}, headers=headers)

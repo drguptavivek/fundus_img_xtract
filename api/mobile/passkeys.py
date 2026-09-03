@@ -170,7 +170,9 @@ def passkey_login_options():
         return jsonify({"error": "username_required", "message": "username is required"}), 400
     from api.mobile.auth import require_web_captcha
 
-    captcha_error = require_web_captcha((payload.get("platform") or "").strip() or None, payload.get("captcha"))
+    captcha_error = require_web_captcha(
+        (payload.get("platform") or "").strip() or None, payload.get("captcha"), consume=False
+    )
     if captcha_error:
         return captcha_error
     try:
@@ -201,6 +203,10 @@ def passkey_login_verify():
     if not username or not device_id or not device_name or not isinstance(credential, dict):
         return jsonify({"error": "invalid_request", "message": "username, device_id, device_name and credential are required"}), 400
     ip = get_client_ip()
+    if (payload.get("platform") or "").strip() == "web":
+        from utils.captcha import captcha_manager
+
+        captcha_manager.clear_captcha()  # spent by this sign-in attempt
     try:
         with transaction_scope() as db:
             user = mobile_login_gate(db, username=username, ip=ip)

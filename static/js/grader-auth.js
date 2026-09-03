@@ -81,8 +81,18 @@
     return payload;
   }
 
-  async function loginWithPasskey(username, captcha) {
-    const { challenge_id, options } = await postJson('/auth/passkeys/login/options', { username, captcha, platform: 'web' });
+  /* Google-style: look the account up first. Resolves the ceremony, or null
+   * when the account has no passkey (so the page falls back to the password). */
+  async function passkeyLoginOptions(username, captcha) {
+    try {
+      return await postJson('/auth/passkeys/login/options', { username, captcha, platform: 'web' });
+    } catch (error) {
+      if (error.status === 404 && error.code === 'no_passkey') return null;
+      throw error;
+    }
+  }
+  async function loginWithPasskey(username, captcha, ceremony) {
+    const { challenge_id, options } = ceremony || await postJson('/auth/passkeys/login/options', { username, captcha, platform: 'web' });
     const credential = await webauthn().get(options);
     const payload = await postJson('/auth/passkeys/login/verify', {
       username, challenge_id, credential, device_id: deviceId(), device_name: deviceName(), platform: 'web',
@@ -234,7 +244,7 @@
   } catch (_) {}
 
   window.GraderAuth = {
-    read, write, bearer, headers: bearer, deviceId, login, loginWithPasskey, refresh, logout, reauthPassword, reauthPasskey,
+    read, write, bearer, headers: bearer, deviceId, login, loginWithPasskey, passkeyLoginOptions, refresh, logout, reauthPassword, reauthPasskey,
     registerPasskey, listPasskeys, passkeysSupported, platformAuthenticatorAvailable, requireReauth, fetch: authFetch,
     ensureWorker, syncWorker, isSignedIn: () => Boolean(read()?.refresh_token),
   };

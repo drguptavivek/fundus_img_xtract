@@ -76,7 +76,7 @@ def shell_assets() -> dict[str, str]:
     version bump can never leave the worker caching a URL the pages no longer use.
     """
     version = current_app.config.get("ASSETS_VERSION", "") or ""
-    pwa_version = f"{version}-grader-pwa-v10"
+    pwa_version = f"{version}-grader-pwa-v11"
 
     def static(filename: str, v: str = version) -> str:
         return url_for("static", filename=filename, v=v)

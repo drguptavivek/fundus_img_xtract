@@ -526,7 +526,9 @@ def login_passkey_options():
     ip = get_client_ip()
     if not username:
         return jsonify({"error": "username_required", "message": "Enter your username first."}), 400
-    captcha_valid, captcha_message = captcha_manager.validate_captcha(captcha_input)
+    # Peek only: if the account has no passkey the same CAPTCHA still has to
+    # carry the password submit that follows.
+    captcha_valid, captcha_message = captcha_manager.validate_captcha(captcha_input, consume=False)
     if not captcha_valid:
         return jsonify({"error": "captcha_invalid", "message": captcha_message}), 400
 
@@ -570,6 +572,9 @@ def login_passkey_verify():
     if int(time.time()) - int(pending.get("issued_at") or 0) > 300:
         return jsonify({"error": "challenge_expired", "message": "This passkey request has expired. Try again."}), 400
     username = pending["username"]
+    from utils.captcha import captcha_manager
+
+    captcha_manager.clear_captcha()  # the CAPTCHA is spent by this sign-in attempt
     with transaction_scope() as db:
         user = db.execute(select(User).where(User.id == pending["user_id"], User.is_active.is_(True))).scalar_one_or_none()
         if user is None:

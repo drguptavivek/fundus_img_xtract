@@ -236,7 +236,7 @@ def test_web_login_requires_the_captcha(client, db_session, monkeypatch):
 
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
-    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value, **kwargs: (False, "Invalid CAPTCHA. Please try again."))
 
     response = _login_web(client, user, device_id="browser-captcha", captcha="WRONG")
 

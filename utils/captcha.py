@@ -206,7 +206,7 @@ class CaptchaManager:
         
         return result
     
-    def validate_captcha(self, user_input):
+    def validate_captcha(self, user_input, consume=True):
         """Validate user input against stored CAPTCHA."""
         from datetime import datetime, timezone
         
@@ -244,8 +244,10 @@ class CaptchaManager:
         if user_input.upper() != stored_text.upper():
             return False, "Invalid CAPTCHA. Please try again."
         
-        # Clear validated CAPTCHA to prevent reuse
-        self.clear_captcha()
+        # Clear validated CAPTCHA to prevent reuse. A passkey lookup peeks
+        # (consume=False) so the credential step that follows can still use it.
+        if consume:
+            self.clear_captcha()
         return True, "CAPTCHA validated successfully."
     
     def clear_captcha(self):

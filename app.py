@@ -123,6 +123,19 @@ def _configure_base_settings(app: Flask) -> None:
     )
     app.config["THUMBNAIL_MAINTENANCE_LOG_LEVEL"] = os.getenv("THUMBNAIL_MAINTENANCE_LOG_LEVEL", "INFO")
     app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60
+    # Grader PWA token auth (see docs/10-DEVELOP/Security.md). Environment
+    # overrides let a deployment shorten the inactivity gate for testing or
+    # re-enable device enrolment for browsers.
+    app.config.setdefault(
+        "GRADING_REAUTH_IDLE_SECONDS", int(os.environ.get("GRADING_REAUTH_IDLE_SECONDS", 30 * 60))
+    )
+    app.config.setdefault(
+        "MOBILE_WEB_DEVICES_AUTO_APPROVE",
+        os.environ.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", "1").strip().lower() not in {"0", "false", "no"},
+    )
+    for key in ("WEBAUTHN_RP_ID", "WEBAUTHN_ORIGIN", "WEBAUTHN_RP_NAME"):
+        if os.environ.get(key):
+            app.config[key] = os.environ[key]
     app.config["CORS_ALLOWED_ORIGINS"] = _parse_cors_origins()
 
 

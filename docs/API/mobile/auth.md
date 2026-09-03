@@ -410,3 +410,17 @@ state lives server-side (Redis, 5-minute TTL; in-process fallback) keyed by
 `challenge_id`. RP id defaults to the request host (`WEBAUTHN_RP_ID`,
 `WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_NAME` override). Access tokens carry an
 `auth_time` claim (last password / passkey proof).
+
+
+## Passkey sign-in (mobile tokens)
+
+For clients that hold no token yet (grader PWA fresh sign-in). No CAPTCHA
+(as for `/auth/login`); the login rate limit and lockouts apply.
+
+| Route | Body | Result |
+|---|---|---|
+| `POST /auth/passkeys/login/options` | `{"username"}` | `{challenge_id, options}` — unknown users and users without a passkey both answer `404 no_passkey` |
+| `POST /auth/passkeys/login/verify` | `{"username", "challenge_id", "credential", "device_id", "device_name", "platform"?, "enrolment_code"?}` | the same token payload as `/auth/login`; a failed assertion is `401 invalid_credentials` and counts as a failed attempt |
+
+Device rules are identical to the password login (web devices auto-approve,
+other platforms need enrolment, blocked devices stay blocked).

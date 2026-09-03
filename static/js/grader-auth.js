@@ -81,6 +81,23 @@
     return payload;
   }
 
+  async function loginWithPasskey(username) {
+    const { challenge_id, options } = await postJson('/auth/passkeys/login/options', { username });
+    const credential = await webauthn().get(options);
+    const payload = await postJson('/auth/passkeys/login/verify', {
+      username, challenge_id, credential, device_id: deviceId(), device_name: deviceName(), platform: 'web',
+    });
+    write({
+      access_token: payload.access_token,
+      refresh_token: payload.refresh_token,
+      expires_at: Date.now() + (Number(payload.expires_in) || 900) * 1000,
+      username: payload.user?.username || username,
+      user_id: payload.user?.id,
+      has_passkey: true,
+    });
+    return payload;
+  }
+
   function refresh() {
     if (refreshing) return refreshing;
     const tokens = read();
@@ -111,6 +128,12 @@
     const payload = await postJson('/auth/passkeys/register/verify', { challenge_id, credential, label: label || deviceName() }, { auth: true });
     write({ ...read(), has_passkey: true });
     return payload.passkey;
+  }
+  async function listPasskeys() {
+    const response = await fetch(API + '/auth/passkeys', { headers: { Accept: 'application/json', ...bearer() }, credentials: 'same-origin' });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return Array.isArray(payload.passkeys) ? payload.passkeys : [];
   }
   async function reauthPasskey() {
     const { challenge_id, options } = await postJson('/auth/passkeys/reauth/options', {}, { auth: true });
@@ -212,8 +235,8 @@
   } catch (_) {}
 
   window.GraderAuth = {
-    read, write, bearer, headers: bearer, deviceId, login, refresh, logout, reauthPassword, reauthPasskey,
-    registerPasskey, passkeysSupported, platformAuthenticatorAvailable, requireReauth, fetch: authFetch,
+    read, write, bearer, headers: bearer, deviceId, login, loginWithPasskey, refresh, logout, reauthPassword, reauthPasskey,
+    registerPasskey, listPasskeys, passkeysSupported, platformAuthenticatorAvailable, requireReauth, fetch: authFetch,
     ensureWorker, syncWorker, isSignedIn: () => Boolean(read()?.refresh_token),
   };
   syncWorker();

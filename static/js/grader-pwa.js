@@ -51,9 +51,11 @@
   // Passkeys belong to a token sign-in; a web-session visit to /grader/ has no
   // token to bind one to, so the card stays hidden there.
   if (passkeyCard && auth && auth.isSignedIn()) {
-    const stored = auth.read();
-    auth.platformAuthenticatorAvailable().then(ok => {
-      if (!ok || stored?.has_passkey) return;
+    Promise.all([auth.platformAuthenticatorAvailable(), auth.listPasskeys()]).then(([ok, passkeys]) => {
+      if (!ok || passkeys === null || passkeys.length > 0) {
+        if (passkeys && passkeys.length) auth.write({ ...auth.read(), has_passkey: true });
+        return;
+      }
       passkeyCard.hidden = false;
       passkeyCard.querySelector('[data-passkey-enrol-button]').addEventListener('click', async event => {
         const button = event.currentTarget;
@@ -68,6 +70,27 @@
         }
       });
     });
+  }
+
+  // ---- Native install prompt (Chromium): surface the browser's own dialog ----
+  const installButton = document.querySelector('[data-pwa-install]');
+  if (installButton) {
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredPrompt = event;
+      installButton.classList.remove('d-none');
+    });
+    installButton.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      try { await deferredPrompt.userChoice; } catch (_) {}
+      deferredPrompt = null;
+      installButton.classList.add('d-none');
+    });
+    if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+      document.querySelector('[data-install-help]')?.remove();
+    }
   }
 
   const workbench = document.getElementById('grading-workbench');

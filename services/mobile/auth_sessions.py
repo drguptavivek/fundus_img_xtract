@@ -151,6 +151,15 @@ def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
         except MobileDeviceError as exc:
             raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
 
+    return _open_mobile_session(db, user, login_request)
+
+
+def _open_mobile_session(db, user: User, login_request: MobileLoginRequest) -> dict:
+    """Everything after the credential check: device gate, token session,
+    session limit, audit. Shared by the password and passkey sign-ins."""
+    username = login_request.username
+    ip = login_request.ip_address
+
     # Browsers (the grader PWA) carry the same tokens but skip enrolment: the
     # device row is created approved unless an administrator blocked it.
     if login_request.platform == WEB_PLATFORM and not login_request.enrolment_code:
@@ -204,6 +213,44 @@ def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
         sanitize_log_value(login_request.device_id),
     )
     return mobile_auth_response(user, access_token, refresh_token, scope, mobile_session)
+
+
+def mobile_login_gate(db, *, username: str, ip: str) -> User | None:
+    """Lockout checks shared by password and passkey sign-in.
+
+    Raises the same ``MobileAuthError`` the password path does; returns the
+    active user row or ``None`` (unknown / inactive - callers must answer
+    identically to a missing credential so accounts cannot be enumerated).
+    """
+    ip_locked, _ = _is_ip_locked(db, ip)
+    if ip_locked:
+        raise MobileAuthError("Too many attempts. IP is temporarily locked.", code="ip_locked", status_code=403)
+    if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
+        user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+        if user:
+            _lock_user(db, user)
+        _record_attempt(db, username, ip, success=False)
+        raise MobileAuthError("Too many attempts. User is temporarily locked.", code="user_locked", status_code=403)
+    if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
+        _lock_ip(db, ip)
+        _record_attempt(db, username, ip, success=False)
+        raise MobileAuthError("Too many attempts. IP is temporarily locked.", code="ip_locked", status_code=403)
+    user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+    if user and user.is_locked_until:
+        locked_until = user.is_locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=utcnow().tzinfo)
+        if locked_until > utcnow():
+            _record_attempt(db, username, ip, success=False)
+            raise MobileAuthError("Too many attempts. User is temporarily locked.", code="user_locked", status_code=403)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
+def login_mobile_user_with_passkey(db, login_request: MobileLoginRequest, *, user: User) -> dict:
+    """Open a mobile session for ``user`` after a verified passkey assertion."""
+    return _open_mobile_session(db, user, login_request)
 
 
 def _require_revocation_store_for_field_user(user) -> None:

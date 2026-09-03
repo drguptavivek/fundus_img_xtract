@@ -13,6 +13,9 @@
       {% if not current_user.is_authenticated %}
       <div class="ms-md-3 mt-3 mt-md-0 text-md-end">
         <a class="btn btn-primary" href="{{ url_for('auth.login') }}">Login to get started</a>
+        <a class="btn btn-outline-primary ms-2" href="{{ url_for('grader_pwa.login') }}">
+          <i class="fa-solid fa-mobile-screen-button me-1" aria-hidden="true"></i>Login as grader
+        </a>
       </div>
       {% endif %}
     </div>

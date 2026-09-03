@@ -10,14 +10,22 @@ from __future__ import annotations
 
 from flask import jsonify, request
 
+from auth.credentials import credential_authenticated
 from auth.decorators import token_auth_required
 from auth.utils import get_client_ip, utcnow
 from db_transaction_manager import transaction_scope
 from passkeys import service as passkey_service
 from passkeys.models import MobilePasskey  # noqa: F401 - registers the table with the metadata
 from passkeys.service import PasskeyError
-from services.mobile.auth_sessions import MobileAuthError, mark_reauthenticated, validate_access_session
-from utils.rate_limiter import rate_limit
+from services.mobile.auth_sessions import (
+    MobileAuthError,
+    MobileLoginRequest,
+    login_mobile_user_with_passkey,
+    mark_reauthenticated,
+    mobile_login_gate,
+    validate_access_session,
+)
+from utils.rate_limiter import auth_rate_limit, get_login_rate_limit_key, rate_limit
 
 from . import mobile_api_bp
 
@@ -139,3 +147,81 @@ def passkey_delete(passkey_id: int):
         if not passkey_service.delete_passkey(db, user_id=context.user.id, passkey_id=passkey_id):
             return jsonify({"error": "not_found", "message": "Passkey not found."}), 404
     return ("", 204)
+
+
+# --------------------------------------------------------------------------- #
+# Passkey sign-in (no bearer yet): username -> assertion -> tokens
+# --------------------------------------------------------------------------- #
+
+
+def _no_passkey():
+    return jsonify({"error": "no_passkey", "message": "No passkey is registered for this username."}), 404
+
+
+@mobile_api_bp.route("/auth/passkeys/login/options", methods=["POST"])
+@credential_authenticated
+@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
+def passkey_login_options():
+    """WebAuthn request options for a username. Same lockouts as the password
+    login; unknown users and users without a passkey answer identically."""
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    if not username:
+        return jsonify({"error": "username_required", "message": "username is required"}), 400
+    try:
+        with transaction_scope() as db:
+            user = mobile_login_gate(db, username=username, ip=get_client_ip())
+            if user is None:
+                return _no_passkey()
+            try:
+                return jsonify(passkey_service.begin_assertion(db, user=user))
+            except PasskeyError:
+                return _no_passkey()
+    except MobileAuthError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@mobile_api_bp.route("/auth/passkeys/login/verify", methods=["POST"])
+@credential_authenticated
+@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
+def passkey_login_verify():
+    """Verify the assertion and open a mobile session (tokens), exactly as a
+    password login would after the credential check."""
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    device_id = (payload.get("device_id") or "").strip()
+    device_name = (payload.get("device_name") or "").strip()
+    credential = payload.get("credential")
+    challenge_id = str(payload.get("challenge_id") or "")
+    if not username or not device_id or not device_name or not isinstance(credential, dict):
+        return jsonify({"error": "invalid_request", "message": "username, device_id, device_name and credential are required"}), 400
+    ip = get_client_ip()
+    try:
+        with transaction_scope() as db:
+            user = mobile_login_gate(db, username=username, ip=ip)
+            if user is None:
+                return jsonify({"error": "invalid_credentials", "message": "Passkey sign-in failed"}), 401
+            try:
+                passkey_service.complete_assertion(db, user=user, challenge_id=challenge_id, credential=credential)
+            except PasskeyError:
+                from auth.routes import _record_attempt
+
+                _record_attempt(db, username, ip, success=False)
+                return jsonify({"error": "invalid_credentials", "message": "Passkey sign-in failed"}), 401
+            return jsonify(
+                login_mobile_user_with_passkey(
+                    db,
+                    MobileLoginRequest(
+                        username=username,
+                        password="",
+                        device_id=device_id,
+                        device_name=device_name,
+                        ip_address=ip,
+                        enrolment_code=(payload.get("enrolment_code") or "").strip(),
+                        platform=(payload.get("platform") or "").strip() or None,
+                    ),
+                    user=user,
+                )
+            )
+    except MobileAuthError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code

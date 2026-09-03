@@ -35,6 +35,18 @@
     <span aria-hidden="true">·</span>
     <a href="{{ url_for('grading.index') }}">Web app</a>
   </div>
+  <details class="mt-4 small text-body-secondary" data-install-help>
+    <summary class="text-body">Install as an app</summary>
+    <button type="button" class="btn btn-outline-primary btn-sm w-100 my-2 d-none" data-pwa-install>
+      <i class="fa-solid fa-download me-1" aria-hidden="true"></i>Install Grader
+    </button>
+    <ul class="mb-0 ps-3 mt-2">
+      <li><strong>iPhone / iPad (Safari):</strong> Share <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> → <em>Add to Home Screen</em>.</li>
+      <li><strong>Mac (Safari):</strong> File → <em>Add to Dock</em>.</li>
+      <li><strong>Android (Chrome):</strong> menu ⋮ → <em>Install app</em> (or <em>Add to Home screen</em>).</li>
+      <li><strong>Windows / Mac (Chrome, Edge):</strong> the install icon in the address bar, or menu → <em>Install Grader</em>.</li>
+    </ul>
+  </details>
   <div class="alert alert-warning small mt-4 d-none" data-login-unsupported>
     This browser cannot run the grader app (service workers are unavailable). Use the web app instead.
   </div>
@@ -72,18 +84,27 @@
     form.username.value = stored.username;
     if (reauth) { form.username.readOnly = true; form.password.focus(); }
   }
-  if (reauth && stored && stored.has_passkey) {
-    auth.platformAuthenticatorAvailable().then(ok => { if (ok) passkeyButton.classList.remove('d-none'); });
-  }
+  // Passkey is offered whenever the device has a platform authenticator: for
+  // re-authentication when a passkey is known, and always for a fresh sign-in
+  // (the server answers "no passkey" for accounts without one).
+  auth.platformAuthenticatorAvailable().then(ok => {
+    if (ok && (!reauth || (stored && stored.has_passkey))) passkeyButton.classList.remove('d-none');
+  });
   if (!reauth && stored && stored.refresh_token) {
     // Already signed in on this device: pick up where we left off.
     auth.refresh().then(proceed).catch(() => undefined);
   }
 
   passkeyButton.addEventListener('click', async () => {
+    errorBox.classList.add('d-none');
+    const username = form.username.value.trim();
+    if (!reauth && !username) { form.username.focus(); fail('Enter your username, then use your passkey.'); return; }
     passkeyButton.disabled = true;
-    try { await auth.reauthPasskey(); await proceed(); }
-    catch (error) { fail(error.message || 'Passkey failed'); passkeyButton.disabled = false; }
+    try {
+      if (reauth && auth.isSignedIn()) await auth.reauthPasskey();
+      else await auth.loginWithPasskey(username);
+      await proceed();
+    } catch (error) { fail(error.message || 'Passkey failed'); passkeyButton.disabled = false; }
   });
 
   form.addEventListener('submit', async event => {

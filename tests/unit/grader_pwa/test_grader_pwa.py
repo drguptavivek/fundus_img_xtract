@@ -84,6 +84,19 @@ def test_pwa_pages_version_worker_registration_and_bypass_http_cache(client):
     assert "updateViaCache: 'none'" in (ROOT / "static/js/grader-auth.js").read_text()
 
 
+def test_phone_viewer_fits_complete_image_without_annotation_overlay():
+    workbench = (ROOT / "templates/grading/_workbench_body.html").read_text()
+    pwa_script = (ROOT / "static/js/grader-pwa.js").read_text()
+    pwa_styles = (ROOT / "static/css/grader-pwa.css").read_text()
+
+    assert 'data-fit-mode="contain"' in workbench
+    assert 'aria-label="View image fullscreen"' in workbench
+    assert '<i class="fa-solid fa-expand" aria-hidden="true"></i>' in workbench
+    assert "Done annotating" not in pwa_script
+    assert "gpwa-annotate-done" not in pwa_styles
+    assert "body.gpwa-workbench .gwb-viewer-body .imggr-full" in pwa_styles
+
+
 def test_offline_page_is_public(client):
     response = client.get("/grader/offline")
 

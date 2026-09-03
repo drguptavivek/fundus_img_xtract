@@ -160,12 +160,8 @@
   function setupAnnotateMode(panel) {
     const toggle = panel.querySelector('[data-annot-toggle]');
     const host = panel.querySelector('[data-geometry-sidebar-host]');
-    if (!toggle || !host || host.querySelector('.gpwa-annotate-done')) return;
-    const done = document.createElement('button');
-    done.type = 'button';
-    done.className = 'btn btn-success gpwa-annotate-done mt-2';
-    done.innerHTML = '<i class="fa-solid fa-check me-1" aria-hidden="true"></i>Done annotating';
-    host.appendChild(done);
+    if (!toggle || !host || panel.dataset.gpwaAnnotateReady === 'true') return;
+    panel.dataset.gpwaAnnotateReady = 'true';
     // The Tools toggle already shows/hides the editor sidebar; annotate mode
     // additionally hides the grade sheet so the image keeps the screen.
     toggle.addEventListener('click', () => {
@@ -174,11 +170,6 @@
         const open = sidebar && !sidebar.classList.contains('is-collapsed');
         panel.classList.toggle('gpwa-annotating', Boolean(open) && phone.matches);
       });
-    });
-    done.addEventListener('click', () => {
-      panel.classList.remove('gpwa-annotating');
-      const sidebar = panel.querySelector('.imggr-annot-sidebar');
-      if (sidebar && !sidebar.classList.contains('is-collapsed')) toggle.click();
     });
   }
 

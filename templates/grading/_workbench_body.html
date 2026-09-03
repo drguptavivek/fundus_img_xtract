@@ -258,13 +258,16 @@
                         </aside>
                         {% endif %}
                         <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1 bg-black">
-                          <div class="imggr-main rounded position-relative bg-black" data-min-viewport-size="120" data-fit-mode="width">
+                          <div class="imggr-main rounded position-relative bg-black" data-min-viewport-size="120" data-fit-mode="contain">
                             <img class="imggr-main-img"
                                  {% if loop.first %}src="{{ viewer_media.media_url }}" fetchpriority="high"
                                  {% else %}data-src="{{ viewer_media.media_url }}" fetchpriority="low"{% endif %}
                                  alt="{{ panel.disease_name }} image{% if viewer_media.laterality %}, {{ viewer_media.laterality }}{% endif %}"
                                  data-index="0">
-                            <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+                            <button class="imggr-full btn btn-sm btn-light position-absolute" type="button"
+                                    aria-label="View image fullscreen" title="View image fullscreen">
+                              <i class="fa-solid fa-expand" aria-hidden="true"></i>
+                            </button>
                           </div>
                         </div>
                       </div>

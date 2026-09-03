@@ -152,6 +152,9 @@ def _encode_access_token(user: User, mobile_session: MobileAuthSession, scope: d
         "roles": scope["roles"],
         "iat": now,
         "exp": now + ACCESS_TOKEN_LIFETIME,
+        # Seconds since epoch of the last password / passkey proof on this
+        # session; the grading gate reads it alongside session activity.
+        "auth_time": int((mobile_session.last_authenticated_at or now).timestamp()),
     }
     return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
 
@@ -183,6 +186,7 @@ def create_mobile_session(
             refresh_token_hash=refresh_hash,
             refresh_token_expires_at=now + lifetime,
             last_used_at=now,
+            last_authenticated_at=now,
             last_refreshed_at=now,
             last_used_ip=request.remote_addr,
             last_user_agent=request.headers.get("User-Agent"),
@@ -320,3 +324,8 @@ def mobile_auth_response(
             "logout": {"href": "/api/mobile/v1/auth/logout", "method": "POST"},
         },
     }
+
+
+def encode_access_token(user: User, mobile_session: MobileAuthSession, scope: dict[str, Any]) -> str:
+    """Public entry point for minting an access token on an existing session (re-authentication)."""
+    return _encode_access_token(user, mobile_session, scope)

@@ -53,6 +53,9 @@ def token_auth_required(f):
                 mobile_auth["session_id"] = access_context.session.id
                 mobile_auth["device_id"] = access_context.session.device_id
                 mobile_auth["user_id"] = access_context.user.id
+                authenticated_at = getattr(access_context, "authenticated_at", None)
+                mobile_auth["idle_seconds"] = getattr(access_context, "idle_seconds", 0.0)
+                mobile_auth["authenticated_at"] = authenticated_at.isoformat() if authenticated_at else None
                 mobile_auth["user"] = {
                     "id": access_context.user.id,
                     "username": access_context.user.username,
@@ -122,3 +125,41 @@ def require_recent_reauthentication(timeout=600):
     if not last_sudo or (now - last_sudo) > timeout:
         return redirect(url_for("auth.confirm_password", next=request.url))
     return None
+
+
+# Seconds of inactivity after which a bearer-token session must re-prove
+# identity before it can act in the grading workbench.
+GRADING_REAUTH_IDLE_SECONDS = 30 * 60
+
+
+def grading_reauth_gate(f):
+    """Require recent activity on a mobile-token session for grading actions.
+
+    Applies only when the request authenticated with a bearer token
+    (``request.mobile_auth``); web sessions are already bounded by the
+    30-minute idle timeout that logs them out. After 30 idle minutes the
+    client must call the re-authentication API (password or passkey) for a
+    fresh access token; JSON callers get ``401 reauth_required`` and page
+    navigations are sent to the grader login page in re-authentication mode.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        mobile_auth = getattr(request, "mobile_auth", None)
+        if mobile_auth:
+            idle = float(mobile_auth.get("idle_seconds") or 0)
+            limit = current_app.config.get("GRADING_REAUTH_IDLE_SECONDS", GRADING_REAUTH_IDLE_SECONDS)
+            if idle > limit:
+                wants_json = request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json"
+                if wants_json:
+                    return jsonify({
+                        "success": False,
+                        "error": {
+                            "code": "reauth_required",
+                            "message": "Please confirm it is you to continue grading.",
+                            "idle_seconds": int(idle),
+                        },
+                    }), 401
+                return redirect(url_for("grader_pwa.login", reauth=1, next=request.full_path.rstrip("?")))
+        return f(*args, **kwargs)
+
+    return decorated

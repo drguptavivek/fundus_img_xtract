@@ -1,0 +1,106 @@
+{% extends "grader_pwa/_layout.html" %}
+{% block title %}{{ 'Confirm it\'s you' if reauth else 'Sign in' }}{% endblock %}
+{% block content %}
+<main class="gpwa-page d-flex flex-column justify-content-center" style="min-height: 100dvh;" data-grader-login
+      data-next="{{ next_url }}" data-reauth="{{ '1' if reauth else '' }}">
+  <div class="text-center mb-4">
+    <img src="{{ pwa_assets.logo }}" alt="" width="64" height="64" class="mb-2">
+    <h1 class="h4 mb-1">{{ 'Confirm it\'s you' if reauth else 'Grader sign in' }}</h1>
+    <p class="text-body-secondary small mb-0" data-login-subtitle>
+      {% if reauth %}You've been inactive for a while. Re-authenticate to continue grading.{% else %}Eye Image Manager{% endif %}
+    </p>
+  </div>
+
+  <button type="button" class="btn btn-primary w-100 mb-3 d-none" data-login-passkey>
+    <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
+  </button>
+
+  <form class="d-flex flex-column gap-3" data-login-form novalidate>
+    <div>
+      <label class="form-label" for="login-username">Username</label>
+      <input class="form-control form-control-lg" id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div>
+      <label class="form-label" for="login-password">Password</label>
+      <input class="form-control form-control-lg" id="login-password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="alert alert-danger py-2 small d-none" role="alert" data-login-error></div>
+    <button class="btn btn-primary btn-lg w-100" type="submit" data-login-submit>
+      {{ 'Confirm with password' if reauth else 'Sign in' }}
+    </button>
+  </form>
+
+  <div class="text-center mt-4 small text-body-secondary">
+    <a href="{{ url_for('grader_pwa.demo_page') }}">Try the demo</a>
+    <span aria-hidden="true">·</span>
+    <a href="{{ url_for('grading.index') }}">Web app</a>
+  </div>
+  <div class="alert alert-warning small mt-4 d-none" data-login-unsupported>
+    This browser cannot run the grader app (service workers are unavailable). Use the web app instead.
+  </div>
+</main>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ pwa_assets.auth_js }}"></script>
+<script>
+(function () {
+  const root = document.querySelector('[data-grader-login]');
+  const form = root.querySelector('[data-login-form]');
+  const errorBox = root.querySelector('[data-login-error]');
+  const passkeyButton = root.querySelector('[data-login-passkey]');
+  const submit = root.querySelector('[data-login-submit]');
+  const reauth = root.dataset.reauth === '1';
+  const next = root.dataset.next && root.dataset.next.startsWith('/grader/') ? root.dataset.next : '/grader/';
+  const auth = window.GraderAuth;
+
+  function fail(message) { errorBox.textContent = message; errorBox.classList.remove('d-none'); }
+  async function proceed() {
+    await auth.ensureWorker(document.body.dataset.swUrl, document.body.dataset.swScope || '/grader/');
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      // First install: the worker is active but not yet controlling this page;
+      // a navigation from here is controlled once it has claimed clients.
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    window.location.assign(next);
+  }
+
+  if (!('serviceWorker' in navigator)) root.querySelector('[data-login-unsupported]').classList.remove('d-none');
+
+  const stored = auth.read();
+  if (stored && stored.username) {
+    form.username.value = stored.username;
+    if (reauth) { form.username.readOnly = true; form.password.focus(); }
+  }
+  if (reauth && stored && stored.has_passkey) {
+    auth.platformAuthenticatorAvailable().then(ok => { if (ok) passkeyButton.classList.remove('d-none'); });
+  }
+  if (!reauth && stored && stored.refresh_token) {
+    // Already signed in on this device: pick up where we left off.
+    auth.refresh().then(proceed).catch(() => undefined);
+  }
+
+  passkeyButton.addEventListener('click', async () => {
+    passkeyButton.disabled = true;
+    try { await auth.reauthPasskey(); await proceed(); }
+    catch (error) { fail(error.message || 'Passkey failed'); passkeyButton.disabled = false; }
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    errorBox.classList.add('d-none');
+    submit.disabled = true;
+    try {
+      if (reauth && auth.isSignedIn()) {
+        await auth.reauthPassword(form.password.value);
+      } else {
+        await auth.login(form.username.value.trim(), form.password.value);
+      }
+      await proceed();
+    } catch (error) {
+      fail(error.message || 'Sign in failed');
+      submit.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

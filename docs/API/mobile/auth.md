@@ -373,3 +373,40 @@ while waiting for approval. Request volume is still bounded by the login rate li
 
 The server cannot control what a client stores. Field clients must not persist patient data
 or images at rest, and must clear any cached data on logout and on session revocation.
+
+
+## Web platform devices (grader PWA)
+
+`POST /api/mobile/v1/auth/login` with `"platform": "web"` and no
+`enrolment_code` creates the device row approved (unless blocked) — browsers
+are not gated by enrolment. Disable with `MOBILE_WEB_DEVICES_AUTO_APPROVE = False`.
+
+## `POST /api/mobile/v1/auth/reauth`
+
+Auth: bearer access token. Body: `{"password": "..."}`.
+
+Re-proves identity on the current mobile session (used after 30 idle minutes,
+see `docs/16-NewFeature/grader_pwa/README.md`). Returns
+`{"access_token", "token_type", "expires_in", "auth_time", "method": "password"}`;
+the refresh token is unchanged. Wrong passwords count toward the login lockouts.
+Rate limit: 10 per minute.
+
+## Passkeys (WebAuthn)
+
+All bearer-authenticated, JSON:
+
+| Route | Purpose |
+|---|---|
+| `GET /auth/passkeys` | List this user's passkeys |
+| `POST /auth/passkeys/register/options` | Creation options + `challenge_id` (requires a password proof within 30 minutes) |
+| `POST /auth/passkeys/register/verify` | `{challenge_id, credential, label?}` → `201 {passkey}` |
+| `POST /auth/passkeys/reauth/options` | Assertion options + `challenge_id` |
+| `POST /auth/passkeys/reauth/verify` | `{challenge_id, credential}` → fresh access token (`method: "passkey"`) |
+| `DELETE /auth/passkeys/<id>` | Remove a passkey |
+
+Options/credentials use the WebAuthn JSON forms
+(`PublicKeyCredential.parseCreationOptionsFromJSON` / `toJSON()`). Challenge
+state lives server-side (Redis, 5-minute TTL; in-process fallback) keyed by
+`challenge_id`. RP id defaults to the request host (`WEBAUTHN_RP_ID`,
+`WEBAUTHN_ORIGIN`, `WEBAUTHN_RP_NAME` override). Access tokens carry an
+`auth_time` claim (last password / passkey proof).

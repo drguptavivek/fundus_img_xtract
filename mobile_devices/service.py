@@ -156,6 +156,37 @@ def redeem_enrolment_code(
     return device
 
 
+WEB_PLATFORM = "web"
+
+
+def ensure_web_device(db, *, user_id: int, device_id: str, label: str | None = None) -> MobileDevice | None:
+    """Approve a browser (``platform == "web"``) device without an enrolment code.
+
+    Product decision 2026-09-03: installed web apps use the same bearer tokens
+    as phones but are not gated by device enrolment. Blocked devices stay
+    blocked - an administrator's decision is never bypassed - and the switch
+    ``MOBILE_WEB_DEVICES_AUTO_APPROVE`` turns the behaviour off wholesale.
+    Returns the device row, or ``None`` when auto-approval is disabled.
+    """
+    from flask import current_app
+
+    if not current_app.config.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", True):
+        return None
+    device = _get_device(db, user_id=user_id, device_id=device_id)
+    if device is None:
+        device = MobileDevice(user_id=user_id, device_id=device_id)
+        db.add(device)
+    if device.status == "blocked":
+        raise DeviceBlocked()
+    if device.status != "approved":
+        device.status = "approved"
+        device.enrolled_at = utcnow()
+    device.platform = WEB_PLATFORM
+    device.label = label or device.label
+    db.flush()
+    return device
+
+
 def require_approved_device(db, *, user_id: int, device_id: str) -> MobileDevice:
     """Raise unless this user has an approved row for this device."""
     device = _get_device(db, user_id=user_id, device_id=device_id)

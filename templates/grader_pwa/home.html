@@ -63,6 +63,15 @@
     {% endfor %}
   </section>
 
+  <section class="mb-4" aria-label="Passkey" data-passkey-enrol hidden>
+    <div class="gpwa-resume">
+      <div class="fw-semibold mb-1"><i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Add a passkey</div>
+      <div class="small text-body-secondary mb-2">After 30 minutes away you'll be asked to confirm it's you. A passkey lets you do that with Face ID, Touch ID or Windows Hello instead of your password.</div>
+      <button type="button" class="btn btn-outline-primary w-100" data-passkey-enrol-button>Set up passkey</button>
+      <div class="small mt-2" data-passkey-enrol-status aria-live="polite"></div>
+    </div>
+  </section>
+
   <section class="mb-4" aria-label="Demo">
     <a class="gpwa-queue text-decoration-none text-body" href="{{ url_for('grader_pwa.demo_page') }}">
       <div class="flex-grow-1 min-w-0">

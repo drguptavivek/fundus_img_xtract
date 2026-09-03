@@ -38,11 +38,15 @@
   }
   const workbenchForm = root.querySelector('[data-workbench-form]');
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  // The grader PWA authenticates with a mobile bearer token (window.GraderAuth);
+  // the web workbench relies on the session cookie + CSRF token. Both are sent
+  // when present - the server picks whichever applies.
   const headers = {
     'Content-Type': 'application/json',
     'X-CSRFToken': csrf,
     'X-Workbench-Token': token,
-    'X-Workbench-Generation': generation
+    'X-Workbench-Generation': generation,
+    ...(window.GraderAuth ? window.GraderAuth.headers() : {})
   };
 
   async function loadPanelMedia(panel) {
@@ -494,7 +498,24 @@
     if (config.demo) return demoApi(path, options);
     let response;
     try {
-      response = await fetch(path, {...options, headers});
+      const auth = window.GraderAuth;
+      const send = () => fetch(path, {...options, headers: {...headers, ...(auth ? auth.headers() : {})}});
+      response = await send();
+      // Token sessions: after 30 idle minutes the server asks for a fresh
+      // identity proof (passkey or password); an expired access token is
+      // refreshed silently. Either way the original call is retried once.
+      if (auth && response.status === 401) {
+        let payload = null;
+        try { payload = await response.clone().json(); } catch (_) {}
+        const code = String(payload?.error?.code || payload?.error || payload?.message || '');
+        if (/reauth_required/.test(code)) {
+          await auth.requireReauth();
+          response = await send();
+        } else if (auth.isSignedIn()) {
+          await auth.refresh();
+          response = await send();
+        }
+      }
     } catch (_) {
       const error = new Error('The grading server is temporarily unavailable. Your unsaved draft will retry.');
       error.code = 'network_error';
@@ -507,7 +528,7 @@
     try {
       payload = JSON.parse(rawBody);
     } catch (_) {
-      const redirectedToLogin = response.redirected && /\/login(?:[/?#]|$)/.test(response.url);
+      const redirectedToLogin = response.redirected && /\/(?:grader\/)?login(?:[/?#]|$)/.test(response.url);
       const transient = response.status >= 500 || response.status === 429;
       const message = redirectedToLogin
         ? 'Your login session has expired. Reload this page and sign in again.'

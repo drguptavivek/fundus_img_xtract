@@ -19,6 +19,7 @@ from auth.mobile_tokens import (
     validate_mobile_session,
 )
 from auth.mobile_tokens import create_mobile_session as create_token_session
+from auth.mobile_tokens import ACCESS_TOKEN_LIFETIME
 from auth.routes import (
     MAX_FAILS_PER_IP,
     MAX_FAILS_PER_USERNAME,
@@ -39,6 +40,8 @@ from mobile_devices.service import (
     refresh_lifetime_for,
     require_approved_device,
     touch_device,
+    WEB_PLATFORM,
+    ensure_web_device,
 )
 from models import MobileAuthSession, User
 from utils.log_sanitize import sanitize_log_value
@@ -75,6 +78,15 @@ class AccessTokenContext:
     claims: dict
     session: MobileAuthSession
     user: User
+    # Seconds since this session's previous request, measured before this
+    # request refreshed ``last_used_at``; the grading gate turns it into a
+    # re-authentication demand after 30 idle minutes.
+    idle_seconds: float = 0.0
+    authenticated_at: datetime | None = None
+
+
+# Endpoints whose requests are machine-generated and never count as activity.
+BACKGROUND_ENDPOINTS = frozenset({"fundus_api.heartbeat_workbench_session"})
 
 
 class MobileAuthError(ValueError):
@@ -135,6 +147,19 @@ def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
                 device_id=login_request.device_id,
                 label=login_request.device_name,
                 platform=login_request.platform,
+            )
+        except MobileDeviceError as exc:
+            raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
+
+    # Browsers (the grader PWA) carry the same tokens but skip enrolment: the
+    # device row is created approved unless an administrator blocked it.
+    if login_request.platform == WEB_PLATFORM and not login_request.enrolment_code:
+        try:
+            ensure_web_device(
+                db,
+                user_id=user.id,
+                device_id=login_request.device_id,
+                label=login_request.device_name,
             )
         except MobileDeviceError as exc:
             raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
@@ -375,11 +400,70 @@ def validate_access_session(db, claims: dict) -> AccessTokenContext:
     except MobileDeviceError as exc:
         raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
 
-    mobile_session.last_used_at = utcnow()
+    now = utcnow()
+    previous = mobile_session.last_used_at
+    if previous is not None and previous.tzinfo is None:
+        previous = previous.replace(tzinfo=now.tzinfo)
+    idle_seconds = max(0.0, (now - previous).total_seconds()) if previous else 0.0
+    # Automatic traffic (the workbench lease heartbeat) keeps a page alive but
+    # is not the user doing anything; leaving last_used_at alone means the
+    # 30-minute inactivity gate measures real interaction.
+    if request.endpoint not in BACKGROUND_ENDPOINTS:
+        mobile_session.last_used_at = now
     mobile_session.last_used_ip = request.remote_addr
     mobile_session.last_user_agent = request.headers.get("User-Agent")
     db.flush()
-    return AccessTokenContext(claims=claims, session=mobile_session, user=user)
+    return AccessTokenContext(
+        claims=claims,
+        session=mobile_session,
+        user=user,
+        idle_seconds=idle_seconds,
+        authenticated_at=mobile_session.last_authenticated_at,
+    )
+
+
+def reauthenticate_mobile_session(db, *, context: AccessTokenContext, password: str, ip_address: str) -> dict:
+    """Re-prove identity on an existing mobile session with the password.
+
+    Issues a fresh access token whose ``auth_time`` is now; the refresh token
+    is untouched. Failed attempts count toward the same lockouts as login.
+    """
+    user = context.user
+    username = user.username
+    if not password or not verify_password(user.password_hash, password):
+        _record_attempt(db, username, ip_address, success=False)
+        if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
+            _lock_user(db, user)
+        raise MobileAuthError("Invalid password", code="invalid_credentials", status_code=401)
+    return mark_reauthenticated(db, context=context, ip_address=ip_address, method="password")
+
+
+def mark_reauthenticated(db, *, context: AccessTokenContext, ip_address: str, method: str) -> dict:
+    """Record a successful identity proof and mint a fresh access token."""
+    from auth.mobile_tokens import build_mobile_scope, encode_access_token
+
+    mobile_session = context.session
+    user = context.user
+    now = utcnow()
+    mobile_session.last_authenticated_at = now
+    mobile_session.last_used_at = now
+    db.flush()
+    _record_attempt(db, user.username, ip_address, success=True)
+    scope = build_mobile_scope(db, user)
+    access_token = encode_access_token(user, mobile_session, scope)
+    logger.info(
+        "Mobile re-authentication user=%s method=%s device_id=%s",
+        sanitize_log_value(user.username),
+        sanitize_log_value(method),
+        sanitize_log_value(mobile_session.device_id),
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": int(ACCESS_TOKEN_LIFETIME.total_seconds()),
+        "auth_time": int(now.timestamp()),
+        "method": method,
+    }
 
 
 def revoke_access_jti(jti: str, expires_at: datetime | int | float | None) -> None:

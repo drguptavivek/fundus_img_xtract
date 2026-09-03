@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import jsonify, request, url_for
 from flask_login import current_user
 
+from auth.decorators import grading_reauth_gate
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.workbench.errors import WorkbenchError
@@ -34,6 +35,7 @@ GRADING_ROLES = ("ophthalmologist", "field_ophthalmologist")
 
 @api_bp.route("/grading/workbench/me/active-sessions", methods=["GET"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def get_active_workbench_sessions():
     with transaction_scope() as db:
         return jsonify({"success": True, "sessions": list_active_sessions(db, user_id=current_user.id)})
@@ -41,6 +43,7 @@ def get_active_workbench_sessions():
 
 @api_bp.route("/grading/workbench/me/submissions", methods=["GET"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def get_my_workbench_submissions():
     try:
         limit = int(request.args.get("limit", 50))
@@ -55,6 +58,7 @@ def get_my_workbench_submissions():
 
 @api_bp.route("/grading/workbench/acquire", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def acquire_workbench_session():
     payload = request.get_json(silent=True) or {}
     try:
@@ -79,6 +83,7 @@ def acquire_workbench_session():
 
 @api_bp.route("/grading/workbench/linked-followups/acquire", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def acquire_linked_followup_workbench_session():
     payload = request.get_json(silent=True) or {}
     try:
@@ -108,6 +113,7 @@ def acquire_linked_followup_workbench_session():
 
 @api_bp.route("/grading/workbench/tasks/<string:task_uuid>/sessions", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def acquire_task_workbench_session(task_uuid: str):
     payload = request.get_json(silent=True) or {}
     try:
@@ -127,6 +133,7 @@ def acquire_task_workbench_session(task_uuid: str):
 
 @api_bp.route("/grading/workbench/grades/<int:grade_id>/revision-session", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def acquire_revision_workbench_session(grade_id: int):
     try:
         with transaction_scope() as db:
@@ -142,6 +149,7 @@ def acquire_revision_workbench_session(grade_id: int):
 
 @api_bp.route("/grading/workbench/packages/<string:package_uuid>/sessions", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def acquire_package_workbench_session(package_uuid: str):
     payload = request.get_json(silent=True) or {}
     try:
@@ -161,6 +169,7 @@ def acquire_package_workbench_session(package_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>", methods=["GET"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def get_workbench_session(session_uuid: str):
     try:
         with transaction_scope() as db:
@@ -180,6 +189,7 @@ def get_workbench_session(session_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>/resume", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def resume_workbench_session(session_uuid: str):
     try:
         with transaction_scope() as db:
@@ -193,6 +203,7 @@ def resume_workbench_session(session_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>/heartbeat", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def heartbeat_workbench_session(session_uuid: str):
     try:
         with transaction_scope() as db:
@@ -210,6 +221,7 @@ def heartbeat_workbench_session(session_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>/release", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def release_workbench_session(session_uuid: str):
     try:
         with transaction_scope() as db:
@@ -227,6 +239,7 @@ def release_workbench_session(session_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>/draft", methods=["PUT"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def save_workbench_session_draft(session_uuid: str):
     payload = request.get_json(silent=True) or {}
     try:
@@ -248,6 +261,7 @@ def save_workbench_session_draft(session_uuid: str):
 
 @api_bp.route("/grading/workbench/sessions/<string:session_uuid>/submit", methods=["POST"])
 @roles_required(*GRADING_ROLES)
+@grading_reauth_gate
 def submit_workbench_session(session_uuid: str):
     payload = request.get_json(silent=True) or {}
     try:

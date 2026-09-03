@@ -25,12 +25,54 @@ Design and rationale: [PLAN.md](PLAN.md). Screen designs: the "Grader PWA Screen
 | `GET /grader/offline` | public | Offline fallback page |
 
 Grading roles: `ophthalmologist`, `field_ophthalmologist` — the same as the web
-workbench. Anonymous visitors are redirected to `/login?next=<url>` and land back
-on the requested case after sign-in (`auth.login` now honours a same-origin `next`).
+workbench.
 
-The PWA calls the existing JSON API for every mutation (`/api/grading/workbench/*`)
-with the session cookie, `X-CSRFToken`, `X-Workbench-Token` and
-`X-Workbench-Generation` — see `docs/API/grading-workbench/README.md`.
+## Authentication: mobile bearer tokens (decision 2026-09-03)
+
+The grader uses the **same bearer tokens as the phone apps**, not the web
+session cookie:
+
+- `GET /grader/login` (public) signs in through `POST /api/mobile/v1/auth/login`
+  with `platform: "web"`. Browsers skip device enrolment: the device row is
+  created approved unless an administrator blocked it
+  (`mobile_devices.service.ensure_web_device`; switch off with
+  `MOBILE_WEB_DEVICES_AUTO_APPROVE = False`).
+- Tokens live in `localStorage` and are handed to the service worker, which
+  attaches `Authorization: Bearer` to every same-origin page navigation, API
+  call and image load and refreshes an expired access token once.
+- Server side, a valid token resolves `current_user` for session-protected
+  routes (`auth.routes.load_user_from_bearer_token`, applied explicitly in the
+  login guard because Flask-Login's own loader order runs session protection
+  first). It is honoured only when no web session user exists, never creates a
+  web session, and leaves authorization untouched (`roles_required`, lab scope).
+  CSRF is skipped only for such bearer-only requests.
+- Anonymous `/grader/*` visitors are sent to `/grader/login?next=…`.
+
+### Security gate: re-authentication after 30 idle minutes
+
+`auth.decorators.grading_reauth_gate` guards every grading workbench API
+route and grader page. For a bearer session it compares the time since the
+session's previous *user* request (`MobileAuthSession.last_used_at`, measured
+before the current request updates it; automatic lease heartbeats are
+excluded) with `GRADING_REAUTH_IDLE_SECONDS` (30 minutes). Past that:
+
+- JSON callers get `401 {"error": {"code": "reauth_required"}}`;
+- page navigations go to `/grader/login?reauth=1&next=…`.
+
+The app then re-proves identity **without leaving the page** via
+`window.GraderAuth.requireReauth()` and retries the call:
+
+- **Passkey** (Touch ID / Face ID / Windows Hello) —
+  `POST /auth/passkeys/reauth/options` → `navigator.credentials.get` →
+  `POST /auth/passkeys/reauth/verify`; WebAuthn assertions are verified
+  server-side with `fido2`.
+- **Password** — `POST /api/mobile/v1/auth/reauth` (same lockouts as login).
+
+Both mint a fresh access token whose `auth_time` is now
+(`MobileAuthSession.last_authenticated_at`). Passkeys are enrolled from the
+home screen (*Set up passkey*) and require a password proof within the last
+30 minutes (`/auth/passkeys/register/*`). Web sessions are unaffected: the
+existing 30-minute idle logout already covers the desktop workbench.
 
 ## What is shared with the web workbench (Phase 0 extraction)
 

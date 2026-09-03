@@ -7,6 +7,14 @@ of this module.
 
 ## Authentication, authorization, and CSRF
 
+Two credentials are accepted: the web session cookie (with the CSRF token on
+mutations) or a mobile bearer access token (grader PWA; no CSRF token needed,
+none is sent by browsers automatically). Bearer sessions must also pass the
+30-minute inactivity gate: after 30 minutes without a user request every
+route here answers `401 {"success": false, "error": {"code": "reauth_required"}}`
+until the client re-authenticates (`POST /api/mobile/v1/auth/reauth` or a
+passkey assertion). The lease heartbeat does not count as activity.
+
 - All endpoints require an authenticated `resident` or `ophthalmologist`.
 - Task access is checked against the user's disease, project, role-slot, and
   lab-unit allocation.

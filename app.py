@@ -3,7 +3,7 @@ import os
 import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, abort, current_app, jsonify, render_template, request, redirect, url_for, session, flash
+from flask import Flask, abort, current_app, g, jsonify, render_template, request, redirect, url_for, session, flash
 from flask import send_from_directory
 from flask import message_flashed
 from flask_cors import CORS
@@ -193,6 +193,18 @@ def _register_csrf_protection(app: Flask) -> None:
     def csrf_protect():
         if not app.config.get("WTF_CSRF_ENABLED", True):
             return
+        # A request authenticated purely by a mobile bearer token (the grader
+        # PWA) carries no browser session, so there is nothing for CSRF to
+        # protect; a request that also holds a web session keeps the check.
+        if (
+            request.headers.get("Authorization", "").startswith("Bearer ")
+            and not session.get("_user_id")
+            and request.path.startswith(BEARER_SESSION_PATH_PREFIXES)
+        ):
+            from auth.routes import resolve_bearer_user
+
+            if resolve_bearer_user(request) is not None:
+                return None
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
             if view_func and (
@@ -604,12 +616,34 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/grader/sw.js",
         "/grader/offline",
         "/grader/demo",
+        "/grader/login",
     }
 )
 PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
 
+# Where a mobile bearer token may stand in for a web session: the grader PWA
+# and the grading / viewer / media APIs it needs. Nowhere else - a leaked
+# token must not reach the rest of the web application. Mobile API routes
+# authenticate tokens themselves and are not affected by this list.
+BEARER_SESSION_PATH_PREFIXES = (
+    "/grader/",
+    "/api/grading/",
+    "/api/encounter-viewer/",
+    "/api/viewer/",
+    "/api/image-metadata/",
+    "/media/",
+)
+
 
 def _register_login_guard(app: Flask) -> None:
+    @app.teardown_request
+    def _forget_bearer_user(_exc):
+        # A bearer identity is per request. Flask-Login keeps the loaded user on
+        # ``g``; drop it so nothing (test clients, nested dispatch sharing an
+        # app context) can carry it into another request.
+        if g.pop("_bearer_login", False):
+            g.pop("_login_user", None)
+
     @app.before_request
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
@@ -619,6 +653,23 @@ def _register_login_guard(app: Flask) -> None:
         # real 404 instead of disguising it as an authentication redirect.
         if request.endpoint is None:
             return
+
+        # A mobile bearer token (the grader PWA) resolves current_user here,
+        # explicitly: Flask-Login's own loader order runs session protection
+        # first and returns anonymous for a bearer-only client whose session
+        # cookie merely holds a CSRF token, so the request_loader would never
+        # be consulted.
+        if (
+            not session.get("_user_id")
+            and request.headers.get("Authorization", "").startswith("Bearer ")
+            and path.startswith(BEARER_SESSION_PATH_PREFIXES)
+        ):
+            from auth.routes import resolve_bearer_user
+
+            bearer_user = resolve_bearer_user(request)
+            if bearer_user is not None:
+                g._login_user = bearer_user
+                g._bearer_login = True
 
         # Allow routes that handle their own authentication (e.g. via JWT)
         if request.endpoint:
@@ -657,6 +708,9 @@ def _register_login_guard(app: Flask) -> None:
             # PWA) lands back where it pointed after sign-in. Only the local
             # path is passed; the login route re-checks it with is_safe_url.
             if request.method in ("GET", "HEAD"):
+                # The grader PWA signs in with mobile tokens on its own page.
+                if path.startswith("/grader/"):
+                    return redirect(url_for("grader_pwa.login", next=request.full_path.rstrip("?")))
                 return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
             return redirect(url_for("auth.login"))
         if getattr(current_user, "is_active", True) is False:

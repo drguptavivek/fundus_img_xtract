@@ -8,6 +8,7 @@ from flask import current_app, jsonify, request
 from auth.credentials import credential_authenticated
 from auth.utils import get_client_ip
 from db_transaction_manager import transaction_scope
+from auth.decorators import token_auth_required
 from services.mobile.auth_sessions import (
     MobileAuthError,
     MobileLoginRequest,
@@ -15,7 +16,9 @@ from services.mobile.auth_sessions import (
     decode_access_claims_without_revocation,
     login_mobile_user,
     logout_mobile_session,
+    reauthenticate_mobile_session,
     refresh_mobile_tokens,
+    validate_access_session,
 )
 from utils.rate_limiter import auth_rate_limit, get_login_rate_limit_key, rate_limit
 
@@ -77,6 +80,31 @@ def refresh():
     try:
         with transaction_scope() as db:
             return jsonify(refresh_mobile_tokens(db, RefreshTokenRequest(refresh_token=refresh_token, device_id=device_id)))
+    except MobileAuthError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@mobile_api_bp.route("/auth/reauth", methods=["POST"])
+@token_auth_required
+@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
+def reauth():
+    """Re-prove identity with the password on the current mobile session.
+
+    Used by the grader after 30 idle minutes (``401 reauth_required``). Returns
+    a fresh access token; the refresh token is unchanged.
+    """
+    payload = request.get_json(silent=True) or {}
+    password = payload.get("password") or ""
+    if not password:
+        return jsonify({"error": "password_required", "message": "password is required"}), 400
+    try:
+        with transaction_scope() as db:
+            context = validate_access_session(db, request.mobile_claims)
+            return jsonify(
+                reauthenticate_mobile_session(
+                    db, context=context, password=password, ip_address=get_client_ip()
+                )
+            )
     except MobileAuthError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 

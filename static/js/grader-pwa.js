@@ -38,6 +38,36 @@
       .catch(() => undefined);
   }
 
+  // ---- Token auth affordances: sign out, add a passkey ----
+  const auth = window.GraderAuth;
+  document.querySelectorAll('[data-grader-signout]').forEach(link => {
+    link.addEventListener('click', async event => {
+      event.preventDefault();
+      if (auth) await auth.logout();
+      window.location.assign(link.getAttribute('href') || '/grader/login');
+    });
+  });
+  const passkeyCard = document.querySelector('[data-passkey-enrol]');
+  if (passkeyCard && auth) {
+    const stored = auth.read();
+    auth.platformAuthenticatorAvailable().then(ok => {
+      if (!ok || stored?.has_passkey) return;
+      passkeyCard.hidden = false;
+      passkeyCard.querySelector('[data-passkey-enrol-button]').addEventListener('click', async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          await auth.registerPasskey();
+          passkeyCard.querySelector('[data-passkey-enrol-status]').textContent = 'Passkey added. You can use it to confirm your identity after a break.';
+          button.hidden = true;
+        } catch (error) {
+          passkeyCard.querySelector('[data-passkey-enrol-status]').textContent = error.message || 'Could not add a passkey.';
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
   const workbench = document.getElementById('grading-workbench');
   if (!workbench) return;
 

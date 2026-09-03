@@ -42,6 +42,70 @@ LOCKOUT_HOURS = 4
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
+def resolve_bearer_user(req):
+    """Cached per request: the user behind a valid mobile bearer token, else None.
+
+    Used by the login guard (to set current_user) and by the CSRF hook (to
+    know the request is bearer-only), so neither depends on the other's order.
+    """
+    if hasattr(req, "_bearer_user_resolved"):
+        return req._bearer_user_resolved
+    user = load_user_from_bearer_token(req)
+    req._bearer_user_resolved = user
+    return user
+
+
+@login_manager.request_loader
+def load_user_from_bearer_token(req):
+    """Resolve ``current_user`` from a mobile access token.
+
+    The grader PWA authenticates with the same bearer tokens as the phone apps
+    and reaches session-protected pages and JSON APIs through Flask-Login. A
+    token is accepted only when it validates against the mobile session store
+    (type, revocation, device); anything else leaves the request anonymous so
+    the normal session/login flow applies. No web session is created.
+    """
+    import os
+
+    import jwt
+
+    auth_header = req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    jwt_secret = os.environ.get("JWT_SECRET")
+    if not jwt_secret:
+        return None
+    token = auth_header.split(" ", 1)[1].strip()
+    try:
+        claims = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return None
+    if claims.get("typ") and claims.get("typ") != "access":
+        return None
+    from db_transaction_manager import get_db_session
+    from services.mobile.auth_sessions import MobileAuthError, validate_access_session
+
+    try:
+        with get_db_session() as db:
+            context = validate_access_session(db, claims)
+            user_id = context.user.id
+            req.mobile_auth = {
+                "claims": claims,
+                "user_id": user_id,
+                "mobile_session_id": context.session.id,
+                "session_id": context.session.id,
+                "device_id": context.session.device_id,
+                "idle_seconds": getattr(context, "idle_seconds", 0.0),
+                "authenticated_at": (
+                    context.authenticated_at.isoformat() if getattr(context, "authenticated_at", None) else None
+                ),
+            }
+            req.mobile_claims = claims
+    except MobileAuthError:
+        return None
+    return load_user(str(user_id))
+
+
 @login_manager.user_loader
 def load_user(user_id: str):
     try:

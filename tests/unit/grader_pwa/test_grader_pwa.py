@@ -92,7 +92,7 @@ def test_anonymous_visitor_is_sent_to_login(client):
     for path in ("/grader/", "/grader/history", "/grader/workbench/abc", "/grader/start/1/resident"):
         response = client.get(path)
         assert response.status_code in (302, 308), path
-        assert "/login" in response.headers["Location"], path
+        assert "/grader/login" in response.headers["Location"], path
 
 
 def test_home_is_forbidden_without_a_grading_role(app, db_session):
@@ -123,7 +123,7 @@ def test_direct_link_survives_the_login_redirect(client):
     from urllib.parse import parse_qs, urlsplit
 
     location = urlsplit(response.headers["Location"])
-    assert location.path == "/login"
+    assert location.path == "/grader/login"
     assert parse_qs(location.query)["next"] == ["/grader/open/task/abc-123/resident"]
 
 

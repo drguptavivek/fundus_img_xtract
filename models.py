@@ -2413,6 +2413,9 @@ class MobileAuthSession(Base):
     refresh_token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     last_refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # When the user last proved who they are on this session: login or an
+    # explicit re-authentication (password / passkey). Refreshing keeps it.
+    last_authenticated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     allowed_lab_unit_ids: Mapped[str | None] = mapped_column(Text, nullable=True)

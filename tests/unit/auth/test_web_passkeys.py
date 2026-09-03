@@ -23,12 +23,15 @@ def _csrf(client, path="/login"):
     return body[start:body.index('"', start)]
 
 
-def test_passkey_options_require_captcha(client):
-    """The CAPTCHA gate runs before anything else (an empty code is refused
-    regardless of the test-mode CAPTCHA bypass)."""
+def test_passkey_options_require_captcha(client, monkeypatch):
+    """The CAPTCHA verdict gates the ceremony before any user lookup. The test
+    harness bypasses CAPTCHA globally, so the validator is pinned here."""
+    from utils.captcha import captcha_manager
+
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
     headers = {"X-CSRFToken": _csrf(client)}
 
-    response = client.post("/login/passkey/options", json={"username": "someone", "captcha": ""}, headers=headers)
+    response = client.post("/login/passkey/options", json={"username": "someone", "captcha": "WRONG"}, headers=headers)
 
     assert response.status_code == 400
     assert response.get_json()["error"] == "captcha_invalid"

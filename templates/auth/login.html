@@ -146,7 +146,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v2') }}"></script>
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
 {% else %}

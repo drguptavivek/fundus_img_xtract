@@ -54,11 +54,33 @@
   async function platformAuthenticatorAvailable() {
     try { return supported() && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (_) { return false; }
   }
+  // Browsers report ceremony outcomes as DOMExceptions; translate the ones a
+  // user can act on into plain sentences.
+  function friendly(error, creating) {
+    const name = error && error.name;
+    if (name === 'InvalidStateError' && creating) {
+      return new Error('This device already has a passkey for your account. Remove it first to create a new one.');
+    }
+    if (name === 'NotAllowedError') {
+      return new Error(creating ? 'Passkey setup was cancelled or timed out.' : 'Passkey sign-in was cancelled or timed out.');
+    }
+    if (name === 'SecurityError') {
+      return new Error('Passkeys only work on a secure (HTTPS or localhost) page.');
+    }
+    if (name === 'NotSupportedError') {
+      return new Error('This browser does not support the requested passkey type.');
+    }
+    return error instanceof Error ? error : new Error(String(error));
+  }
   async function create(options) {
-    return credentialToJSON(await navigator.credentials.create({ publicKey: parseCreation(options) }));
+    try {
+      return credentialToJSON(await navigator.credentials.create({ publicKey: parseCreation(options) }));
+    } catch (error) { throw friendly(error, true); }
   }
   async function get(options) {
-    return credentialToJSON(await navigator.credentials.get({ publicKey: parseRequest(options) }));
+    try {
+      return credentialToJSON(await navigator.credentials.get({ publicKey: parseRequest(options) }));
+    } catch (error) { throw friendly(error, false); }
   }
   window.WebAuthnJSON = { parseCreation, parseRequest, credentialToJSON, supported, platformAuthenticatorAvailable, create, get };
 })();

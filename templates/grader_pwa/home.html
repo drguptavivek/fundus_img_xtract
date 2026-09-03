@@ -36,9 +36,28 @@
         <div class="small text-body-secondary">{{ queue.target.label }}</div>
       </div>
       <div class="d-flex flex-column gap-1">
+        {# First-level grading leases either resident slot, so the two are one
+           button with the combined count; resident2 wins as the slot it opens
+           (same rule as the web dashboard's project queue cards). #}
+        {% set first_level = namespace(slot=none, first_package_uuid=none, package_count=0) %}
         {% for slot in queue.slots %}
-        {% if slot.package_count > 0 %}
-        <a class="btn {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
+          {% if slot.slot in ['resident', 'resident2'] %}
+            {% set first_level.package_count = first_level.package_count + slot.package_count %}
+            {% if slot.package_count > 0 and (first_level.slot is none or slot.slot == 'resident2') %}
+              {% set first_level.slot = slot.slot %}
+              {% set first_level.first_package_uuid = slot.first_package_uuid %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {% if first_level.slot and first_level.package_count > 0 %}
+        <a class="btn btn-primary"
+           href="{{ url_for('grader_pwa.open_package', package_uuid=first_level.first_package_uuid, role_slot=first_level.slot) }}">
+          First-level grading ({{ first_level.package_count }})
+        </a>
+        {% endif %}
+        {% for slot in queue.slots %}
+        {% if slot.slot == 'arbitrator' and slot.package_count > 0 %}
+        <a class="btn btn-warning"
            href="{{ url_for('grader_pwa.open_package', package_uuid=slot.first_package_uuid, role_slot=slot.slot) }}">
           {{ grading_slot_label(slot.slot) }} ({{ slot.package_count }})
         </a>

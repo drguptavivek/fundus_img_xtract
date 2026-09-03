@@ -2,32 +2,56 @@
 {% block title %}{{ 'Confirm it\'s you' if reauth else 'Sign in' }}{% endblock %}
 {% block content %}
 <main class="gpwa-page d-flex flex-column justify-content-center" style="min-height: 100dvh;" data-grader-login
-      data-next="{{ next_url }}" data-reauth="{{ '1' if reauth else '' }}">
+      data-next="{{ next_url }}" data-reauth="{{ '1' if reauth else '' }}"
+      data-captcha-url="{{ url_for('auth.refresh_captcha') }}" data-captcha-audio-url="{{ url_for('auth.captcha_audio') }}">
   <div class="text-center mb-4">
     <img src="{{ pwa_assets.logo }}" alt="" width="64" height="64" class="mb-2">
     <h1 class="h4 mb-1">{{ 'Confirm it\'s you' if reauth else 'Grader sign in' }}</h1>
-    <p class="text-body-secondary small mb-0" data-login-subtitle>
-      {% if reauth %}You've been inactive for a while. Re-authenticate to continue grading.{% else %}Eye Image Manager{% endif %}
+    <p class="text-body-secondary small mb-0">
+      {% if reauth %}You've been inactive for a while. Use your passkey to continue grading.{% else %}Eye Image Manager{% endif %}
     </p>
   </div>
 
-  <button type="button" class="btn btn-primary w-100 mb-3 d-none" data-login-passkey>
-    <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
-  </button>
+  {# ---- Re-authentication: passkey only ---- #}
+  <div class="d-flex flex-column gap-2 {{ '' if reauth else 'd-none' }}" data-reauth-panel>
+    <button type="button" class="btn btn-primary btn-lg w-100 d-none" data-reauth-passkey>
+      <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
+    </button>
+    <p class="small text-body-secondary text-center d-none" data-reauth-nopasskey>This sign-in has no passkey on this device, so you'll need to sign in again.</p>
+    <button type="button" class="btn btn-outline-secondary w-100" data-reauth-signin>Sign in again</button>
+  </div>
 
-  <form class="d-flex flex-column gap-3" data-login-form novalidate>
-    <div>
-      <label class="form-label" for="login-username">Username</label>
-      <input class="form-control form-control-lg" id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  {# ---- Sign in: step 1 username + CAPTCHA, step 2 passkey or password ---- #}
+  <form class="d-flex flex-column gap-3 {{ 'd-none' if reauth else '' }}" data-login-form novalidate>
+    <div data-login-step="1" class="d-flex flex-column gap-3">
+      <div>
+        <label class="form-label" for="login-username">Username</label>
+        <input class="form-control form-control-lg" id="login-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div>
+        <label class="form-label" for="login-captcha">CAPTCHA</label>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <img data-captcha-img alt="CAPTCHA" class="border rounded bg-white" style="width: 180px; height: 50px; cursor: pointer;" title="Tap to refresh">
+          <button type="button" class="btn btn-outline-secondary" data-captcha-refresh aria-label="New CAPTCHA"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+          <button type="button" class="btn btn-outline-secondary" data-captcha-audio aria-label="Hear the CAPTCHA"><i class="fa-solid fa-volume-high" aria-hidden="true"></i></button>
+        </div>
+        <input class="form-control form-control-lg" id="login-captcha" name="captcha" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="Enter the code" style="text-transform: uppercase;">
+      </div>
+      <button class="btn btn-primary btn-lg w-100" type="button" data-login-next>Next</button>
     </div>
-    <div>
-      <label class="form-label" for="login-password">Password</label>
-      <input class="form-control form-control-lg" id="login-password" name="password" type="password" autocomplete="current-password" required>
+
+    <div data-login-step="2" class="d-none d-flex flex-column gap-3">
+      <div class="small text-body-secondary">Signing in as <strong data-login-username></strong> · <a href="#" data-login-back>change</a></div>
+      <button type="button" class="btn btn-primary btn-lg w-100 d-none" data-login-passkey>
+        <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
+      </button>
+      <div>
+        <label class="form-label" for="login-password">Password</label>
+        <input class="form-control form-control-lg" id="login-password" name="password" type="password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-outline-primary btn-lg w-100" type="submit" data-login-submit>Sign in with password</button>
     </div>
     <div class="alert alert-danger py-2 small d-none" role="alert" data-login-error></div>
-    <button class="btn btn-primary btn-lg w-100" type="submit" data-login-submit>
-      {{ 'Confirm with password' if reauth else 'Sign in' }}
-    </button>
   </form>
 
   <div class="text-center mt-4 small text-body-secondary">
@@ -60,69 +84,104 @@
   const root = document.querySelector('[data-grader-login]');
   const form = root.querySelector('[data-login-form]');
   const errorBox = root.querySelector('[data-login-error]');
-  const passkeyButton = root.querySelector('[data-login-passkey]');
-  const submit = root.querySelector('[data-login-submit]');
   const reauth = root.dataset.reauth === '1';
   const next = root.dataset.next && root.dataset.next.startsWith('/grader/') ? root.dataset.next : '/grader/';
   const auth = window.GraderAuth;
+  const fail = message => { errorBox.textContent = message; errorBox.classList.remove('d-none'); };
 
-  function fail(message) { errorBox.textContent = message; errorBox.classList.remove('d-none'); }
   async function proceed() {
     await auth.ensureWorker(document.body.dataset.swUrl, document.body.dataset.swScope || '/grader/');
-    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
-      // First install: the worker is active but not yet controlling this page;
-      // a navigation from here is controlled once it has claimed clients.
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) await new Promise(r => setTimeout(r, 150));
     window.location.assign(next);
   }
-
   if (!('serviceWorker' in navigator)) root.querySelector('[data-login-unsupported]').classList.remove('d-none');
 
-  const stored = auth.read();
-  if (stored && stored.username) {
-    form.username.value = stored.username;
-    if (reauth) { form.username.readOnly = true; form.password.focus(); }
+  /* ---- CAPTCHA (same session CAPTCHA as the web login) ---- */
+  const captchaImg = root.querySelector('[data-captcha-img]');
+  async function refreshCaptcha() {
+    try {
+      const response = await fetch(root.dataset.captchaUrl, { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (data.image) captchaImg.src = data.image;
+      form.captcha.value = '';
+    } catch (_) { fail('Could not load the CAPTCHA. Check your connection and try again.'); }
   }
-  // Passkey is offered whenever the device has a platform authenticator: for
-  // re-authentication when a passkey is known, and always for a fresh sign-in
-  // (the server answers "no passkey" for accounts without one).
-  auth.platformAuthenticatorAvailable().then(ok => {
-    if (ok && (!reauth || (stored && stored.has_passkey))) passkeyButton.classList.remove('d-none');
+  captchaImg.addEventListener('click', refreshCaptcha);
+  root.querySelector('[data-captcha-refresh]').addEventListener('click', refreshCaptcha);
+  root.querySelector('[data-captcha-audio]').addEventListener('click', () => {
+    new Audio(root.dataset.captchaAudioUrl + '?t=' + Date.now()).play().catch(() => undefined);
   });
-  if (!reauth && stored && stored.refresh_token) {
-    // Already signed in on this device: pick up where we left off.
-    auth.refresh().then(proceed).catch(() => undefined);
+
+  /* ---- Steps ---- */
+  const step1 = form.querySelector('[data-login-step="1"]');
+  const step2 = form.querySelector('[data-login-step="2"]');
+  const passkeyButton = form.querySelector('[data-login-passkey]');
+  const submit = form.querySelector('[data-login-submit]');
+  function toStep2() {
+    errorBox.classList.add('d-none');
+    if (!form.username.value.trim()) { form.username.reportValidity(); return; }
+    if (!form.captcha.value.trim()) { form.captcha.reportValidity(); return; }
+    form.querySelector('[data-login-username]').textContent = form.username.value.trim();
+    step1.classList.add('d-none'); step2.classList.remove('d-none');
+    auth.platformAuthenticatorAvailable().then(ok => { if (ok) passkeyButton.classList.remove('d-none'); });
+    form.password.focus();
   }
+  function toStep1() {
+    step2.classList.add('d-none'); step1.classList.remove('d-none');
+    refreshCaptcha();
+    form.username.focus();
+  }
+  form.querySelector('[data-login-next]').addEventListener('click', toStep2);
+  form.querySelector('[data-login-back]').addEventListener('click', event => { event.preventDefault(); toStep1(); });
+  form.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !step1.classList.contains('d-none')) { event.preventDefault(); toStep2(); }
+  });
+
+  const stored = auth.read();
+  if (stored && stored.username) form.username.value = stored.username;
+  if (!reauth && stored && stored.refresh_token) auth.refresh().then(proceed).catch(() => undefined);
+  if (!reauth) refreshCaptcha();
 
   passkeyButton.addEventListener('click', async () => {
     errorBox.classList.add('d-none');
-    const username = form.username.value.trim();
-    if (!reauth && !username) { form.username.focus(); fail('Enter your username, then use your passkey.'); return; }
     passkeyButton.disabled = true;
-    try {
-      if (reauth && auth.isSignedIn()) await auth.reauthPasskey();
-      else await auth.loginWithPasskey(username);
-      await proceed();
-    } catch (error) { fail(error.message || 'Passkey failed'); passkeyButton.disabled = false; }
+    try { await auth.loginWithPasskey(form.username.value.trim(), form.captcha.value.trim()); await proceed(); }
+    catch (error) { fail(error.message || 'Passkey sign-in failed'); passkeyButton.disabled = false; if (/captcha/i.test(error.message || '')) toStep1(); }
   });
-
   form.addEventListener('submit', async event => {
     event.preventDefault();
     errorBox.classList.add('d-none');
+    if (!form.password.value) { form.password.reportValidity(); return; }
     submit.disabled = true;
-    try {
-      if (reauth && auth.isSignedIn()) {
-        await auth.reauthPassword(form.password.value);
-      } else {
-        await auth.login(form.username.value.trim(), form.password.value);
-      }
-      await proceed();
-    } catch (error) {
-      fail(error.message || 'Sign in failed');
-      submit.disabled = false;
-    }
+    try { await auth.login(form.username.value.trim(), form.password.value, form.captcha.value.trim()); await proceed(); }
+    catch (error) { fail(error.message || 'Sign in failed'); submit.disabled = false; if (/captcha/i.test(error.message || '')) toStep1(); }
   });
+
+  /* ---- Re-authentication: passkey only ---- */
+  if (reauth) {
+    const panel = root.querySelector('[data-reauth-panel]');
+    const reauthPasskey = panel.querySelector('[data-reauth-passkey]');
+    const noPasskey = panel.querySelector('[data-reauth-nopasskey]');
+    if (stored && stored.has_passkey && auth.isSignedIn()) {
+      auth.platformAuthenticatorAvailable().then(ok => (ok ? reauthPasskey : noPasskey).classList.remove('d-none'));
+    } else {
+      noPasskey.classList.remove('d-none');
+    }
+    reauthPasskey.addEventListener('click', async () => {
+      errorBox.classList.add('d-none');
+      reauthPasskey.disabled = true;
+      try { await auth.reauthPasskey(); await proceed(); }
+      catch (error) { fail(error.message || 'Passkey failed'); reauthPasskey.disabled = false; }
+    });
+    panel.querySelector('[data-reauth-signin]').addEventListener('click', async () => {
+      await auth.logout();
+      panel.classList.add('d-none');
+      form.classList.remove('d-none');
+      root.querySelector('h1').textContent = 'Grader sign in';
+      refreshCaptcha();
+      form.username.focus();
+    });
+  }
 })();
 </script>
 {% endblock %}

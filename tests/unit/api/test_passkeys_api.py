@@ -116,3 +116,19 @@ def test_passkey_login_verify_rejects_a_bad_assertion(client, db_session, monkey
     assert response.status_code == 401
     assert response.get_json()["error"] == "invalid_credentials"
     assert "access_token" not in response.get_json()
+
+
+def test_passkey_login_options_require_captcha_for_web(client, db_session, monkeypatch):
+    from utils.captcha import captcha_manager
+
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    _seed_passkey(db_session, user, credential_id="Y2FwdGNoYS10ZXN0")
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
+
+    response = client.post(
+        "/api/mobile/v1/auth/passkeys/login/options", json={"username": user.username, "platform": "web", "captcha": "WRONG"}
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "captcha_invalid"

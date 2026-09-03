@@ -168,6 +168,11 @@ def passkey_login_options():
     username = (payload.get("username") or "").strip()
     if not username:
         return jsonify({"error": "username_required", "message": "username is required"}), 400
+    from api.mobile.auth import require_web_captcha
+
+    captcha_error = require_web_captcha((payload.get("platform") or "").strip() or None, payload.get("captcha"))
+    if captcha_error:
+        return captcha_error
     try:
         with transaction_scope() as db:
             user = mobile_login_gate(db, username=username, ip=get_client_ip())

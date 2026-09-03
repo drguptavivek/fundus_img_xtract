@@ -66,9 +66,9 @@
     return tokens?.access_token ? { Authorization: `Bearer ${tokens.access_token}` } : {};
   }
 
-  async function login(username, password) {
+  async function login(username, password, captcha) {
     const payload = await postJson('/auth/login', {
-      username, password, device_id: deviceId(), device_name: deviceName(), platform: 'web',
+      username, password, captcha, device_id: deviceId(), device_name: deviceName(), platform: 'web',
     });
     write({
       access_token: payload.access_token,
@@ -81,8 +81,8 @@
     return payload;
   }
 
-  async function loginWithPasskey(username) {
-    const { challenge_id, options } = await postJson('/auth/passkeys/login/options', { username });
+  async function loginWithPasskey(username, captcha) {
+    const { challenge_id, options } = await postJson('/auth/passkeys/login/options', { username, captcha, platform: 'web' });
     const credential = await webauthn().get(options);
     const payload = await postJson('/auth/passkeys/login/verify', {
       username, challenge_id, credential, device_id: deviceId(), device_name: deviceName(), platform: 'web',
@@ -149,26 +149,26 @@
     write(null);
   }
 
-  /* ---- In-page re-authentication prompt (after 30 idle minutes) ---- */
+  /* ---- In-page re-authentication prompt (after 30 idle minutes) ----
+   * Passkey only: the server refuses the password route for web devices. A
+   * session without a passkey has to sign in again in full. */
   function requireReauth(reason) {
     if (reauthing) return reauthing;
     reauthing = new Promise((resolve, reject) => {
       const tokens = read();
+      const loginUrl = '/grader/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
       const overlay = document.createElement('div');
       overlay.className = 'gpwa-reauth';
       overlay.innerHTML = `
         <div class="gpwa-reauth-card" role="dialog" aria-modal="true" aria-labelledby="gpwa-reauth-title">
           <h2 class="h5 mb-1" id="gpwa-reauth-title">Confirm it's you</h2>
-          <p class="small text-body-secondary mb-3">${reason || 'You have been inactive for a while. Please re-authenticate to continue grading.'}</p>
+          <p class="small text-body-secondary mb-3">${reason || 'You have been inactive for a while. Confirm it\'s you to continue grading.'}</p>
           <button type="button" class="btn btn-primary w-100 mb-2 d-none" data-reauth-passkey>
             <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
           </button>
-          <form data-reauth-form class="d-flex flex-column gap-2">
-            <input class="form-control" type="password" name="password" placeholder="Password for ${tokens?.username || ''}" autocomplete="current-password" required>
-            <button class="btn btn-outline-secondary w-100" type="submit">Confirm with password</button>
-          </form>
+          <p class="small text-body-secondary d-none" data-reauth-nopasskey>This sign-in has no passkey on this device, so you'll need to sign in again.</p>
+          <button type="button" class="btn btn-outline-secondary w-100" data-reauth-signin>Sign in again</button>
           <div class="small text-danger mt-2 d-none" data-reauth-error></div>
-          <button type="button" class="btn btn-link btn-sm w-100 mt-1" data-reauth-signout>Sign out</button>
         </div>`;
       document.body.appendChild(overlay);
       const errorBox = overlay.querySelector('[data-reauth-error]');
@@ -176,24 +176,23 @@
       const done = payload => { overlay.remove(); reauthing = null; resolve(payload); };
       const passkeyButton = overlay.querySelector('[data-reauth-passkey]');
       if (tokens?.has_passkey) {
-        platformAuthenticatorAvailable().then(ok => { if (ok) passkeyButton.classList.remove('d-none'); });
+        platformAuthenticatorAvailable().then(ok => {
+          if (ok) passkeyButton.classList.remove('d-none');
+          else overlay.querySelector('[data-reauth-nopasskey]').classList.remove('d-none');
+        });
+      } else {
+        overlay.querySelector('[data-reauth-nopasskey]').classList.remove('d-none');
       }
       passkeyButton.addEventListener('click', async () => {
         passkeyButton.disabled = true;
         try { done(await reauthPasskey()); } catch (error) { fail(error.message || 'Passkey failed'); passkeyButton.disabled = false; }
       });
-      overlay.querySelector('[data-reauth-form]').addEventListener('submit', async event => {
-        event.preventDefault();
-        const password = event.target.password.value;
-        try { done(await reauthPassword(password)); } catch (error) { fail(error.message || 'Password not accepted'); }
-      });
-      overlay.querySelector('[data-reauth-signout]').addEventListener('click', async () => {
+      overlay.querySelector('[data-reauth-signin]').addEventListener('click', async () => {
         await logout();
         reauthing = null;
         reject(Object.assign(new Error('Signed out'), { code: 'signed_out' }));
-        window.location.assign('/grader/login');
+        window.location.assign(loginUrl);
       });
-      overlay.querySelector('input[name="password"]').focus();
     });
     return reauthing;
   }

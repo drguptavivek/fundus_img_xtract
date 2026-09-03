@@ -7,7 +7,7 @@ from tests.helpers.factories import UserFactory
 from tests.unit.api.test_mobile_auth import JWT_SECRET, _seed_mobile_user
 
 
-def _login_web(client, user, device_id="browser-1"):
+def _login_web(client, user, device_id="browser-1", captcha="ABC123"):
     return client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -16,6 +16,7 @@ def _login_web(client, user, device_id="browser-1"):
             "device_id": device_id,
             "device_name": "Chrome on macOS",
             "platform": "web",
+            "captcha": captcha,
         },
     )
 
@@ -189,16 +190,27 @@ def test_idle_session_requires_reauth_and_password_reauth_clears_it(client, db_s
     assert gated.status_code == 302
     assert "reauth=1" in gated.headers["Location"]
 
-    wrong = client.post("/api/mobile/v1/auth/reauth", headers=headers, json={"password": "nope"})
+    # Web devices may not use the password route; they re-authenticate with a
+    # passkey (or sign in again). Native devices keep the password route.
+    refused = client.post("/api/mobile/v1/auth/reauth", headers=headers, json={"password": "Test@2026"})
+    assert refused.status_code == 403
+    assert refused.get_json()["error"] == "passkey_required"
+
+    # A native session (android) can still re-prove with the password.
+    from tests.helpers.factories import approve_mobile_device
+
+    approve_mobile_device(db_session, user.id, "phone-idle")
+    db_session.commit()
+    native = client.post(
+        "/api/mobile/v1/auth/login",
+        json={"username": user.username, "password": "Test@2026", "device_id": "phone-idle", "device_name": "Pixel", "platform": "android"},
+    ).get_json()["access_token"]
+    native_headers = {"Authorization": f"Bearer {native}"}
+    wrong = client.post("/api/mobile/v1/auth/reauth", headers=native_headers, json={"password": "nope"})
     assert wrong.status_code == 401
-
-    fresh = client.post("/api/mobile/v1/auth/reauth", headers=headers, json={"password": "Test@2026"})
+    fresh = client.post("/api/mobile/v1/auth/reauth", headers=native_headers, json={"password": "Test@2026"})
     assert fresh.status_code == 200, fresh.get_json()
-    new_token = fresh.get_json()["access_token"]
     assert fresh.get_json()["method"] == "password"
-
-    page = client.get("/grader/", headers={"Authorization": f"Bearer {new_token}"})
-    assert page.status_code == 200
 
 
 def test_bearer_token_does_not_authenticate_outside_the_grader_surface(client, db_session, monkeypatch):
@@ -216,3 +228,29 @@ def test_bearer_token_does_not_authenticate_outside_the_grader_surface(client, d
 
     # ...while the grader surface itself works.
     assert client.application.test_client().get("/grader/", headers=headers).status_code == 200
+
+
+def test_web_login_requires_the_captcha(client, db_session, monkeypatch):
+    """Browsers solve the session CAPTCHA like the web form; native apps do not."""
+    from utils.captcha import captcha_manager
+
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    monkeypatch.setattr(captcha_manager, "validate_captcha", lambda value: (False, "Invalid CAPTCHA. Please try again."))
+
+    response = _login_web(client, user, device_id="browser-captcha", captcha="WRONG")
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "captcha_invalid"
+
+
+def test_password_reauth_is_refused_for_web_devices(client, db_session, monkeypatch):
+    """Re-authentication in the grader is passkey-only, enforced server-side."""
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    token = _login_web(client, user, device_id="browser-reauth").get_json()["access_token"]
+
+    response = client.post("/api/mobile/v1/auth/reauth", headers={"Authorization": f"Bearer {token}"}, json={"password": "Test@2026"})
+
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "passkey_required"

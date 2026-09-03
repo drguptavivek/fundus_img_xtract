@@ -199,6 +199,11 @@ def require_approved_device(db, *, user_id: int, device_id: str) -> MobileDevice
     return device
 
 
+def device_platform(db, *, user_id: int, device_id: str) -> str | None:
+    device = _get_device(db, user_id=user_id, device_id=device_id)
+    return device.platform if device is not None else None
+
+
 def touch_device(db, *, user_id: int, device_id: str) -> None:
     device = _get_device(db, user_id=user_id, device_id=device_id)
     if device is not None:

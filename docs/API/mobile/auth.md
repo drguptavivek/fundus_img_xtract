@@ -424,3 +424,16 @@ For clients that hold no token yet (grader PWA fresh sign-in). No CAPTCHA
 
 Device rules are identical to the password login (web devices auto-approve,
 other platforms need enrolment, blocked devices stay blocked).
+
+
+## Web platform: CAPTCHA and passkey-only re-authentication
+
+Requests with `"platform": "web"` (the grader PWA) must include `captcha`
+solved against the session CAPTCHA (`GET /refresh-captcha`, `GET
+/captcha-audio`) on `POST /auth/login` and `POST /auth/passkeys/login/options`
+- the same gate as the web form. Native apps are unaffected.
+
+`POST /auth/reauth` (password) is refused with `403 passkey_required` when the
+session's device platform is `web`: grader re-authentication after 30 idle
+minutes is passkey-only; a session without a passkey signs in again in full
+(username → CAPTCHA → passkey or password).

@@ -41,6 +41,9 @@ def login():
 
     if not username or not password or not device_id or not device_name:
         return jsonify({"error": "username, password, device_id, and device_name are required"}), 400
+    captcha_error = require_web_captcha(platform, payload.get("captcha"))
+    if captcha_error:
+        return captcha_error
 
     try:
         with transaction_scope() as db:
@@ -84,14 +87,30 @@ def refresh():
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 
 
+def require_web_captcha(platform: str | None, captcha_input):
+    """Browsers (``platform == "web"``) must solve the session CAPTCHA on
+    sign-in, exactly as the web login form does; native apps are unchanged.
+    Returns an error response or ``None``."""
+    if platform != "web":
+        return None
+    from utils.captcha import captcha_manager
+
+    valid, message = captcha_manager.validate_captcha((captcha_input or "").strip())
+    if not valid:
+        return jsonify({"error": "captcha_invalid", "message": message}), 400
+    return None
+
+
 @mobile_api_bp.route("/auth/reauth", methods=["POST"])
 @token_auth_required
 @auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
 def reauth():
     """Re-prove identity with the password on the current mobile session.
 
-    Used by the grader after 30 idle minutes (``401 reauth_required``). Returns
-    a fresh access token; the refresh token is unchanged.
+    Used after 30 idle minutes (``401 reauth_required``). Returns a fresh
+    access token; the refresh token is unchanged. Web (grader) devices must
+    re-authenticate with a passkey instead - the password path is refused
+    for them so the policy holds server-side, not only in the UI.
     """
     payload = request.get_json(silent=True) or {}
     password = payload.get("password") or ""
@@ -100,6 +119,13 @@ def reauth():
     try:
         with transaction_scope() as db:
             context = validate_access_session(db, request.mobile_claims)
+            from mobile_devices.service import device_platform
+
+            if device_platform(db, user_id=context.user.id, device_id=context.session.device_id) == "web":
+                return jsonify({
+                    "error": "passkey_required",
+                    "message": "Use your passkey to continue, or sign in again.",
+                }), 403
             return jsonify(
                 reauthenticate_mobile_session(
                     db, context=context, password=password, ip_address=get_client_ip()

@@ -26,6 +26,43 @@
   </section>
   {% endif %}
 
+  {% if project_queues %}
+  <section class="mb-4" aria-label="Project encounter sets">
+    <h2 class="gpwa-section">Project encounter sets</h2>
+    {% for queue in project_queues %}
+    <div class="gpwa-queue mb-2">
+      <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold">{{ queue.project.title }}</div>
+        <div class="small text-body-secondary">{{ queue.target.label }}</div>
+      </div>
+      <div class="d-flex flex-column gap-1">
+        {% for slot in queue.slots %}
+        {% if slot.package_count > 0 %}
+        <a class="btn {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
+           href="{{ url_for('grader_pwa.open_package', package_uuid=slot.first_package_uuid, role_slot=slot.slot) }}">
+          {{ grading_slot_label(slot.slot) }} ({{ slot.package_count }})
+        </a>
+        {% endif %}
+
+  <section class="mb-4" aria-label="Passkey" data-passkey-enrol hidden>
+    <div class="gpwa-resume">
+      <div class="fw-semibold mb-1"><i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Add a passkey</div>
+      <div class="small text-body-secondary mb-2">After 30 minutes away you'll be asked to confirm it's you. A passkey lets you do that with Face ID, Touch ID or Windows Hello instead of your password.</div>
+      <button type="button" class="btn btn-outline-primary w-100" data-passkey-enrol-button>Set up passkey</button>
+      <div class="small mt-2" data-passkey-enrol-status aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="mb-4" aria-label="Demo">
+    <a class="gpwa-queue text-decoration-none text-body" href="{{ url_for('grader_pwa.demo_page') }}">
+      <div class="flex-grow-1 min-w-0">
+        <div class="fw-semibold">Try the demo</div>
+        <div class="small text-body-secondary">A synthetic encounter set to practise grading and annotation. Nothing is saved.</div>
+      </div>
+      <i class="fa-solid fa-chevron-right text-body-secondary" aria-hidden="true"></i>
+    </a>
+  </section>
+
   <section class="mb-4" aria-label="Your queues">
     <h2 class="gpwa-section">Your queues</h2>
     {% for card in queues %}
@@ -62,43 +99,6 @@
     <div class="alert alert-secondary mb-0">No grading queues are allocated to you.</div>
     {% endfor %}
   </section>
-
-  <section class="mb-4" aria-label="Passkey" data-passkey-enrol hidden>
-    <div class="gpwa-resume">
-      <div class="fw-semibold mb-1"><i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Add a passkey</div>
-      <div class="small text-body-secondary mb-2">After 30 minutes away you'll be asked to confirm it's you. A passkey lets you do that with Face ID, Touch ID or Windows Hello instead of your password.</div>
-      <button type="button" class="btn btn-outline-primary w-100" data-passkey-enrol-button>Set up passkey</button>
-      <div class="small mt-2" data-passkey-enrol-status aria-live="polite"></div>
-    </div>
-  </section>
-
-  <section class="mb-4" aria-label="Demo">
-    <a class="gpwa-queue text-decoration-none text-body" href="{{ url_for('grader_pwa.demo_page') }}">
-      <div class="flex-grow-1 min-w-0">
-        <div class="fw-semibold">Try the demo</div>
-        <div class="small text-body-secondary">A synthetic encounter set to practise grading and annotation. Nothing is saved.</div>
-      </div>
-      <i class="fa-solid fa-chevron-right text-body-secondary" aria-hidden="true"></i>
-    </a>
-  </section>
-
-  {% if project_queues %}
-  <section class="mb-4" aria-label="Project encounter sets">
-    <h2 class="gpwa-section">Project encounter sets</h2>
-    {% for queue in project_queues %}
-    <div class="gpwa-queue mb-2">
-      <div class="flex-grow-1 min-w-0">
-        <div class="fw-semibold">{{ queue.project.title }}</div>
-        <div class="small text-body-secondary">{{ queue.target.label }}</div>
-      </div>
-      <div class="d-flex flex-column gap-1">
-        {% for slot in queue.slots %}
-        {% if slot.package_count > 0 %}
-        <a class="btn {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
-           href="{{ url_for('grader_pwa.open_package', package_uuid=slot.first_package_uuid, role_slot=slot.slot) }}">
-          {{ grading_slot_label(slot.slot) }} ({{ slot.package_count }})
-        </a>
-        {% endif %}
         {% endfor %}
       </div>
     </div>

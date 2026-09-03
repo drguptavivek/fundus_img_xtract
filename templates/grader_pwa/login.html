@@ -45,6 +45,7 @@
       <button type="button" class="btn btn-primary btn-lg w-100 d-none" data-login-passkey>
         <i class="fa-solid fa-fingerprint me-1" aria-hidden="true"></i>Use passkey
       </button>
+      <p class="small text-body-secondary mb-0 d-none" data-login-passkey-hint>Passkeys are stored per browser (Safari uses iCloud Keychain, Chrome its own store). No passkey here? Sign in with your password and add one from the home screen, or pick "use a phone" in the passkey dialog.</p>
       <div>
         <label class="form-label" for="login-password">Password</label>
         <input class="form-control form-control-lg" id="login-password" name="password" type="password" autocomplete="current-password">
@@ -123,7 +124,11 @@
     if (!form.captcha.value.trim()) { form.captcha.reportValidity(); return; }
     form.querySelector('[data-login-username]').textContent = form.username.value.trim();
     step1.classList.add('d-none'); step2.classList.remove('d-none');
-    auth.platformAuthenticatorAvailable().then(ok => { if (ok) passkeyButton.classList.remove('d-none'); });
+    auth.platformAuthenticatorAvailable().then(ok => {
+      if (!ok) return;
+      passkeyButton.classList.remove('d-none');
+      form.querySelector('[data-login-passkey-hint]').classList.remove('d-none');
+    });
     form.password.focus();
   }
   function toStep1() {

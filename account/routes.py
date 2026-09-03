@@ -251,11 +251,48 @@ PASSKEY_SUDO_MAX_AGE_SECONDS = 30 * 60
 
 
 def _sudo_is_fresh() -> bool:
-    """Password confirmed within the last 30 minutes (``/confirm-password``)."""
+    """A recent password proof: ``/confirm-password`` within 30 minutes, or the
+    short enrolment window that a password sign-in opens."""
     import time
 
+    from auth.routes import PASSKEY_ENROL_WINDOW_KEY
+
+    now = int(time.time())
     last_sudo = session.get("last_sudo_time")
-    return bool(last_sudo) and (int(time.time()) - int(last_sudo)) <= PASSKEY_SUDO_MAX_AGE_SECONDS
+    if last_sudo and (now - int(last_sudo)) <= PASSKEY_SUDO_MAX_AGE_SECONDS:
+        return True
+    return int(session.get(PASSKEY_ENROL_WINDOW_KEY) or 0) > now
+
+
+@account_bp.route("/passkeys/offer", methods=["GET"])
+@login_required
+def passkey_offer():
+    """Post-login prompt to add a passkey. Shown once per device (30-day
+    cookie on "Not now"); the page itself skips ahead when the browser has
+    no platform authenticator."""
+    from utils.security_middleware import is_safe_url
+
+    next_url = request.args.get("next") or ""
+    if not next_url or not is_safe_url(next_url):
+        next_url = url_for("homepage")
+    return render_template("account/passkey_offer.html", next_url=next_url, can_enrol=_sudo_is_fresh())
+
+
+@account_bp.route("/passkeys/offer/dismiss", methods=["POST"])
+@login_required
+def passkey_offer_dismiss():
+    from auth.routes import PASSKEY_OFFER_DISMISSED_COOKIE
+    from utils.security_middleware import is_safe_url
+
+    next_url = request.form.get("next") or ""
+    if not next_url or not is_safe_url(next_url):
+        next_url = url_for("homepage")
+    response = redirect(next_url)
+    response.set_cookie(
+        PASSKEY_OFFER_DISMISSED_COOKIE, "1", max_age=30 * 24 * 3600, httponly=True, samesite="Lax",
+        secure=request.is_secure,
+    )
+    return response
 
 
 @account_bp.route("/passkeys", methods=["GET"])

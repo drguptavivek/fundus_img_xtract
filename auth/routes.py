@@ -390,7 +390,16 @@ def login():
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
-                return _complete_web_login(user, username=username, ip=ip)
+                from passkeys import service as passkey_service
+
+                has_passkey = bool(passkey_service.list_passkeys(db, user_id=user.id))
+                response = _complete_web_login(user, username=username, ip=ip)
+                # The password just typed authorises passkey enrolment for a
+                # few minutes without the confirm-password step.
+                session[PASSKEY_ENROL_WINDOW_KEY] = int(time.time()) + PASSKEY_ENROL_WINDOW_SECONDS
+                if not has_passkey and request.cookies.get(PASSKEY_OFFER_DISMISSED_COOKIE) != "1":
+                    return redirect(url_for("account.passkey_offer", next=response.headers.get("Location")))
+                return response
 
             # Failure path
             _record_attempt(db, username, ip, success=False)
@@ -490,6 +499,11 @@ def _web_login_gate(db, username: str, ip: str):
 
 
 PASSKEY_LOGIN_SESSION_KEY = "passkey_login"
+# After a password sign-in the user may enrol a passkey for this long without
+# re-confirming the password (the password itself was the proof).
+PASSKEY_ENROL_WINDOW_KEY = "passkey_enrol_until"
+PASSKEY_ENROL_WINDOW_SECONDS = 10 * 60
+PASSKEY_OFFER_DISMISSED_COOKIE = "passkey_offer_dismissed"
 
 
 @auth_bp.route("/login/passkey/options", methods=["POST"])

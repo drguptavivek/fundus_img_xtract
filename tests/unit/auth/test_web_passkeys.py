@@ -135,3 +135,73 @@ def test_passkey_options_for_a_user_with_a_passkey(client, db_session, ophthalmo
         pending = sess["passkey_login"]
         assert pending["user_id"] == ophthalmologist_user.id
         assert pending["challenge_id"] == payload["challenge_id"]
+
+
+def _password_login(client, user, **extra):
+    csrf = _csrf(client)
+    _prime_captcha(client)
+    return client.post(
+        "/login",
+        data={"username": user.username, "password": "Test@2026", "captcha": CAPTCHA, "csrf_token": csrf, **extra},
+        follow_redirects=False,
+    )
+
+
+def test_two_step_login_markup(client):
+    body = client.get("/login").get_data(as_text=True)
+
+    assert 'data-login-step="1"' in body and 'data-login-step="2"' in body
+    assert 'id="next-btn"' in body
+    assert "Sign in with password" in body
+
+
+def test_password_login_without_passkey_offers_enrolment(client, db_session, ophthalmologist_user):
+    response = _password_login(client, ophthalmologist_user)
+
+    assert response.status_code == 302
+    assert "/account/passkeys/offer" in response.headers["Location"]
+    assert "next=" in response.headers["Location"]
+
+    offer = client.get(response.headers["Location"])
+    assert offer.status_code == 200
+    assert "Add a passkey for this device" in offer.get_data(as_text=True)
+
+    # The password just entered authorises enrolment without confirm-password.
+    options = client.post("/account/passkeys/register/options", json={}, headers={"X-CSRFToken": _csrf(client, "/account/profile")})
+    assert options.status_code == 200, options.get_json()
+
+
+def test_offer_can_be_dismissed_for_this_device(client, db_session, ophthalmologist_user):
+    _password_login(client, ophthalmologist_user)
+    csrf = _csrf(client, "/account/profile")
+
+    dismissed = client.post("/account/passkeys/offer/dismiss", data={"next": "/grading/", "csrf_token": csrf})
+    assert dismissed.status_code == 302
+    assert dismissed.headers["Location"].endswith("/grading/")
+    assert "passkey_offer_dismissed=1" in dismissed.headers.get("Set-Cookie", "")
+
+    client.get("/logout")
+    again = _password_login(client, ophthalmologist_user)
+    assert "/account/passkeys/offer" not in again.headers["Location"]
+
+
+def test_password_login_with_passkey_skips_offer(client, db_session, ophthalmologist_user):
+    from fido2 import cbor
+
+    from passkeys.models import MobilePasskey
+
+    db_session.add(
+        MobilePasskey(
+            user_id=ophthalmologist_user.id,
+            credential_id="b2ZmZXItdGVzdA",
+            public_key=cbor.encode({1: 2, 3: -7, -1: 1, -2: b"\x03" * 32, -3: b"\x04" * 32}),
+            sign_count=0,
+        )
+    )
+    db_session.flush()
+    db_session.commit()
+
+    response = _password_login(client, ophthalmologist_user)
+
+    assert response.status_code == 302
+    assert "/account/passkeys/offer" not in response.headers["Location"]

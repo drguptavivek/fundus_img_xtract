@@ -56,6 +56,7 @@
               >
             </div>
 
+            <div data-login-step="2" class="d-none">
             <div class="mb-3">
               <label class="form-label" for="password">Password</label>
               <input
@@ -70,6 +71,9 @@
               >
             </div>
 
+            </div>
+
+            <div data-login-step="1">
             <div class="mb-3">
               <label class="form-label" for="captcha">CAPTCHA</label>
               <div class="row g-2 align-items-center">
@@ -117,7 +121,12 @@
             </div>
             #}
 
-            <button class="btn btn-primary w-100" type="submit" id="signin-btn" disabled>Sign in</button>
+            <button class="btn btn-primary w-100" type="button" id="next-btn">Next</button>
+            </div>
+
+            <div data-login-step="2" class="d-none">
+            <div class="small text-muted mb-2">Signing in as <strong data-login-username></strong> · <a href="#" data-login-back>change</a></div>
+            <button class="btn btn-primary w-100" type="submit" id="signin-btn" disabled>Sign in with password</button>
             <button class="btn btn-outline-primary w-100 mt-2 d-none" type="button" id="passkey-btn" data-passkey-login
                     data-options-url="{{ url_for('auth.login_passkey_options') }}"
                     data-verify-url="{{ url_for('auth.login_passkey_verify', next=request.args.get('next') or none) }}">
@@ -125,6 +134,7 @@
             </button>
             <div class="form-text mt-1 d-none" id="passkey-hint">Enter your username and the CAPTCHA, then use Face ID, Touch ID or Windows Hello instead of your password.</div>
             <div class="alert alert-danger py-2 small mt-2 d-none" role="alert" id="passkey-error"></div>
+            </div>
           </form>
 
         </div>
@@ -152,6 +162,36 @@
 {% else %}
 <script>
 {% endif %}
+(function () {
+  // Two-step sign-in: username + CAPTCHA, then the credential (password or
+  // passkey). The form still posts every field, so the server contract is
+  // unchanged; the split only decides what is on screen.
+  const form = document.querySelector('form[action*="login"]');
+  if (!form) return;
+  const step1 = form.querySelectorAll('[data-login-step="1"]');
+  const step2 = form.querySelectorAll('[data-login-step="2"]');
+  const usernameBox = form.querySelector('[data-login-username]');
+  const nextButton = document.getElementById('next-btn');
+  const show = (nodes, on) => nodes.forEach(node => node.classList.toggle('d-none', !on));
+  const goStep2 = () => {
+    const username = form.username.value.trim();
+    const captcha = form.captcha.value.trim();
+    if (!username) { form.username.focus(); form.username.reportValidity(); return; }
+    if (!captcha) { form.captcha.focus(); form.captcha.reportValidity(); return; }
+    usernameBox.textContent = username;
+    show(step1, false); show(step2, true);
+    form.password.focus();
+  };
+  nextButton.addEventListener('click', goStep2);
+  form.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && step2[0].classList.contains('d-none')) { event.preventDefault(); goStep2(); }
+  });
+  form.querySelector('[data-login-back]').addEventListener('click', event => {
+    event.preventDefault();
+    show(step2, false); show(step1, true);
+    form.username.focus();
+  });
+})();
 (function () {
   // Passkey sign-in: username + CAPTCHA first (same checks as the password
   // form), then a WebAuthn assertion instead of the password.

@@ -84,3 +84,17 @@ Passkeys are managed at `/account/passkeys` (behind the confirm-password
 step; `POST /account/passkeys/register/options|verify`,
 `POST /account/passkeys/<id>/delete`). A passkey login does **not** refresh
 `last_sudo_time`: sensitive operations still require the password.
+
+
+## Login flow (web)
+
+`/login` is two steps on screen (username → CAPTCHA → *Next* → passkey or
+password + *Sign in*); the form still posts every field in one request.
+
+After a **password** sign-in, a user with no passkey is redirected to
+`/account/passkeys/offer?next=<landing>` (skipped automatically by the page
+when the browser has no platform authenticator; *Not now* sets a 30-day
+`passkey_offer_dismissed` cookie). The password just entered opens a
+10-minute enrolment window (`session["passkey_enrol_until"]`) during which
+`/account/passkeys/register/*` work without the confirm-password step.
+A passkey sign-in never triggers the offer and opens no such window.

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+{% block title %}Add a passkey{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 32rem;" data-passkey-offer data-next="{{ next_url }}">
+  <div class="card shadow-sm">
+    <div class="card-body text-center p-4">
+      <div class="display-6 mb-2"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i></div>
+      <h1 class="h4 mb-2">Sign in faster next time</h1>
+      <p class="text-muted mb-4">Add a passkey so you can sign in with Face ID, Touch ID or Windows Hello instead of typing your password. Sensitive actions will still ask for your password.</p>
+      <div class="d-grid gap-2">
+        <button type="button" class="btn btn-primary btn-lg" id="offer-add-btn"
+                data-options-url="{{ url_for('account.passkey_register_options') }}"
+                data-verify-url="{{ url_for('account.passkey_register_verify') }}"
+                {% if not can_enrol %}disabled title="Confirm your password first"{% endif %}>
+          Add a passkey for this device
+        </button>
+        <form method="post" action="{{ url_for('account.passkey_offer_dismiss') }}">
+          {{ csrf_field() }}
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <button class="btn btn-link" type="submit">Not now</button>
+        </form>
+      </div>
+      <div class="alert alert-success py-2 small mt-3 d-none" id="offer-done" role="status">Passkey added. Taking you in…</div>
+      <div class="alert alert-danger py-2 small mt-3 d-none" id="offer-error" role="alert"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v2') }}"></script>
+<script>
+(function () {
+  const root = document.querySelector('[data-passkey-offer]');
+  const next = root.dataset.next || '/';
+  const button = document.getElementById('offer-add-btn');
+  const done = document.getElementById('offer-done');
+  const errorBox = document.getElementById('offer-error');
+  const helper = window.WebAuthnJSON;
+  const skip = () => window.location.replace(next);
+  if (!helper || !helper.supported()) { skip(); return; }
+  helper.platformAuthenticatorAvailable().then(ok => { if (!ok) skip(); });
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const post = async (url, body) => {
+    const response = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify(body),
+    });
+    let payload = {};
+    try { payload = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (HTTP ${response.status})`);
+    return payload;
+  };
+  button.addEventListener('click', async () => {
+    errorBox.classList.add('d-none');
+    button.disabled = true;
+    try {
+      const { challenge_id, options } = await post(button.dataset.optionsUrl, {});
+      const credential = await helper.create(options);
+      await post(button.dataset.verifyUrl, { challenge_id, credential, label: navigator.platform || 'This device' });
+      done.classList.remove('d-none');
+      setTimeout(skip, 900);
+    } catch (error) {
+      errorBox.textContent = error.message || 'Could not add the passkey.';
+      errorBox.classList.remove('d-none');
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

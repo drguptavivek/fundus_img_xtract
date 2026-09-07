@@ -294,23 +294,38 @@ def _encounter_set_browser_months(dates: list[dict[str, Any]]) -> list[dict[str,
     return months
 
 
+def _encounter_set_date_query(db: Session, user, project_id: int, selected_date: date, *, no_pii: bool = False):
+    query = db.query(PatientEncounters).filter(
+        PatientEncounters.is_set_based.is_(True),
+        PatientEncounters.project_id == project_id,
+        PatientEncounters.capture_date_dt == selected_date,
+    ).order_by(
+        PatientEncounters.id.asc() if no_pii else PatientEncounters.name.asc(),
+        PatientEncounters.patient_id.asc(), PatientEncounters.id.asc(),
+    )
+    return _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
+
+
+def encounter_set_date_position(db: Session, *, user, project_id: int | None, capture_date: date | None, encounter_id: int) -> tuple[int, int] | None:
+    """Return the one-based position and total in the authorized browser date order."""
+    if project_id is None or capture_date is None:
+        return None
+    ids = [row.id for row in _encounter_set_date_query(db, user, project_id, capture_date).with_entities(PatientEncounters.id).all()]
+    if encounter_id not in ids:
+        return None
+    return ids.index(encounter_id) + 1, len(ids)
+
+
 def _encounter_set_browser_patients(db: Session, user, project_id: int, selected_date: date, *, no_pii: bool = False) -> list[dict[str, Any]]:
     query = (
-        db.query(PatientEncounters)
+        _encounter_set_date_query(db, user, project_id, selected_date, no_pii=no_pii)
         .options(
             selectinload(PatientEncounters.encounter_set_images),
             selectinload(PatientEncounters.encounter_set_attachments),
             selectinload(PatientEncounters.lab_unit),
             selectinload(PatientEncounters.upload_profile),
         )
-        .filter(
-            PatientEncounters.is_set_based.is_(True),
-            PatientEncounters.project_id == project_id,
-            PatientEncounters.capture_date_dt == selected_date,
-        )
-        .order_by(PatientEncounters.id.asc() if no_pii else PatientEncounters.name.asc(), PatientEncounters.patient_id.asc(), PatientEncounters.id.asc())
     )
-    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
     return [_encounter_set_patient_row(encounter, no_pii=no_pii) for encounter in query.limit(300).all()]
 
 

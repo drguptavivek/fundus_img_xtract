@@ -109,7 +109,7 @@
                 hx-target="#encounter-set-browser-workspace"
                 hx-swap="innerHTML">
           <div class="d-flex justify-content-between gap-2">
-            <div class="fw-semibold text-truncate">{{ patient.name or '-' }}</div>
+            <div class="fw-semibold text-truncate">{{ loop.index }}. {{ patient.name or '-' }}</div>
             <span class="badge {{ 'text-bg-success' if patient.verified_status == 'verified' else 'text-bg-warning' }}">
               {{ patient.verified_status }}
             </span>

@@ -106,6 +106,14 @@ Upload is intentionally fast and permissive by design:
 
 ### Phase B: verification as the quality gate
 
+The verification header shows `EncounterSet N of total on YYYY-MM-DD` within the
+current project and the user's authorized browser scope. Numbering follows the
+browser patient list (name, patient ID, then encounter ID), includes verified and
+excluded sets, and is independent of the image/document panel counter. The browser
+list displays matching serial numbers. Positions are recalculated on page load;
+they are not permanent encounter identifiers. The total covers the whole date,
+including records beyond the browser's 300-row display limit.
+
 - Verifiers review uploaded metadata and media.
 - Verification can edit metadata.
 - Approval occurs only when verification constraints are satisfied.

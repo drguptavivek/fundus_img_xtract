@@ -672,6 +672,7 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"values.join('; ')" in response.data
     assert b"imageFieldsAnchor.scrollIntoView({behavior: 'smooth', block: 'start'})" in response.data
     assert b"1 / 4" in response.data
+    assert b"EncounterSet 1 of 1 on 2023-10-27" in response.data
     assert b"Summary" in response.data
     assert b"@media (max-width: 1399.98px)" in response.data
     assert b"overflow-x: auto" in response.data
@@ -699,6 +700,27 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"pollOcrUntilTerminal" in response.data
     assert b"JSON.stringify({force: true})" in response.data
     assert b"Close and refresh report" in response.data
+
+
+def test_verification_date_position_matches_browser_order(db_session, encounter_set_data):
+    from remidio_api_integration.service import encounter_set_date_position, _encounter_set_browser_patients
+
+    user = UserFactory.create_admin(db_session, username="admin_date_position")
+    encounter = encounter_set_data["encounter"]
+    for name, capture_date in [("AAA", encounter.capture_date_dt), ("ZZZ", encounter.capture_date_dt), ("AAA other day", date(2023, 10, 28))]:
+        db_session.add(PatientEncounters(
+            uuid=str(uuid.uuid4()), name=name, patient_id=name,
+            project_id=encounter.project_id, lab_unit_id=encounter.lab_unit_id,
+            is_set_based=True, capture_date_dt=capture_date,
+            capture_date=capture_date.isoformat(), encounter_verified_status="verified",
+        ))
+    db_session.flush()
+    patients = _encounter_set_browser_patients(db_session, user, encounter.project_id, encounter.capture_date_dt)
+    assert [patient["id"] for patient in patients].index(encounter.id) == 1
+    assert encounter_set_date_position(
+        db_session, user=user, project_id=encounter.project_id,
+        capture_date=encounter.capture_date_dt, encounter_id=encounter.id,
+    ) == (2, 3)
 
 
 def test_verify_encounter_set_nav_shows_laterality_and_focus(

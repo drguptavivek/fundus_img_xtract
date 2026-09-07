@@ -154,6 +154,9 @@
             <h1 class="h4 mb-0">{{ 'EncounterSet Verification Record' if verification_read_only else 'Verify EncounterSet' }}</h1>
             <span class="badge {{ 'text-bg-success' if verification_read_only else 'text-bg-warning' }}">{{ encounter.encounter_verified_status|capitalize if encounter.encounter_verified_status else 'Pending' }}</span>
             {% if encounter_set_type %}<span class="badge text-bg-light border">{{ encounter_set_type.name }}</span>{% endif %}
+            {% if date_position %}
+            <span class="badge text-bg-light border" id="encounter-set-date-position">EncounterSet {{ date_position[0] }} of {{ date_position[1] }} on {{ encounter.capture_date_dt }}</span>
+            {% endif %}
           </div>
           <div class="text-muted">
             {{ encounter.name }} · {{ encounter.patient_id }} · {{ encounter.capture_date }}

@@ -498,6 +498,8 @@ def mark_reviewed(uuid):
 
 
 def _verification_context(db, uuid: str) -> dict:
+    from remidio_api_integration.service import encounter_set_date_position
+
     query = (
         db.query(PatientEncounters)
         .options(
@@ -542,6 +544,10 @@ def _verification_context(db, uuid: str) -> dict:
         "verification_profile": _encounter_set_verification_profile(db, encounter),
         "verification_read_only": encounter.encounter_verified_status == "verified",
         "back_url": _encounter_set_browser_url(encounter),
+        "date_position": encounter_set_date_position(
+            db, user=current_user, project_id=encounter.project_id,
+            capture_date=encounter.capture_date_dt, encounter_id=encounter.id,
+        ),
         "image_descriptors": image_descriptors,
         "image_descriptor_vocabulary": IMAGE_DESCRIPTOR_VOCABULARY,
         "summary_eye_groups": _summary_eye_groups(images, image_descriptors),

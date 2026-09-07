@@ -161,6 +161,8 @@
   </div>
 
   <!-- Review Grade Section - Only shown if user can review -->
+  {% include "review/_saved_reviews.html" %}
+
   {% if can_review %}
   <div class="row mt-1">
     <div class="col-12">

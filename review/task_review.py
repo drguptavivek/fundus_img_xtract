@@ -36,6 +36,7 @@ from uuid import uuid4
 from . import bp
 from .queues import ReviewQueueError, load_review_queue
 from .my_discrepancy_reviews import my_discrepancy_review_page
+from .saved_reviews import list_saved_reviews
 
 # Initialize grades logger for review grade submissions
 grades_logger = logging.getLogger("grades")
@@ -897,6 +898,7 @@ def review_task_details(task_id: int):
             image_metadata=image_metadata,
             can_review=can_review,
             existing_review_grade=existing_review_grade,
+            saved_reviews=list_saved_reviews(db, task_id=task_id),
             available_grades=available_grades,
             grading_features=grading_features,
             existing_selected_features=existing_selected_features,

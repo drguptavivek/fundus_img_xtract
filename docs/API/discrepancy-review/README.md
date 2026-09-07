@@ -1,5 +1,10 @@
 # Discrepancy Review API
 
+The authorized task detail page displays a read-only Saved Reviews section with
+all current human review grades, reviewer names, comments, and user-local save
+times for that task. This evidence is visible independently of the current user's
+editable review. The edit form continues to load and update only that user's row.
+
 ## List my discrepancy reviews
 
 `GET /api/review/me/discrepancy-reviews`

@@ -1,0 +1,14 @@
+{% if saved_reviews %}
+<section class="card shadow-sm my-3" aria-labelledby="saved-reviews-heading">
+  <div class="card-header"><h5 class="mb-0" id="saved-reviews-heading">Saved Reviews</h5></div>
+  <div class="card-body">
+    {% for review in saved_reviews %}
+    <article class="mb-3" data-saved-review-id="{{ review.id }}">
+      <div><strong>{{ review.grade }}</strong> — {{ review.reviewer }}</div>
+      {% if review.comment %}<div style="white-space: pre-wrap">{{ review.comment | mask_text_emails }}</div>{% endif %}
+      <div class="small text-muted">Saved: {{ review.updated_at | user_datetime if review.updated_at else 'Unknown' }}</div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

@@ -106,6 +106,15 @@ Upload is intentionally fast and permissive by design:
 
 ### Phase B: verification as the quality gate
 
+Image fields required by active automatic grading rules are editable during
+verification even when the upload schema marks them non-editable. For profiles
+requiring `fundus_field`, the form shows the canonical Fundus Field selector in
+place of the generic Focus selector. Saving it persists the configured value
+(for example, `OTHER`) and removes the obsolete `focus` display override.
+Selecting OTHER satisfies field presence; it does not match a MACULA-only task
+rule. Existing selections must be confirmed in the canonical field; no historical
+clinical metadata is automatically rewritten.
+
 The verification header shows `EncounterSet N of total on YYYY-MM-DD` within the
 current project and the user's authorized browser scope. Numbering follows the
 browser patient list (name, patient ID, then encounter ID), includes verified and

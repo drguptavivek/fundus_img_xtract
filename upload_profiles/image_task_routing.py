@@ -75,6 +75,20 @@ def missing_image_task_routing_fields(
     )
 
 
+def verification_routing_metadata_fields(fields: list[dict], profile_config: Any | None) -> list[dict]:
+    """Make configured image routing inputs editable so verifiers can satisfy them."""
+    required = {field.key for field in required_image_task_routing_fields(profile_config)}
+    result = []
+    for field in fields:
+        is_required = field.get("scope") == "image" and field.get("key") in required
+        result.append({
+            **field,
+            "required_for_task_routing": is_required,
+            "editable_during_verification": bool(field.get("editable_during_verification") or is_required),
+        })
+    return result
+
+
 def image_is_eligible_for_routing_validation(image: Any) -> bool:
     """Return whether an image can produce a grading task after verification."""
     return bool(

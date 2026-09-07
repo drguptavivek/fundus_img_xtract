@@ -293,6 +293,7 @@
             <option value="unknown" {% if effective_laterality == 'unknown' %}selected{% endif %}>Unknown</option>
           </select>
         </div>
+        {% if not (image_fields | selectattr('key', 'equalto', 'fundus_field') | list) %}
         <div class="{{ compact_control_col }}">
           <label class="form-label" for="image_focus_{{ selected_image.id }}">Focus{% if 'focus' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__focus" value="1">
@@ -307,6 +308,7 @@
             <option value="other" {% if effective_focus == 'other' %}selected{% endif %}>Other</option>
           </select>
         </div>
+        {% endif %}
         {% if has_gaze_context %}
         <div class="{{ gaze_control_col }}">
           <label class="form-label" for="image_gaze_{{ selected_image.id }}">Gaze Position</label>

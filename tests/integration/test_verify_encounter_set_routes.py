@@ -1466,6 +1466,52 @@ def test_mark_reviewed_requires_configured_image_routing_metadata(
     assert encounter_set_data["image"].is_reviewed is False
 
 
+@pytest.mark.parametrize("field_value", ["OTHER", "MACULA", "DISC"])
+def test_required_fundus_field_can_be_saved_and_reviewed(
+    auth_client_factory, encounter_set_data, db_session, csrf_token, field_value
+):
+    user = UserFactory.create_admin(db_session, username=f"verify_fundus_{field_value}")
+    auth_client = auth_client_factory(user)
+    config = _configure_laterality_task_routing(encounter_set_data, db_session)
+    scheme = config.grading_packages[0].image_grading_schemes[0]
+    scheme.metadata_field_key = "fundus_field"
+    scheme.metadata_match_value = "MACULA"
+    set_type = encounter_set_data["encounter_set_type"]
+    set_type.metadata_schema_json = {"fields": [{
+        "key": "fundus_field", "label": "Fundus Field", "scope": "image",
+        "type": "select", "selection_mode": "single",
+        "editable_during_verification": False,
+        "options": [{"value": value, "label": value} for value in ("MACULA", "DISC", "OTHER")],
+    }]}
+    image = encounter_set_data["image"]
+    image.metadata_json = {"focus": "other"}
+    db_session.flush()
+    base = f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}"
+    panel_url = f"{base}/panel/image?image_uuid={image.uuid}"
+    panel = auth_client.get(panel_url)
+    assert panel.status_code == 200
+    assert f'name="metadata__image__{image.id}__fundus_field"'.encode() in panel.data
+    assert f'name="metadata__image__{image.id}__focus"'.encode() not in panel.data
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={f"metadata__image__{image.id}__fundus_field": field_value},
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert response.status_code == 200
+    db_session.refresh(image)
+    assert image.metadata_json["fundus_field"] == field_value
+    assert "focus" not in image.metadata_json
+    reloaded = auth_client.get(panel_url)
+    assert f'<option value="{field_value}" selected>'.encode() in reloaded.data
+    reviewed = auth_client.post(
+        f"/verify_encounter_set/mark_reviewed/{image.uuid}",
+        headers={"X-CSRFToken": csrf_token},
+    )
+    assert reviewed.status_code == 200
+    db_session.refresh(image)
+    assert image.is_reviewed is True
+
+
 def test_finalize_rejects_reviewed_image_missing_configured_routing_metadata(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):

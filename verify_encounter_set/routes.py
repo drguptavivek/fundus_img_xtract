@@ -44,6 +44,7 @@ from upload_profiles.image_task_routing import (
     image_metadata_matches_rule,
     missing_image_task_routing_fields,
     required_image_task_routing_fields,
+    verification_routing_metadata_fields,
 )
 from db_transaction_manager import transaction_scope
 from authz import access_context, role_scoped_rows
@@ -401,6 +402,9 @@ def update_metadata(uuid):
                     form_name,
                     field,
                 )
+                if field["key"] == "fundus_field":
+                    # Canonical field replaces the old display-only focus override.
+                    metadata.pop("focus", None)
             image_observation_name = f"metadata__image__{image_id}__verifier_observation"
             if _metadata_form_field_present(request.form, image_observation_name):
                 _set_verifier_observation(
@@ -767,13 +771,7 @@ def _encounter_set_verification_profile(db, encounter: PatientEncounters) -> dic
     fields = _metadata_fields_by_display_order(
         (encounter_set_type.metadata_schema_json or {}).get("fields", []) if encounter_set_type else []
     )
-    routing_field_keys = {
-        field.key for field in required_image_task_routing_fields(profile_config)
-    }
-    fields = [
-        {**field, "required_for_task_routing": field["key"] in routing_field_keys}
-        for field in fields
-    ]
+    fields = verification_routing_metadata_fields(fields, profile_config)
     image_schemes = []
     if profile_config:
         image_schemes = [

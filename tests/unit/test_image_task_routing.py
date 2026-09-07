@@ -4,6 +4,7 @@ from upload_profiles.image_task_routing import (
     image_metadata_matches_rule,
     missing_image_task_routing_fields,
     required_image_task_routing_fields,
+    verification_routing_metadata_fields,
 )
 
 
@@ -93,3 +94,17 @@ def test_missing_routing_fields_apply_only_to_gradable_task_images():
     assert missing_image_task_routing_fields(_task_image(is_not_gradable=True), config) == ()
     assert missing_image_task_routing_fields(_task_image(creates_task=False), config) == ()
     assert missing_image_task_routing_fields(_task_image(visible_to_grader=False), config) == ()
+
+
+def test_only_active_image_routing_fields_override_editability():
+    fields = [
+        {"key": "laterality", "scope": "image", "editable_during_verification": False},
+        {"key": "laterality", "scope": "encounter", "editable_during_verification": False},
+        {"key": "source_id", "scope": "image", "editable_during_verification": False},
+    ]
+    result = verification_routing_metadata_fields(fields, _routing_config())
+    assert [field["editable_during_verification"] for field in result] == [True, False, False]
+    assert [field["required_for_task_routing"] for field in result] == [True, False, False]
+    assert fields[0]["editable_during_verification"] is False
+    assert not any(field["editable_during_verification"] for field in
+                   verification_routing_metadata_fields(fields, _routing_config(policy="never")))

@@ -96,7 +96,7 @@ def render_discrepancy_review(
         regrade_adjudicators: List[User] = []
         if user_lab_unit_ids:
             classical_user_ids = set(db.execute(
-                select(User)
+                select(User.id)
                 .join(User.roles)
                 .join(user_lab_units, user_lab_units.c.user_id == User.id)
                 .where(Role.name == "regrade_adjudicator")

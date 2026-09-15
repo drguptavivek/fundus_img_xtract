@@ -47,6 +47,34 @@ def test_direct_upload_form_partial_is_api_rendered(client, login_user, direct_u
     assert direct_upload_web_data["profile"].name.encode() in response.data
 
 
+def test_direct_upload_form_marks_each_radio_group_and_requested_project_selected(
+    client, login_user, direct_upload_web_data
+):
+    login_user(direct_upload_web_data["uploader"].username, "Test@2026")
+    project_id = direct_upload_web_data["project"].id
+
+    response = client.get(f"/api/direct-uploads/form?project_id={project_id}")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert html.count('class="fas fa-check direct-upload-selection-check" aria-hidden="true"') == 6
+    for group_name in (
+        "project_id",
+        "hospital_id",
+        "lab_unit_id",
+        "camera_id",
+        "disease_id",
+        "area_id",
+    ):
+        assert f'name="{group_name}"' in html
+
+    assert f'id="project_{project_id}" value="{project_id}" autocomplete="off" required checked' in html
+    assert ".btn-check:checked + .btn .direct-upload-selection-check" in html
+    assert "width: 1em" in html
+    assert "opacity: 0" in html
+    assert "opacity: 1" in html
+
+
 def test_direct_upload_web_api_creates_job_and_returns_workspace(client, login_user, direct_upload_web_data):
     login_user(direct_upload_web_data["uploader"].username, "Test@2026")
 

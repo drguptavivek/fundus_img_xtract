@@ -59,6 +59,28 @@ def test_owner_can_read_null_lab_job(client, null_lab_jobs):
         assert client.get(f"/jobs/processing/{owned_token}").status_code == 200
 
 
+def test_export_job_view_selects_export_template_before_session_closes(
+    client, db_session, hosp_a_data_manager
+):
+    owner_id = db_session.merge(hosp_a_data_manager).id
+    job = Job(
+        token="owned-export-job",
+        status="queued",
+        upload_type="dataset_export",
+        uploader_user_id=owner_id,
+        lab_unit_id=None,
+    )
+    db_session.add(job)
+    db_session.commit()
+    _login(client, owner_id)
+
+    with patch("jobs.routes.render_template", return_value="OK") as render:
+        response = client.get(f"/jobs/{job.token}/view")
+
+    assert response.status_code == 200
+    render.assert_called_once_with("jobs/export_job_status.html", job_id=job.token)
+
+
 def test_job_list_and_type_choices_do_not_leak_hidden_null_lab_job(
     client, null_lab_jobs
 ):

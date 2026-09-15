@@ -184,7 +184,8 @@ def job_status_page(job_token: str):
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if not job or not _current_user_can_see(job, allowed_lab_units):
             abort(404)
-    if job and job.upload_type in ("discrepancy_export", "dataset_export"):
+        is_export = job.upload_type in ("discrepancy_export", "dataset_export")
+    if is_export:
         return render_template("jobs/export_job_status.html", job_id=job_token)
     return render_template("jobs/job_status.html", job_id=job_token)
 

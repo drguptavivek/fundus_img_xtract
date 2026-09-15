@@ -59,8 +59,13 @@ def glaucoma_results():
 
         # Unique patients with at least one cleaned glaucoma record
         unique_patients = (
-            classical_verification_rows(db, db.query(func.count(func.distinct(PatientEncounters.patient_id))), current_user)
-            .select_from(GlaucomaResultsCleaned)
+            classical_verification_rows(
+                db,
+                db.query(func.count(func.distinct(PatientEncounters.patient_id))).select_from(
+                    GlaucomaResultsCleaned
+                ),
+                current_user,
+            )
             .join(
                 PatientEncounters,
                 GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,

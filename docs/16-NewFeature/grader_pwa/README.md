@@ -96,13 +96,39 @@ defined, with `color-interpolation-filters="sRGB"`, in both layouts.
 
 `static/css/grader-pwa.css` + `static/js/grader-pwa.js`, scoped under `body.gpwa`:
 
-- The viewer card fills the screen on a black stage; the grade card becomes a
-  bottom sheet. Peeked, it shows the grade options and Save & Next; a handle (or
-  choosing a grade that carries features) opens features, comment and Save & Close.
-- The filter bar is the unchanged `.imggr-filters` radio group (N R G B Y H E).
+"Phone" is `(max-width: 767.98px), (max-height: 500px)` in every layer
+(`grader-pwa.css`, `grading-workbench.css`, `grader-pwa.js`,
+`grading-workbench-session.js`): a landscape iPhone is wider than the tablet
+breakpoint but under 400px tall, and used to get the desktop workbench.
+
+- **The image owns the screen.** `grader-pwa.js` sets `data-fit-mode="fill"`
+  on every `.imggr-main`; the viewer then sizes the image box to the image's own
+  aspect ratio inside the stage (no square, no 72dvh cap) and the stage centres
+  it. On an iPhone 14 Pro the image is 393px wide in portrait and the full
+  320px height in landscape.
+- **Overlay chrome.** The workbench header is a translucent strip over the top
+  edge of the stage (in flow again in landscape so it never covers the image);
+  the filter strip (`N R G B Y H E`, reset, Tools) sits over the bottom edge.
+  A sliders button unfolds brightness / contrast beneath it; a chevron folds
+  the whole strip to a single pill (remembered in `localStorage`).
+- **Three-height grade sheet.** Rail: a 44px bar naming the disease and the
+  chosen grade. Peek (default): grade options and Save. Open: features,
+  guidelines, comment and Clear as well. Tap the handle to step peek <-> open,
+  the chevron to minimise to the rail, or swipe the header up / down. In
+  landscape the sheet is a right-hand column; minimised, a 3rem sliver.
+  Choosing a grade that carries features opens the sheet.
+- **Fullscreen that works on iPhone.** iPhone Safari has no element
+  fullscreen, so `grading-viewer.js` falls back to a CSS fullscreen: the
+  `.imggr-main-wrap` is pinned over the viewport (`imggr-pseudo-fullscreen`),
+  the image box is re-fitted to it, the viewer's own button becomes the exit
+  control and the filter strip stays fixed along the bottom edge. The header
+  strip carries the phone's fullscreen button (`.gpwa-fullscreen`), relaying
+  to the active panel's viewer button. Browsers with the Fullscreen API keep
+  using it.
 - **Annotate mode**: the existing Tools toggle shows the editor sidebar as the
   tool panel and hides the grade sheet; "Done annotating" returns.
-- Tablets and desktops get the standard workbench with 44px targets.
+- Tablets and desktops get the standard workbench with 44px targets (and the
+  aspect-ratio fit).
 
 ## Touch: pan versus draw
 

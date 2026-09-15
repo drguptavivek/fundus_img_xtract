@@ -124,9 +124,37 @@
     if (!document.hidden && !wakeLock) requestWakeLock();
   });
 
-  // ---- Phone layout: grade card as a bottom sheet, sidebar as annotate mode ----
-  const phone = window.matchMedia('(max-width: 767.98px)');
+  // ---- Fit: the image box takes the image's own aspect ratio, not a square ----
+  // A viewer that initialised before this ran (a cached first image) has
+  // already sized itself square, so it is re-fitted straight away.
+  workbench.querySelectorAll('.imggr-main').forEach(main => { main.dataset.fitMode = 'fill'; });
+  workbench.querySelectorAll('.imggr-viewer-root').forEach(viewer => {
+    window.requestAnimationFrame(() => viewer.__imggrState?.refreshViewportSize?.());
+  });
+
+  // ---- Phone layout: overlay chrome, three-height grade sheet, annotate mode ----
+  // Landscape phones are wider than the tablet breakpoint but far shorter, so
+  // "phone" is either dimension. grading-workbench.css uses the same query.
+  const PHONE_QUERY = '(max-width: 767.98px), (max-height: 500px)';
+  const phone = window.matchMedia(PHONE_QUERY);
   const panels = Array.from(workbench.querySelectorAll('[data-task-uuid]'));
+  const TOOLBAR_HIDDEN_KEY = 'grader.toolbar_hidden';
+  const SHEET_STATES = ['rail', 'peek', 'open'];
+
+  function refreshViewer(panel) {
+    const viewer = panel.querySelector('.imggr-viewer-root');
+    window.requestAnimationFrame(() => viewer?.__imggrState?.refreshViewportSize?.());
+  }
+
+  function iconButton(className, icon, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
+    return button;
+  }
 
   function setupSheet(panel) {
     const card = panel.querySelector('.gwb-grade-card');
@@ -135,26 +163,132 @@
     const handle = document.createElement('button');
     handle.type = 'button';
     handle.className = 'gpwa-sheet-handle';
-    handle.setAttribute('aria-label', 'Show or hide features and comment');
-    handle.setAttribute('aria-expanded', 'false');
+    handle.innerHTML = '<span class="gpwa-sheet-grip" aria-hidden="true"></span><span class="gpwa-sheet-label"></span>';
+    const label = handle.querySelector('.gpwa-sheet-label');
+    const minimise = iconButton('gpwa-sheet-minimise', 'fa-chevron-down', 'Minimise grade sheet');
     header.prepend(handle);
-    card.classList.add('is-peek');
-    const setOpen = open => {
-      card.classList.toggle('is-peek', !open);
-      handle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const viewer = panel.querySelector('.imggr-viewer-root');
-      window.requestAnimationFrame(() => viewer?.__imggrState?.refreshViewportSize?.());
+    header.append(minimise);
+
+    const disease = panel.dataset.diseaseName || 'Grade';
+    const chosenGrade = () => {
+      const checked = panel.querySelector('[data-grade-option]:checked');
+      return checked ? panel.querySelector(`label[for="${checked.id}"]`)?.textContent.trim() : '';
     };
-    handle.addEventListener('click', () => setOpen(card.classList.contains('is-peek')));
-    // Choosing a grade that carries features opens the sheet so they are not missed.
+    const updateLabel = () => {
+      const grade = chosenGrade();
+      label.innerHTML = '';
+      label.append(`${disease}: `);
+      const value = document.createElement(grade ? 'strong' : 'span');
+      value.textContent = grade || 'choose a grade';
+      label.append(value);
+    };
+
+    const current = () => card.dataset.sheetState || 'peek';
+    const setState = state => {
+      card.dataset.sheetState = state;
+      card.classList.toggle('is-rail', state === 'rail');
+      card.classList.toggle('is-peek', state === 'peek');
+      handle.setAttribute('aria-expanded', state === 'rail' ? 'false' : 'true');
+      handle.setAttribute('aria-label', state === 'open' ? 'Show fewer grading controls' : 'Show more grading controls');
+      const rail = state === 'rail';
+      minimise.querySelector('i').className = `fa-solid ${rail ? 'fa-chevron-up' : 'fa-chevron-down'}`;
+      const minimiseLabel = rail ? 'Show grade sheet' : 'Minimise grade sheet';
+      minimise.setAttribute('aria-label', minimiseLabel);
+      minimise.title = minimiseLabel;
+      updateLabel();
+      refreshViewer(panel);
+    };
+    const step = delta => {
+      const index = SHEET_STATES.indexOf(current());
+      setState(SHEET_STATES[Math.min(SHEET_STATES.length - 1, Math.max(0, index + delta))]);
+    };
+
+    // Tap the handle: rail -> peek, peek <-> open. The chevron: anything -> rail, rail -> peek.
+    let swiped = false;
+    handle.addEventListener('click', () => {
+      if (swiped) { swiped = false; return; }
+      setState(current() === 'open' ? 'peek' : (current() === 'rail' ? 'peek' : 'open'));
+    });
+    minimise.addEventListener('click', () => setState(current() === 'rail' ? 'peek' : 'rail'));
+    // Swipe the header up or down to step through the heights.
+    let startY = null;
+    header.addEventListener('pointerdown', event => { startY = event.clientY; swiped = false; });
+    header.addEventListener('pointerup', event => {
+      if (startY === null) return;
+      const delta = event.clientY - startY;
+      startY = null;
+      if (Math.abs(delta) < 28) return;
+      swiped = true;
+      step(delta < 0 ? 1 : -1);
+    });
+    header.addEventListener('pointercancel', () => { startY = null; });
+
     panel.querySelectorAll('[data-grade-option]').forEach(option => {
       option.addEventListener('change', () => {
+        updateLabel();
+        // A grade that carries features opens the sheet so they are not missed.
         window.requestAnimationFrame(() => {
           const fieldset = panel.querySelector('[data-feature-fieldset]');
-          if (fieldset && !fieldset.classList.contains('d-none')) setOpen(true);
+          if (fieldset && !fieldset.classList.contains('d-none')) setState('open');
         });
       });
     });
+    setState('peek');
+  }
+
+  function setupToolbar(panel) {
+    const toolbar = panel.querySelector('.gwb-viewer-toolbar');
+    if (!toolbar || toolbar.querySelector('.gpwa-toolbar-toggle')) return;
+    const adjust = iconButton('btn btn-outline-secondary btn-sm gpwa-adjust-toggle', 'fa-sliders', 'Show brightness and contrast');
+    adjust.setAttribute('aria-pressed', 'false');
+    adjust.addEventListener('click', () => {
+      const open = toolbar.classList.toggle('is-adjusting');
+      adjust.setAttribute('aria-pressed', open ? 'true' : 'false');
+      adjust.classList.toggle('active', open);
+    });
+    const fold = iconButton('btn btn-outline-secondary btn-sm gpwa-toolbar-toggle', 'fa-chevron-down', 'Hide image controls');
+    const setHidden = hidden => {
+      toolbar.classList.toggle('is-hidden', hidden);
+      fold.querySelector('i').className = `fa-solid ${hidden ? 'fa-sliders' : 'fa-chevron-down'}`;
+      const label = hidden ? 'Show image controls' : 'Hide image controls';
+      fold.setAttribute('aria-label', label);
+      fold.title = label;
+    };
+    fold.addEventListener('click', () => {
+      const hidden = !toolbar.classList.contains('is-hidden');
+      setHidden(hidden);
+      try { localStorage.setItem(TOOLBAR_HIDDEN_KEY, hidden ? '1' : '0'); } catch (_) {}
+    });
+    toolbar.append(adjust, fold);
+    let hidden = false;
+    try { hidden = localStorage.getItem(TOOLBAR_HIDDEN_KEY) === '1'; } catch (_) {}
+    setHidden(hidden);
+  }
+
+  // The header strip carries the fullscreen control; it relays to the active
+  // panel's viewer button, which (on iPhone) pins the image over the screen.
+  function setupHeaderFullscreen() {
+    const actions = workbench.querySelector('.gwb-header > div:last-child');
+    if (!actions || actions.querySelector('.gpwa-fullscreen')) return;
+    const button = iconButton('btn btn-sm btn-outline-secondary gpwa-fullscreen', 'fa-expand', 'View image fullscreen');
+    const activeViewerButton = () => workbench.querySelector('.carousel-item.active .imggr-full');
+    const sync = () => {
+      const target = activeViewerButton();
+      button.hidden = !target;
+      const active = Boolean(target?.classList.contains('is-active'));
+      button.querySelector('i').className = `fa-solid ${active ? 'fa-compress' : 'fa-expand'}`;
+      const label = active ? 'Exit fullscreen' : 'View image fullscreen';
+      button.setAttribute('aria-label', label);
+      button.title = label;
+    };
+    button.addEventListener('click', () => {
+      activeViewerButton()?.click();
+      window.requestAnimationFrame(() => window.requestAnimationFrame(sync));
+    });
+    actions.insertBefore(button, actions.querySelector('[data-release-workbench]'));
+    sync();
+    workbench.querySelector('#workbench-panels')?.addEventListener('slid.bs.carousel', sync);
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(type => document.addEventListener(type, () => window.requestAnimationFrame(sync)));
   }
 
   function setupAnnotateMode(panel) {
@@ -174,10 +308,11 @@
   }
 
   function setupPhoneLayout() {
-    panels.forEach(panel => { setupSheet(panel); setupAnnotateMode(panel); });
+    setupHeaderFullscreen();
+    panels.forEach(panel => { setupSheet(panel); setupToolbar(panel); setupAnnotateMode(panel); });
   }
   if (phone.matches) setupPhoneLayout();
   // Rotating a tablet or resizing a window can cross the phone breakpoint after
-  // load; both setups are idempotent, so re-run them when it does.
+  // load; every setup is idempotent, so re-run them when it does.
   phone.addEventListener('change', event => { if (event.matches) setupPhoneLayout(); });
 })();

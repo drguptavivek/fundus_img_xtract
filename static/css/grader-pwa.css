@@ -118,9 +118,49 @@ body.gpwa-workbench .gwb-shell.is-expanded {
 body.gpwa-workbench [data-workbench-expand] { display: none; }
 body.gpwa-workbench .imggr-main { touch-action: none; }
 body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
+/* The image box takes the image's own aspect ratio ("fill" fit mode, set by
+   grader-pwa.js) and sits centred on the black stage instead of being a square. */
+body.gpwa-workbench .gwb-viewer-body .imggr-main-wrap { align-items: center; justify-content: center; }
+body.gpwa-workbench .gwb-viewer-body .imggr-main { width: auto; height: auto; }
+body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color: #fff; }
 
-/* Phones: the image takes every pixel the grade sheet does not. */
-@media (max-width: 767.98px) {
+/* Phones, either orientation: the image owns the screen. The header and the
+   filter strip are translucent overlays on the stage's black letterbox; the
+   grade sheet is a bottom sheet with three heights - rail, peek, open. */
+@media (max-width: 767.98px), (max-height: 500px) {
+  body.gpwa-workbench .gwb-shell.is-expanded { padding: 0; }
+
+  /* Header: one thin strip over the top edge. */
+  body.gpwa-workbench .gwb-header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 7;
+    margin: 0 !important;
+    border: 0 !important;
+    padding: calc(.25rem + env(safe-area-inset-top)) calc(.4rem + env(safe-area-inset-right)) .4rem calc(.4rem + env(safe-area-inset-left)) !important;
+    flex-wrap: nowrap;
+    gap: .35rem;
+    background: linear-gradient(rgba(0, 0, 0, .78), rgba(0, 0, 0, .45) 65%, rgba(0, 0, 0, 0));
+    pointer-events: none;
+  }
+  body.gpwa-workbench .gwb-header > * { pointer-events: auto; min-width: 0; }
+  body.gpwa-workbench .gwb-header > div:last-child { flex-wrap: nowrap; }
+  body.gpwa-workbench .gwb-header h1 { font-size: .8rem; color: #dee2e6; }
+  body.gpwa-workbench .gwb-header .badge {
+    background: rgba(21, 28, 32, .72) !important;
+    color: #dee2e6 !important;
+    border-color: rgba(255, 255, 255, .18) !important;
+  }
+  body.gpwa-workbench .gwb-header .btn-sm {
+    min-height: 2rem;
+    min-width: 2rem;
+    padding: .2rem .45rem;
+    background: rgba(21, 28, 32, .72);
+    border-color: rgba(255, 255, 255, .18);
+    color: #dee2e6;
+  }
+  body.gpwa-workbench .gwb-header .btn-outline-danger { color: #ff8a80; }
+
   body.gpwa-workbench .gwb-panel-row {
     display: flex;
     flex-direction: column;
@@ -131,12 +171,14 @@ body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
   }
   body.gpwa-workbench .gwb-panel-row > [class*="col-"] {
     padding: 0;
+    margin-top: 0;
     min-height: 0;
   }
   body.gpwa-workbench .gwb-panel-row > .col-lg-8 {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
+    min-width: 0;
   }
   body.gpwa-workbench .gwb-panel-row > .col-lg-4 { flex: 0 0 auto; }
   body.gpwa-workbench .gwb-viewer-card {
@@ -148,34 +190,102 @@ body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
     border-radius: 0;
     background: #000;
   }
-  body.gpwa-workbench .gwb-viewer-card > .card-header { display: none; }
-  body.gpwa-workbench .gwb-viewer-body { overflow: hidden; }
-  body.gpwa-workbench .gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; }
+  body.gpwa-workbench .gwb-viewer-card > .card-header { display: none !important; }
+  body.gpwa-workbench .gwb-viewer-body { position: relative; overflow: hidden; padding: 0 !important; }
+  body.gpwa-workbench [data-target-level="encounter"] .gwb-viewer-body {
+    padding: calc(2.9rem + env(safe-area-inset-top)) .5rem .5rem !important;
+    overflow-y: auto;
+  }
+  body.gpwa-workbench .gwb-viewer-body .imggr-viewer-root { flex: 1 1 auto; order: 1; }
   body.gpwa-workbench .gwb-viewer-body .imggr-stage,
   body.gpwa-workbench .gwb-viewer-body .imggr-annot-layout,
   body.gpwa-workbench .gwb-viewer-body .imggr-main-wrap { height: 100%; }
-  body.gpwa-workbench .gwb-viewer-body .imggr-main { height: 100%; }
-  body.gpwa-workbench .gwb-viewer-body .imggr-full {
-    top: .35rem;
-    right: .35rem;
+  body.gpwa-workbench .gwb-viewer-body .imggr-main { padding: 0; border-radius: 0 !important; }
+  /* The fullscreen control lives in the header strip on phones (grader-pwa.js
+     relays the tap); the viewer's own button only appears as the exit control. */
+  body.gpwa-workbench .gwb-viewer-body .imggr-full { display: none; }
+  body.gpwa-workbench .gwb-viewer-body .imggr-pseudo-fullscreen .imggr-full {
+    display: inline-flex;
     width: 2.75rem;
     height: 2.75rem;
     margin: 0;
     padding: 0;
-    display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
+    background: rgba(21, 28, 32, .78);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .25);
   }
-  body.gpwa-workbench .gwb-viewer-toolbar { order: 2; margin-top: .35rem; }
-  body.gpwa-workbench .gwb-viewer-toolbar .imggr-filters .btn { min-height: 2.75rem; }
-  body.gpwa-workbench .gwb-viewer-toolbar .imggr-loupe-toggle { display: inline-flex; }
 
-  /* Grade card as a bottom sheet: peeked shows grade options + actions only. */
+  /* Filter strip: over the foot of the stage. Row one is filters, loupe, reset
+     and the two toggles; the brightness / contrast sliders unfold beneath on
+     demand; the chevron folds the whole strip down to a single pill. */
+  body.gpwa-workbench .gwb-viewer-toolbar {
+    order: 2;
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 6;
+    margin: 0 !important;
+    padding: .3rem calc(.25rem + env(safe-area-inset-right)) .3rem calc(.25rem + env(safe-area-inset-left));
+    gap: .25rem;
+    background: rgba(21, 28, 32, .78);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-filters { flex: 1 1 auto; flex-wrap: nowrap; min-width: 0; }
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-filters .btn {
+    min-height: 2.25rem;
+    min-width: 1.75rem;
+    padding: .2rem .1rem;
+    font-size: .8rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-annot-toggle { font-size: .8rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-reset,
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-annot-toggle,
+  body.gpwa-workbench .gwb-viewer-toolbar .gpwa-adjust-toggle,
+  body.gpwa-workbench .gwb-viewer-toolbar .gpwa-toolbar-toggle {
+    flex: 0 0 auto;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    padding: .2rem .4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body.gpwa-workbench .gwb-viewer-toolbar .gpwa-adjust-toggle { order: 3; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gpwa-toolbar-toggle { order: 4; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control { display: none; margin-top: 0; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-adjusting .gwb-adjustment-control { display: flex; margin-top: .15rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control .form-range { min-height: 2rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-hidden {
+    left: auto;
+    padding: .3rem;
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: none !important; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-hidden .gpwa-toolbar-toggle {
+    display: inline-flex !important;
+    border-radius: 50%;
+    background: rgba(21, 28, 32, .78);
+  }
+  /* In (pseudo) fullscreen the strip stays reachable along the bottom edge. */
+  body.gpwa-workbench.imggr-fullscreen-active .gwb-viewer-toolbar {
+    position: fixed;
+    z-index: 2070;
+    padding-bottom: calc(.3rem + env(safe-area-inset-bottom));
+  }
+
+  /* Grade sheet. Rail: a 44px bar naming the disease and the chosen grade.
+     Peek: grade options and Save. Open: features, comment, Clear as well. */
   body.gpwa-workbench .gwb-grade-card {
     display: flex;
     flex-direction: column;
-    max-height: 68dvh;
+    max-height: 62dvh;
     height: auto !important;
     border: 0;
     border-top: 1px solid var(--bs-border-color);
@@ -183,32 +293,99 @@ body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
     box-shadow: 0 -2px 12px rgba(0, 0, 0, .35);
     overflow: hidden;
   }
-  body.gpwa-workbench .gwb-grade-card .card-header { padding-top: 0 !important; padding-bottom: 0 !important; }
-  body.gpwa-workbench .gwb-grade-card .card-body { overflow-y: auto; padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom)); }
-  body.gpwa-workbench .gwb-grade-card [data-grade-options] label.btn { min-height: 44px; }
+  body.gpwa-workbench .gwb-grade-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    min-height: 2.75rem;
+    padding: 0 .25rem 0 .5rem !important;
+    border-bottom: 0;
+  }
+  body.gpwa-workbench .gwb-grade-card .card-header > .d-flex { flex: 0 0 auto; gap: .25rem !important; }
+  body.gpwa-workbench .gwb-grade-card .card-header h2 { display: none; }
+  body.gpwa-workbench .gwb-grade-card .card-header .btn-group .btn { min-width: 2.5rem; min-height: 2.25rem; }
+  .gpwa-sheet-handle {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--bs-body-color);
+    text-align: left;
+    font-size: .85rem;
+    line-height: 1.2;
+  }
+  .gpwa-sheet-grip {
+    flex: 0 0 auto;
+    width: 5px;
+    height: 26px;
+    border-radius: 3px;
+    background: var(--bs-border-color);
+  }
+  .gpwa-sheet-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gpwa-sheet-label strong { color: var(--bs-primary-text-emphasis); }
+  .gpwa-sheet-minimise {
+    flex: 0 0 auto;
+    width: 2.75rem;
+    min-height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: .5rem;
+    background: transparent;
+    color: var(--bs-secondary-color);
+  }
+  body.gpwa-workbench .gwb-grade-card .card-body {
+    overflow-y: auto;
+    padding: .25rem .6rem calc(.5rem + env(safe-area-inset-bottom));
+  }
+  body.gpwa-workbench .gwb-form:has(.gwb-footer) .gwb-grade-card .card-body { padding-bottom: .5rem; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .card-body { display: none; }
+  body.gpwa-workbench .gwb-grade-card [data-grade-options] { margin-bottom: .5rem !important; }
+  body.gpwa-workbench .gwb-grade-card [data-grade-options] > .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: .35rem;
+    margin: 0;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-grade-options] > .row > [class*="col-"] {
+    flex: none;
+    width: auto;
+    max-width: none;
+    padding: 0;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-grade-options] label.btn {
+    min-height: 40px;
+    padding: .3rem .4rem;
+    font-size: .85rem;
+    line-height: 1.15;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-workbench-submit-actions] .btn {
+    min-height: 40px;
+    padding: .3rem .7rem;
+    font-size: .9rem;
+  }
   body.gpwa-workbench .gwb-grade-card.is-peek [data-feature-fieldset],
   body.gpwa-workbench .gwb-grade-card.is-peek [data-grade-guidelines],
   body.gpwa-workbench .gwb-grade-card.is-peek .gwb-comment,
   body.gpwa-workbench .gwb-grade-card.is-peek label[for^="comment-"],
   body.gpwa-workbench .gwb-grade-card.is-peek [data-clear-selection] { display: none !important; }
-  body.gpwa-workbench .gwb-grade-card.is-peek [data-workbench-submit-actions] { margin-top: .5rem !important; }
-  .gpwa-sheet-handle {
-    display: flex;
-    width: 100%;
-    min-height: 32px;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    background: transparent;
-    color: var(--bs-secondary-color);
+  body.gpwa-workbench .gwb-grade-card.is-peek [data-workbench-submit-actions] { margin-top: .25rem !important; }
+
+  /* Target pager / previous-next: one slim row under the sheet. */
+  body.gpwa-workbench .gwb-footer {
+    margin-top: 0 !important;
+    padding: .25rem .5rem calc(.25rem + env(safe-area-inset-bottom)) !important;
+    gap: .35rem;
+    flex-wrap: nowrap;
   }
-  .gpwa-sheet-handle::before {
-    content: '';
-    width: 36px;
-    height: 5px;
-    border-radius: 3px;
-    background: var(--bs-border-color);
-  }
+  body.gpwa-workbench .gwb-footer .btn { min-height: 2.25rem; padding: .2rem .55rem; }
+  body.gpwa-workbench .gwb-footer .btn-sm { min-width: 2.25rem; }
 
   /* Annotate mode: the sheet steps aside and the editor's own sidebar is laid
      over the image - tools on a right-edge rail, class / instance / actions as
@@ -301,8 +478,40 @@ body.gpwa-workbench .gwb-header .btn-sm { min-height: 2.25rem; }
   body.gpwa-workbench .imggr-annot-sidebar .form-select { min-height: 44px; }
 }
 
+/* Landscape phones: the sheet becomes a side column so the image keeps the
+   full height; minimised, the column shrinks to a sliver with the handle. */
+@media (max-height: 500px) and (orientation: landscape) {
+  body.gpwa-workbench .gwb-header {
+    position: relative;
+    padding-top: calc(.15rem + env(safe-area-inset-top)) !important;
+    padding-bottom: .15rem !important;
+    background: var(--bs-body-bg);
+    pointer-events: auto;
+  }
+  body.gpwa-workbench .gwb-header .btn-sm { min-height: 1.85rem; }
+  body.gpwa-workbench .gwb-panel-row { flex-direction: row; }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-4 { flex: 0 0 40%; max-width: 40%; height: 100%; }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-4:has(.gwb-grade-card.is-rail) { flex-basis: 3rem; max-width: 3rem; }
+  body.gpwa-workbench .gwb-grade-card {
+    max-height: none;
+    height: 100% !important;
+    border-top: 0;
+    border-left: 1px solid var(--bs-border-color);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail .card-header { flex-direction: column; justify-content: flex-start; padding: .25rem 0 !important; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-handle { flex: 0 0 auto; width: 100%; justify-content: center; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grip { width: 26px; height: 5px; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-label,
+  body.gpwa-workbench .gwb-grade-card.is-rail .card-header > .d-flex { display: none; }
+  body.gpwa-workbench .gwb-grade-card .card-body { padding-bottom: .5rem; }
+  body.gpwa-workbench .gwb-footer { padding-top: .15rem !important; padding-bottom: calc(.15rem + env(safe-area-inset-bottom)) !important; }
+  body.gpwa-workbench .gwb-footer .btn { min-height: 2rem; }
+}
+
 /* Tablets and up: the desktop workbench with touch-sized controls. */
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 500.01px) {
   body.gpwa-workbench .btn-sm { min-height: 2.25rem; }
   body.gpwa-workbench [data-grade-options] label.btn { min-height: 44px; }
   body.gpwa-workbench .gwb-footer .btn { min-height: 44px; }

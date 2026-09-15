@@ -97,6 +97,45 @@ def test_phone_viewer_fits_complete_image_without_annotation_overlay():
     assert "body.gpwa-workbench .gwb-viewer-body .imggr-full" in pwa_styles
 
 
+def test_phone_workbench_gives_the_image_the_screen():
+    """iPhone review: image too small, controls too big, no way to minimise the
+    sheet, fullscreen dead. The PWA fits the image box to the image's aspect
+    ratio, overlays the header and filter strip, folds the sheet to a rail and
+    falls back to a CSS fullscreen where the browser has no element fullscreen."""
+    viewer = (ROOT / "static/js/grading-viewer.js").read_text()
+    viewer_styles = (ROOT / "static/css/app.css").read_text()
+    pwa_script = (ROOT / "static/js/grader-pwa.js").read_text()
+    pwa_styles = (ROOT / "static/css/grader-pwa.css").read_text()
+    workbench_styles = (ROOT / "static/css/grading-workbench.css").read_text()
+    session_script = (ROOT / "static/js/grading-workbench-session.js").read_text()
+
+    # Aspect-ratio fit instead of a 72dvh-capped square, centred on the stage.
+    assert "main.dataset.fitMode === 'fill'" in viewer
+    assert "main.dataset.fitMode = 'fill'" in pwa_script
+    assert "body.gpwa-workbench .gwb-viewer-body .imggr-main-wrap { align-items: center; justify-content: center; }" in pwa_styles
+
+    # Fullscreen falls back to a pinned wrap when the Fullscreen API is missing (iPhone Safari).
+    assert "function nativeFullscreenSupported" in viewer
+    assert "enterPseudoFullscreen(el)" in viewer
+    assert ".imggr-main-wrap.imggr-pseudo-fullscreen {" in viewer_styles
+    assert "body.gpwa-workbench.imggr-fullscreen-active .gwb-viewer-toolbar" in pwa_styles
+    assert "gpwa-fullscreen" in pwa_script
+
+    # Three-height sheet with an explicit minimise control, and a foldable filter strip.
+    assert "const SHEET_STATES = ['rail', 'peek', 'open']" in pwa_script
+    assert "gpwa-sheet-minimise" in pwa_script
+    assert "body.gpwa-workbench .gwb-grade-card.is-rail .card-body { display: none; }" in pwa_styles
+    assert "gpwa-toolbar-toggle" in pwa_script
+    assert "body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: none !important; }" in pwa_styles
+
+    # Landscape phones are phones: the same query in every layer.
+    phone_query = "(max-width: 767.98px), (max-height: 500px)"
+    assert f"@media {phone_query} {{" in pwa_styles
+    assert f"@media {phone_query} {{" in workbench_styles
+    assert f"'{phone_query}'" in pwa_script
+    assert f"'{phone_query}'" in session_script
+
+
 def test_offline_page_is_public(client):
     response = client.get("/grader/offline")
 

@@ -55,7 +55,8 @@ body.gwb-expanded-lock { overflow: hidden; }
   .gwb-encounter-summary { grid-template-columns: 1fr; }
 }
 .gwb-short { display: none; }
-@media (max-width: 767.98px) {
+/* Phones in either orientation (a landscape phone is wide but under 500px tall). */
+@media (max-width: 767.98px), (max-height: 500px) {
   .gwb-hide-phone { display: none !important; }
   .gwb-full { display: none; }
   .gwb-short { display: inline; }

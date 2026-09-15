@@ -810,6 +810,37 @@ body {
   object-position: center;
 }
 
+/* Pseudo fullscreen (browsers without element fullscreen, e.g. iPhone Safari):
+   the wrap is pinned over the viewport and the image box, sized to the image's
+   aspect ratio by the viewer ("fill" fit mode), is centred inside it. */
+.imggr-main-wrap.imggr-pseudo-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2060;
+  width: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #000 !important;
+  border-radius: 0 !important;
+}
+.imggr-main-wrap.imggr-pseudo-fullscreen .imggr-main {
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+}
+.imggr-main-wrap.imggr-pseudo-fullscreen .imggr-full {
+  top: calc(.5rem + env(safe-area-inset-top));
+  right: calc(.5rem + env(safe-area-inset-right));
+}
+body.imggr-fullscreen-active { overflow: hidden; }
+
 /* Grading filters: button active state */
 .imggr-filters .btn-check:checked + .btn {
   color: #fff;

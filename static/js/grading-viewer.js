@@ -230,10 +230,59 @@
     selectFilter(root, next);
   }
 
+  // Fullscreen: the Fullscreen API where the browser offers it for elements;
+  // otherwise (iPhone Safari, which only fullscreens <video>) a CSS
+  // "pseudo" fullscreen that pins the viewer's wrap over the whole viewport.
+  // Either way the image box is re-fitted to the space it now has.
+  const PSEUDO_FULLSCREEN_CLASS = 'imggr-pseudo-fullscreen';
+  const BODY_FULLSCREEN_CLASS = 'imggr-fullscreen-active';
+  function nativeFullscreenSupported(el){
+    if (document.fullscreenEnabled === false || document.webkitFullscreenEnabled === false) return false;
+    return typeof (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen) === 'function';
+  }
+  function fullscreenWrapFor(el){
+    return el?.closest?.('.imggr-main-wrap') || null;
+  }
+  function pseudoFullscreenMain(){
+    return document.querySelector(`.${PSEUDO_FULLSCREEN_CLASS} .imggr-main`);
+  }
+  function refitAfterFullscreenChange(el){
+    const root = el?.closest?.('.imggr-viewer-root');
+    const state = root ? (viewerStates.get(root) || root.__imggrState) : null;
+    window.requestAnimationFrame(() => {
+      state?.refreshViewportSize?.();
+      syncFullscreenButtons();
+    });
+  }
+  function enterPseudoFullscreen(el){
+    const wrap = fullscreenWrapFor(el);
+    if (!wrap) return;
+    wrap.classList.add(PSEUDO_FULLSCREEN_CLASS);
+    document.body.classList.add(BODY_FULLSCREEN_CLASS);
+    el.dataset.imggrFitBeforeFullscreen = el.dataset.fitMode || '';
+    el.dataset.fitMode = 'fill';
+    refitAfterFullscreenChange(el);
+  }
+  function exitPseudoFullscreen(){
+    const el = pseudoFullscreenMain();
+    if (!el) return;
+    fullscreenWrapFor(el)?.classList.remove(PSEUDO_FULLSCREEN_CLASS);
+    document.body.classList.remove(BODY_FULLSCREEN_CLASS);
+    if (el.dataset.imggrFitBeforeFullscreen) el.dataset.fitMode = el.dataset.imggrFitBeforeFullscreen;
+    else delete el.dataset.fitMode;
+    delete el.dataset.imggrFitBeforeFullscreen;
+    refitAfterFullscreenChange(el);
+  }
   function requestFullscreen(el){
-    try { (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen)?.call(el); } catch(_) {}
+    if (!el) return;
+    if (!nativeFullscreenSupported(el)) { enterPseudoFullscreen(el); return; }
+    try {
+      const result = (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen).call(el);
+      if (result && typeof result.catch === 'function') result.catch(() => enterPseudoFullscreen(el));
+    } catch(_) { enterPseudoFullscreen(el); }
   }
   function exitFullscreen(){
+    if (pseudoFullscreenMain()) { exitPseudoFullscreen(); return; }
     try {
       const hasFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
       if (!hasFullscreen) return;
@@ -241,8 +290,29 @@
     } catch(_) {}
   }
   function isFullscreenFor(el){
-    return document.fullscreenElement === el || document.webkitFullscreenElement === el;
+    if (!el) return false;
+    return document.fullscreenElement === el || document.webkitFullscreenElement === el || pseudoFullscreenMain() === el;
   }
+  function syncFullscreenButtons(){
+    document.querySelectorAll('.imggr-viewer-root').forEach(root => {
+      const main = root.querySelector('.imggr-main');
+      const button = root.querySelector('.imggr-full');
+      if (!main || !button) return;
+      const active = isFullscreenFor(main);
+      button.classList.toggle('is-active', active);
+      const icon = button.querySelector('i');
+      if (icon) { icon.classList.toggle('fa-expand', !active); icon.classList.toggle('fa-compress', active); }
+      const label = active ? 'Exit fullscreen' : 'View image fullscreen';
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(type => {
+    document.addEventListener(type, () => {
+      document.querySelectorAll('.imggr-viewer-root').forEach(root => refitAfterFullscreenChange(root.querySelector('.imggr-main')));
+    });
+  });
 
   function adjustRangeInput(input, direction){
     if (!input || !direction) return;
@@ -428,7 +498,7 @@
     const presetModalId = root.dataset.presetModalId || `imggr-preset-modal-${uuid}`;
 
     // Single image; just wire up fullscreen and activation
-    fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); });
+    fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); syncFullscreenButtons(); });
 
     // Compose and apply filter (SVG + brightness/contrast)
     const card = root.closest('.card');
@@ -1210,6 +1280,28 @@
       if (!Number.isFinite(availableH) || availableH <= 0) {
         const approxBottomMargin = 180;
         availableH = window.innerHeight - rootRect.top - approxBottomMargin;
+      }
+
+      if (main.dataset.fitMode === 'fill') {
+        // The largest box of the image's own aspect ratio that fits the wrap
+        // (or the viewer root when the wrap has no height of its own): no
+        // square, no viewport cap. The wrap centres it, so pan maths - which
+        // assume the image starts at the box's top-left - are untouched.
+        const fillW = Math.max(1, Math.floor(availableW));
+        const wrapH = wrapRect && wrapRect.height > 0 ? wrapRect.height : availableH;
+        const fillH = Math.max(1, Math.floor(wrapH));
+        const natW = mainImg?.naturalWidth || 0;
+        const natH = mainImg?.naturalHeight || 0;
+        let targetW = fillW;
+        let targetH = fillH;
+        if (natW > 0 && natH > 0) {
+          const scale = Math.min(fillW / natW, fillH / natH);
+          targetW = Math.max(1, Math.floor(natW * scale));
+          targetH = Math.max(1, Math.floor(natH * scale));
+        }
+        main.style.width = `${targetW}px`;
+        main.style.height = `${targetH}px`;
+        return;
       }
 
       const fitToWidth = main.dataset.fitMode === 'width'

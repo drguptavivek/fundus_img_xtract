@@ -333,6 +333,7 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
     pdf_attachment = None
     ocr_status = "absent"
     dr_verdict: RemidioVerdictDTO | None = None
+    amd_verdict: RemidioVerdictDTO | None = None
     glaucoma_verdict: RemidioVerdictDTO | None = None
     report_datetime = None
 
@@ -352,6 +353,7 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
             # A real encounter carries several attachments; each may hold a
             # different report page. Keep the first verdict found per kind.
             dr_verdict = dr_verdict or _verdict(ocr.get("dr_report"), "dr_data")
+            amd_verdict = amd_verdict or _verdict(ocr.get("amd_report"), "amd_data")
             glaucoma_verdict = glaucoma_verdict or _verdict(ocr.get("glaucoma_report"), "glaucoma_data")
             report_datetime = report_datetime or ocr.get("source_report_datetime") or ocr.get("completed_at")
         elif ocr_status == "completed":
@@ -378,5 +380,6 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
         ocr_result=dr_verdict.result if dr_verdict else None,
         report_datetime=str(report_datetime) if report_datetime else None,
         dr=dr_verdict,
+        amd=amd_verdict,
         glaucoma=glaucoma_verdict,
     )

@@ -102,8 +102,10 @@ matches what the user considers "today".
         "ocr_status": "completed",
         "ocr_result": "Moderate NPDR",
         "report_datetime": "2026-08-20T09:58:00",
-        "dr": {"result": "Moderate NPDR", "qualitative_result": "Refer",
+        "dr": {"result": "Signs of DR detected.", "qualitative_result": "Referral suggested",
                "vcdr_right": null, "vcdr_left": null},
+        "amd": {"result": "No signs of AMD detected.", "qualitative_result": null,
+                "vcdr_right": null, "vcdr_left": null},
         "glaucoma": {"result": "Glaucoma suspect", "qualitative_result": "Refer",
                      "vcdr_right": "0.7", "vcdr_left": "0.5"}
       }
@@ -160,6 +162,7 @@ The camera's own verdicts are exposed per report page, read from the OCR pipelin
 `<kind>_report.<kind>_data` block and only when that block is `detected`:
 
 - `dr` — the Remidio DR report: `result`, `qualitative_result`.
+- `amd` — the Remidio AMD report: `result`, `qualitative_result`.
 - `glaucoma` — the Remidio glaucoma report: `result`, `qualitative_result`,
   `vcdr_right`, `vcdr_left`.
 - `ocr_result` duplicates `dr.result` as a single string for clients that only read

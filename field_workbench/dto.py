@@ -101,6 +101,7 @@ class RemidioReportDTO:
     # Structured verdicts per report page the camera produced. ``None`` when the
     # OCR finished without detecting that report.
     dr: RemidioVerdictDTO | None = None
+    amd: RemidioVerdictDTO | None = None
     glaucoma: RemidioVerdictDTO | None = None
 
     def to_dict(self) -> dict[str, Any]:

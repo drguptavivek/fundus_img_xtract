@@ -58,7 +58,11 @@ def test_structured_result_appears_once_ocr_completes(db_session, field_data):
                             "vcdr_left": "0.5",
                         },
                     },
-                    "amd_report": {"detected": False, "page": None, "amd_data": {}},
+                    "amd_report": {
+                        "detected": True,
+                        "page": 1,
+                        "amd_data": {"result": "No signs of AMD detected", "qualitative_result": None},
+                    },
                     "completed_at": "2026-08-20T10:00:00+00:00",
                 }
             },
@@ -73,6 +77,8 @@ def test_structured_result_appears_once_ocr_completes(db_session, field_data):
     assert report.ocr_result == "Moderate NPDR"
     assert report.dr.result == "Moderate NPDR"
     assert report.dr.qualitative_result == "Refer"
+    assert report.amd.result == "No signs of AMD detected"
+    assert report.amd.qualitative_result is None
     assert report.glaucoma.result == "Glaucoma suspect"
     assert report.glaucoma.vcdr_right == "0.7"
     assert report.glaucoma.vcdr_left == "0.5"
@@ -102,6 +108,7 @@ def test_ocr_that_found_no_report_page_is_finished_with_no_verdict(db_session, f
     assert report.ocr_status == "completed"
     assert report.ocr_result is None
     assert report.dr is None
+    assert report.amd is None
     assert report.glaucoma is None
     # The PDF stays reachable after OCR, not replaced by it.
     assert report.pdf_available is True

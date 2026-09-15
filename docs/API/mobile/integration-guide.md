@@ -12,9 +12,11 @@ does not restate them.
 
 ## Read this first: five things that surprise people
 
-1. **A device cannot sign in until an administrator enrols it.** Correct credentials on an
-   unenrolled device return `403 device_not_enrolled` and **no tokens**. Your first-run
-   flow needs an enrolment-code field. See [First run](#first-run-device-enrolment).
+1. **Devices sign in with credentials alone by default.** The device row is created
+   approved on first sign-in unless an administrator has blocked it. Only when the server
+   runs in strict mode (`MOBILE_DEVICES_AUTO_APPROVE=0`) does an unenrolled device get
+   `403 device_not_enrolled` and no tokens; keep the enrolment-code field for that case.
+   See [First run](#first-run-device-enrolment).
 2. **Two error envelopes exist.** The auth decorator returns `{"message": ...}`; route
    handlers return `{"error": ..., "message": ...}`. Parse both. See
    [Error handling](#error-handling).

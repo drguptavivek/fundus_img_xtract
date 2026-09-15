@@ -20,7 +20,7 @@ These routes live in `api/mobile/auth.py`, `api/mobile/sessions.py`, and `servic
   (`field_optometrist`, `field_ophthalmologist`) and **2** for everyone else. Creating a new session
   revokes the oldest active session beyond that limit; the displaced device's next request fails with
   `session_superseded` (401) rather than a generic session error, so the app can explain what happened.
-- **Every client device must be enrolled before it can sign in.** See *Device enrolment* below.
+- Devices sign in with credentials alone by default; enrolment codes are an optional stricter mode. See *Device enrolment* below.
 
 ## `POST /auth/login`
 
@@ -375,11 +375,18 @@ The server cannot control what a client stores. Field clients must not persist p
 or images at rest, and must clear any cached data on logout and on session revocation.
 
 
-## Web platform devices (grader PWA)
+## Device auto-approval (all platforms)
 
-`POST /api/mobile/v1/auth/login` with `"platform": "web"` and no
-`enrolment_code` creates the device row approved (unless blocked) — browsers
-are not gated by enrolment. Disable with `MOBILE_WEB_DEVICES_AUTO_APPROVE = False`.
+`POST /api/mobile/v1/auth/login` without an `enrolment_code` creates the device
+row approved (unless an administrator blocked it) on **every** platform — native
+apps sign in exactly like the web PWA. Product decision 2026-09-15.
+
+- `MOBILE_DEVICES_AUTO_APPROVE` (default on) governs all platforms.
+- With it off, `MOBILE_WEB_DEVICES_AUTO_APPROVE` (default on) still waives
+  enrolment for `"platform": "web"` only, restoring the earlier browser-only
+  behaviour; every other platform then needs an enrolment code.
+- Blocking a device in the admin hub remains the per-device control and is
+  never bypassed by auto-approval.
 
 ## `POST /api/mobile/v1/auth/reauth`
 

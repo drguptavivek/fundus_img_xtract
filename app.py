@@ -130,6 +130,10 @@ def _configure_base_settings(app: Flask) -> None:
         "GRADING_REAUTH_IDLE_SECONDS", int(os.environ.get("GRADING_REAUTH_IDLE_SECONDS", 30 * 60))
     )
     app.config.setdefault(
+        "MOBILE_DEVICES_AUTO_APPROVE",
+        os.environ.get("MOBILE_DEVICES_AUTO_APPROVE", "1").strip().lower() not in {"0", "false", "no"},
+    )
+    app.config.setdefault(
         "MOBILE_WEB_DEVICES_AUTO_APPROVE",
         os.environ.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", "1").strip().lower() not in {"0", "false", "no"},
     )

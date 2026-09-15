@@ -40,8 +40,7 @@ from mobile_devices.service import (
     refresh_lifetime_for,
     require_approved_device,
     touch_device,
-    WEB_PLATFORM,
-    ensure_web_device,
+    ensure_device,
 )
 from models import MobileAuthSession, User
 from utils.log_sanitize import sanitize_log_value
@@ -160,14 +159,16 @@ def _open_mobile_session(db, user: User, login_request: MobileLoginRequest) -> d
     username = login_request.username
     ip = login_request.ip_address
 
-    # Browsers (the grader PWA) carry the same tokens but skip enrolment: the
-    # device row is created approved unless an administrator blocked it.
-    if login_request.platform == WEB_PLATFORM and not login_request.enrolment_code:
+    # Devices sign in with credentials alone when policy allows (the default
+    # for every platform): the device row is created approved unless an
+    # administrator blocked it. Enrolment codes remain an opt-in stricter path.
+    if not login_request.enrolment_code:
         try:
-            ensure_web_device(
+            ensure_device(
                 db,
                 user_id=user.id,
                 device_id=login_request.device_id,
+                platform=login_request.platform,
                 label=login_request.device_name,
             )
         except MobileDeviceError as exc:

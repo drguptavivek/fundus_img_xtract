@@ -65,11 +65,39 @@ def _login(client, user, device_id, **extra):
     return client.post("/api/mobile/v1/auth/login", json=body)
 
 
-def test_login_from_unenrolled_device_returns_no_tokens(client, db_session, monkeypatch):
+def test_native_device_signs_in_without_a_code_by_default(client, db_session, monkeypatch):
+    """Product decision 2026-09-15: apps sign in like the web PWA - no device code."""
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user = _seed_user(db_session)
 
-    response = _login(client, user, "unenrolled-device")
+    response = _login(client, user, "fresh-phone", platform="ios")
+
+    assert response.status_code == 200
+    assert response.get_json()["access_token"]
+    device = db_session.query(MobileDevice).filter_by(user_id=user.id, device_id="fresh-phone").one()
+    assert device.status == "approved"
+    assert device.platform == "ios"
+
+
+def test_blocked_device_is_still_refused_under_auto_approval(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user = _seed_user(db_session)
+    db_session.add(MobileDevice(user_id=user.id, device_id="bad-phone", status="blocked"))
+    db_session.flush()
+
+    response = _login(client, user, "bad-phone", platform="android")
+
+    assert response.status_code == 403
+    assert "access_token" not in response.get_json()
+
+
+def test_login_from_unenrolled_device_returns_no_tokens(client, db_session, monkeypatch):
+    """Strict mode: with auto-approval off, an unenrolled device gets nothing."""
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    monkeypatch.setitem(client.application.config, "MOBILE_DEVICES_AUTO_APPROVE", False)
+    user = _seed_user(db_session)
+
+    response = _login(client, user, "unenrolled-device", platform="android")
 
     assert response.status_code == 403
     payload = response.get_json()
@@ -239,6 +267,7 @@ def test_response_reports_the_real_refresh_window_not_the_default(client, db_ses
 def test_device_refusal_does_not_burn_the_account_lockout_budget(client, db_session, monkeypatch):
     """Correct credentials on a pending device must not lock the account."""
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    monkeypatch.setitem(client.application.config, "MOBILE_DEVICES_AUTO_APPROVE", False)
     user = _seed_user(db_session)
 
     for _ in range(6):

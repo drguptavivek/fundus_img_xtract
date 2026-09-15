@@ -37,8 +37,10 @@ def test_web_platform_login_skips_enrolment(client, db_session, monkeypatch):
     assert device.platform == "web"
 
 
-def test_non_web_platform_still_requires_enrolment(client, db_session, monkeypatch):
+def test_non_web_platform_requires_enrolment_in_strict_mode(client, db_session, monkeypatch):
+    """With global auto-approval off, only browsers keep the waiver."""
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    monkeypatch.setitem(client.application.config, "MOBILE_DEVICES_AUTO_APPROVE", False)
     user, _, _ = _seed_mobile_user(db_session)
 
     response = client.post(
@@ -57,14 +59,13 @@ def test_non_web_platform_still_requires_enrolment(client, db_session, monkeypat
 
 
 def test_web_auto_approval_can_be_disabled(client, db_session, monkeypatch):
+    """Both switches off: even a browser must present an enrolment code."""
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
-    client.application.config["MOBILE_WEB_DEVICES_AUTO_APPROVE"] = False
-    try:
-        user, _, _ = _seed_mobile_user(db_session)
-        response = _login_web(client, user, device_id="browser-off")
-        assert response.status_code in (403, 409)
-    finally:
-        client.application.config.pop("MOBILE_WEB_DEVICES_AUTO_APPROVE", None)
+    monkeypatch.setitem(client.application.config, "MOBILE_DEVICES_AUTO_APPROVE", False)
+    monkeypatch.setitem(client.application.config, "MOBILE_WEB_DEVICES_AUTO_APPROVE", False)
+    user, _, _ = _seed_mobile_user(db_session)
+    response = _login_web(client, user, device_id="browser-off")
+    assert response.status_code in (403, 409)
 
 
 def test_blocked_browser_device_stays_blocked(client, db_session, monkeypatch):

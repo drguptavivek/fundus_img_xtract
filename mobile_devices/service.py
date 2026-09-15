@@ -159,18 +159,38 @@ def redeem_enrolment_code(
 WEB_PLATFORM = "web"
 
 
-def ensure_web_device(db, *, user_id: int, device_id: str, label: str | None = None) -> MobileDevice | None:
-    """Approve a browser (``platform == "web"``) device without an enrolment code.
+def auto_approval_enabled(platform: str | None) -> bool:
+    """Whether a device on ``platform`` may sign in without an enrolment code.
 
-    Product decision 2026-09-03: installed web apps use the same bearer tokens
-    as phones but are not gated by device enrolment. Blocked devices stay
-    blocked - an administrator's decision is never bypassed - and the switch
-    ``MOBILE_WEB_DEVICES_AUTO_APPROVE`` turns the behaviour off wholesale.
-    Returns the device row, or ``None`` when auto-approval is disabled.
+    Product decision 2026-09-15: native apps sign in the same way as the web
+    PWA - username and password, no device code. ``MOBILE_DEVICES_AUTO_APPROVE``
+    (default on) governs every platform; ``MOBILE_WEB_DEVICES_AUTO_APPROVE``
+    remains as the narrower switch for browsers so the earlier web-only
+    behaviour can still be expressed when the global one is off.
     """
     from flask import current_app
 
-    if not current_app.config.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", True):
+    config = current_app.config
+    if config.get("MOBILE_DEVICES_AUTO_APPROVE", True):
+        return True
+    return platform == WEB_PLATFORM and bool(config.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", True))
+
+
+def ensure_device(
+    db,
+    *,
+    user_id: int,
+    device_id: str,
+    platform: str | None,
+    label: str | None = None,
+) -> MobileDevice | None:
+    """Approve a device without an enrolment code when policy allows it.
+
+    Blocked devices stay blocked - an administrator's decision is never
+    bypassed. Returns the device row, or ``None`` when auto-approval is off
+    for this platform (the caller's approval gate then decides).
+    """
+    if not auto_approval_enabled(platform):
         return None
     device = _get_device(db, user_id=user_id, device_id=device_id)
     if device is None:
@@ -181,10 +201,15 @@ def ensure_web_device(db, *, user_id: int, device_id: str, label: str | None = N
     if device.status != "approved":
         device.status = "approved"
         device.enrolled_at = utcnow()
-    device.platform = WEB_PLATFORM
+    device.platform = platform or device.platform
     device.label = label or device.label
     db.flush()
     return device
+
+
+def ensure_web_device(db, *, user_id: int, device_id: str, label: str | None = None) -> MobileDevice | None:
+    """Browser variant of :func:`ensure_device`, kept for existing callers."""
+    return ensure_device(db, user_id=user_id, device_id=device_id, platform=WEB_PLATFORM, label=label)
 
 
 def require_approved_device(db, *, user_id: int, device_id: str) -> MobileDevice:

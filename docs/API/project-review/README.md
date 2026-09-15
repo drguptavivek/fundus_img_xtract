@@ -38,8 +38,9 @@ their respective integrations are currently active in the project's effective
 configuration. The response also includes that enabled configuration:
 
 The summary also returns `grading_completion_percent`, `grading_stage_metrics`
-for every persisted grading stage, and `grading_rows` grouped by task target
-type, disease, grading mode, and stage. Each row includes `target_group` and
+for the three active workflow stages plus finalised tasks, and `grading_rows`
+grouped by task target type, disease, and grading mode. Each row includes stage
+counts rather than repeating the target once per persisted state, plus `target_group` and
 `target_type`, plus `scope_role`, `scope_name`, and `parent_scope_name` for
 unified, root, and linked EncounterSet disease scopes. These values come from
 persisted lineage: EncounterSets contain whole-set and per-image targets
@@ -129,10 +130,13 @@ or the queue-complete partial, and emits `HX-Trigger: direct-image-verified`.
 
 `GET /api/projects/{project_id}/review/gradings`
 
-Aggregates tasks by target type, unified/disease-specific package mode,
-disease, and persisted workflow state. State labels map `pending` to Not
-graded, `resident_done` to Pending Resident 2, `arbitration` to Pending
-adjudication, `resident2_done` to Pending Resident, and `final` to Finalised.
+Aggregates tasks by target type, unified/disease-specific package mode, and
+disease scope. Each row reports `task_count`, `first_grading_count`,
+`second_grading_count`, `adjudication_count`, and `final_count`. First grading
+includes `pending` plus the edge case where Resident 2 graded first;
+second grading maps `resident_done`, adjudication maps `arbitration`, and
+complete maps `final`. EncounterSet rows without persisted scope lineage are
+reported as legacy/unscoped rather than visually inheriting the preceding scope.
 
 ## Errors
 

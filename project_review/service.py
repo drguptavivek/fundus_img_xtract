@@ -72,15 +72,6 @@ class _ResolvedScope:
     lab_unit_ids: frozenset[int]
 
 
-STATE_LABELS = {
-    "pending": "Not graded",
-    "resident_done": "Pending Resident 2",
-    "resident2_done": "Pending Resident",
-    "arbitration": "Pending adjudication",
-    "final": "Finalised",
-}
-
-
 def list_projects(db: Session, *, user: User) -> tuple[ProjectChoiceDTO, ...]:
     statement = select(Project).order_by(Project.active.desc(), Project.title)
     if not user.has_role("admin"):
@@ -123,16 +114,12 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
     package_help = "Each workflow is created for one EncounterSet from a configured grading package and contains one or more grading tasks."
     grading_rows = _grading_rows(db, project.id, scope)
     task_count = sum(row.task_count for row in grading_rows)
-    finalised_count = sum(row.task_count for row in grading_rows if row.state == "final")
-    grading_stage_metrics = tuple(
-        ProjectMetricDTO(state, label, sum(row.task_count for row in grading_rows if row.state == state))
-        for state, label in (
-            ("pending", "Not graded"),
-            ("resident_done", "Pending Resident 2"),
-            ("resident2_done", "Pending Resident"),
-            ("arbitration", "Pending adjudication"),
-            ("final", "Finalised"),
-        )
+    finalised_count = sum(row.final_count for row in grading_rows)
+    grading_stage_metrics = (
+        ProjectMetricDTO("first_grading", "Awaiting first grading", sum(row.first_grading_count for row in grading_rows)),
+        ProjectMetricDTO("second_grading", "Awaiting second grading", sum(row.second_grading_count for row in grading_rows)),
+        ProjectMetricDTO("adjudication", "Awaiting adjudication", sum(row.adjudication_count for row in grading_rows)),
+        ProjectMetricDTO("final", "Finalised", finalised_count),
     )
     allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
@@ -326,29 +313,24 @@ def get_gradings(db: Session, *, user: User, project_id: int) -> ProjectGradings
             ProjectMetricDTO("tasks", "Total tasks", sum(row.task_count for row in rows)),
             ProjectMetricDTO("images", "Task-image associations", sum(row.image_count for row in rows)),
             ProjectMetricDTO(
-                "not_graded",
-                "Not graded",
-                sum(row.task_count for row in rows if row.state == "pending"),
+                "first_grading",
+                "Awaiting first grading",
+                sum(row.first_grading_count for row in rows),
             ),
             ProjectMetricDTO(
-                "resident2",
-                "Pending Resident 2",
-                sum(row.task_count for row in rows if row.state == "resident_done"),
-            ),
-            ProjectMetricDTO(
-                "resident",
-                "Pending Resident",
-                sum(row.task_count for row in rows if row.state == "resident2_done"),
+                "second_grading",
+                "Awaiting second grading",
+                sum(row.second_grading_count for row in rows),
             ),
             ProjectMetricDTO(
                 "finalised",
                 "Finalised tasks",
-                sum(row.task_count for row in rows if row.state == "final"),
+                sum(row.final_count for row in rows),
             ),
             ProjectMetricDTO(
                 "adjudication",
                 "Pending adjudication",
-                sum(row.task_count for row in rows if row.state == "arbitration"),
+                sum(row.adjudication_count for row in rows),
             ),
         ),
     )
@@ -544,7 +526,19 @@ def _scope_lab_units(db: Session, scope: _ResolvedScope) -> tuple[ProjectLabUnit
 
 def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[ProjectGradingDTO, ...]:
     allowed_labs = _allowed_lab_ids(db, scope)
-    grouped: dict[tuple[str, str, str, str | None, str | None, str | None, str, str], list[int]] = defaultdict(lambda: [0, 0])
+    grouped: dict[tuple[str, str, str, str | None, str | None, str | None, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
+
+    def add_task(bucket: list[int], *, state: str, image_count: int) -> None:
+        bucket[0] += 1
+        bucket[1] += image_count
+        if state in {"pending", "resident2_done"}:
+            bucket[2] += 1
+        elif state == "resident_done":
+            bucket[3] += 1
+        elif state == "arbitration":
+            bucket[4] += 1
+        elif state == "final":
+            bucket[5] += 1
 
     direct_query = select(GradingTask, Disease).join(
         DirectImageUpload, DirectImageUpload.id == GradingTask.direct_image_upload_id
@@ -553,9 +547,8 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
     )
     direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}))
     for task, disease in db.execute(direct_query):
-        bucket = grouped[("Single images", "Independent image", "disease specific", None, None, None, disease.name, task.state)]
-        bucket[0] += 1
-        bucket[1] += 1
+        bucket = grouped[("Single images", "Independent image", "disease specific", None, None, None, disease.name)]
+        add_task(bucket, state=task.state, image_count=1)
 
     scope_disease = aliased(Disease)
     parent_scope_disease = aliased(Disease)
@@ -612,9 +605,12 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         else:
             target_group, target = "EncounterSets", "Whole EncounterSet"
         mode = (grading_mode or "disease_specific").replace("_", " ")
-        bucket = grouped[(target_group, target, mode, scope_role, scope_name, parent_scope_name, disease.name, task.state)]
-        bucket[0] += 1
-        bucket[1] += 1 if task.encounter_set_image_id or task.encounter_file_id else int(encounter_image_counts.get(encounter_id, 0))
+        bucket = grouped[(target_group, target, mode, scope_role, scope_name, parent_scope_name, disease.name)]
+        add_task(
+            bucket,
+            state=task.state,
+            image_count=1 if task.encounter_set_image_id or task.encounter_file_id else int(encounter_image_counts.get(encounter_id, 0)),
+        )
 
     return tuple(ProjectGradingDTO(
         target_group=key[0],
@@ -624,10 +620,12 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         scope_name=key[4],
         parent_scope_name=key[5],
         disease_name=key[6],
-        state=key[7],
-        state_label=STATE_LABELS.get(key[7], key[7].replace("_", " ").title()),
         task_count=value[0],
         image_count=value[1],
+        first_grading_count=value[2],
+        second_grading_count=value[3],
+        adjudication_count=value[4],
+        final_count=value[5],
     ) for key, value in sorted(
         grouped.items(),
         key=lambda item: (
@@ -635,8 +633,8 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
             {"unified": 0, "disease specific": 1}.get(item[0][2], 9),
             {"unified": 0, "root": 1, "linked": 2, None: 3}.get(item[0][3], 9),
             item[0][4] or "",
-            item[0][1],
-            item[0][6:],
+            {"Whole EncounterSet": 0, "Image within EncounterSet": 1, "Independent image": 0, "Individual image": 0}.get(item[0][1], 9),
+            item[0][6],
         ),
     ))
 

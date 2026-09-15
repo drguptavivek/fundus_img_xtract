@@ -351,10 +351,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert allowed_encounter.uuid not in metric_rows["grading_packages"]["help_text"]
         assert configuration["grading_completion_percent"] == 20
         assert {row["key"]: row["value"] for row in configuration["grading_stage_metrics"]} == {
-            "pending": 3,
-            "resident_done": 0,
-            "resident2_done": 0,
-            "arbitration": 1,
+            "first_grading": 3,
+            "second_grading": 0,
+            "adjudication": 1,
             "final": 1,
         }
         assert "remidio_dr_reports" not in metrics
@@ -404,7 +403,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert b"contains one or more grading tasks" in summary_page.data
         assert b"Grading workflow progress" in summary_page.data
         assert b"20% finalised" in summary_page.data
-        assert b"Pending adjudication" in summary_page.data
+        assert b"Awaiting adjudication" in summary_page.data
+        assert b"Legacy / unscoped tasks" in summary_page.data
+        assert summary_page.data.index(b"Whole EncounterSet") < summary_page.data.index(b"Image within EncounterSet")
         assert b"EncounterSets" in summary_page.data
         assert b"Unified grading" in summary_page.data
         assert b"Whole EncounterSet" in summary_page.data
@@ -468,18 +469,22 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
 
         gradings = client.get(f"/api/projects/{project.id}/review/gradings")
         grading_rows = gradings.get_json()["data"]["rows"]
-        assert {(row["target_group"], row["target_type"], row["grading_mode"], row["state"]) for row in grading_rows} == {
-            ("Single images", "Independent image", "disease specific", "final"),
-            ("EncounterSets", "Whole EncounterSet", "unified", "arbitration"),
-            ("Classic ZIP encounters", "Individual image", "disease specific", "pending"),
-            ("EncounterSets", "Image within EncounterSet", "disease specific", "pending"),
+        assert {(row["target_group"], row["target_type"], row["grading_mode"]) for row in grading_rows} == {
+            ("Single images", "Independent image", "disease specific"),
+            ("EncounterSets", "Whole EncounterSet", "unified"),
+            ("Classic ZIP encounters", "Individual image", "disease specific"),
+            ("EncounterSets", "Image within EncounterSet", "disease specific"),
         }
+        assert sum(row["first_grading_count"] for row in grading_rows) == 3
+        assert sum(row["adjudication_count"] for row in grading_rows) == 1
+        assert sum(row["final_count"] for row in grading_rows) == 1
         linked_row = next(row for row in grading_rows if row["scope_role"] == "linked")
         assert linked_row["scope_name"] == "Review Linked Image Disease"
         assert linked_row["parent_scope_name"] == "Glaucoma"
         gradings_page = client.get(f"/projects/{project.id}/gradings")
         assert gradings_page.status_code == 200
-        assert b"Pending adjudication" in gradings_page.data
+        assert b"Adjudication" in gradings_page.data
+        assert b"Legacy / unscoped tasks" in gradings_page.data
         assert b"SECRET-MRN-100" not in gradings_page.data
 
         verified = client.post(

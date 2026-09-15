@@ -220,10 +220,12 @@ class ProjectGradingDTO:
     scope_name: str | None
     parent_scope_name: str | None
     disease_name: str
-    state: str
-    state_label: str
     task_count: int
     image_count: int
+    first_grading_count: int
+    second_grading_count: int
+    adjudication_count: int
+    final_count: int
 
 
 @dataclass(frozen=True)

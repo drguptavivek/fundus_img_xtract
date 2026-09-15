@@ -119,17 +119,21 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         PatientEncounters,
         PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
     ).where(PatientEncounters.project_id == project.id, encounter_scope))
-    package_breakdown = db.execute(
-        select(EncounterSetGradingPackage.name, func.count(EncounterSetGradingPackage.id))
+    package_rows = db.execute(
+        select(
+            EncounterSetGradingPackage.name,
+            PatientEncounters.uuid,
+            EncounterSetGradingPackage.state,
+        )
         .join(PatientEncounters, PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id)
         .where(PatientEncounters.project_id == project.id, encounter_scope)
-        .group_by(EncounterSetGradingPackage.name)
-        .order_by(EncounterSetGradingPackage.name)
+        .order_by(EncounterSetGradingPackage.name, PatientEncounters.uuid)
     ).all()
-    package_help = "Each workflow is created for one EncounterSet from a configured grading package and contains one or more grading tasks."
-    if package_breakdown:
-        package_help += " " + "; ".join(
-            f"{name}: {count}" for name, count in package_breakdown
+    package_help = "Each workflow is created for one EncounterSet and contains one or more grading tasks."
+    if package_rows:
+        package_help += "\n\n" + "\n".join(
+            f"{name} — EncounterSet {encounter_uuid} — {STATE_LABELS.get(state, state.replace('_', ' ').title())}"
+            for name, encounter_uuid, state in package_rows
         )
     task_count = sum(row.task_count for row in _grading_rows(db, project.id, scope))
     allowed_labs = _allowed_lab_ids(db, scope)

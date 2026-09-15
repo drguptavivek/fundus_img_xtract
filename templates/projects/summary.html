@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ data.project.title }} · Project Summary{% endblock %}
+{% block extra_styles %}<style>.tooltip.project-metric-tooltip .tooltip-inner{max-width:min(720px,90vw);text-align:left;white-space:pre-line}</style>{% endblock %}
 {% block content %}
 <div class="container-fluid px-3 px-lg-4 pb-5">
   {% include "projects/_header.html" %}
@@ -134,6 +135,6 @@
 {% endblock %}
 {% block page_scripts %}
 {% if csp_script_nonce %}<script nonce="{{ csp_script_nonce() }}">{% else %}<script>{% endif %}
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(element){new bootstrap.Tooltip(element);});
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(element){new bootstrap.Tooltip(element,{customClass:'project-metric-tooltip'});});
 </script>
 {% endblock %}

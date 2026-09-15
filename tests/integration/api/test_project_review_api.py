@@ -290,7 +290,8 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert metrics["total_images"] == 2
         assert metrics["grading_tasks"] == 2
         assert metrics["grading_packages"] == 1
-        assert "Unified Package: 1" in metric_rows["grading_packages"]["help_text"]
+        assert "Unified Package" in metric_rows["grading_packages"]["help_text"]
+        assert allowed_encounter.uuid in metric_rows["grading_packages"]["help_text"]
         assert "remidio_dr_reports" not in metrics
         assert "remidio_amd_reports" not in metrics
         assert "remidio_glaucoma_reports" not in metrics
@@ -337,7 +338,7 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert b"Effective configuration" in summary_page.data
         assert b"EncounterSet grading workflows" in summary_page.data
         assert b"contains one or more grading tasks" in summary_page.data
-        assert b"Unified Package: 1" in summary_page.data
+        assert allowed_encounter.uuid.encode() in summary_page.data
         assert b'<p>Readable <strong>guidance</strong>.</p>' in summary_page.data
         assert b"onclick" not in summary_page.data
         assert b"&lt;p&gt;Readable" not in summary_page.data

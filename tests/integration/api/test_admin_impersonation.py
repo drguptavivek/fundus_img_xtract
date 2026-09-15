@@ -15,6 +15,16 @@ def test_admin_can_start_and_stop_impersonation(client, db_session, admin_user, 
     target = db_session.query(User).filter_by(username="test_manager").one()
     csrf = _authenticate(client, admin_user.id)
 
+    users_page = client.get("/admin/users")
+    assert users_page.status_code == 200
+    assert b"/static/js/htmx.min.js" in users_page.data
+    assert b"/static/js/admin-impersonation.js" in users_page.data
+    assert b"-impersonation-v2" in users_page.data
+    assert f'data-impersonate-user-id="{target.id}"'.encode() in users_page.data
+    impersonation_js = client.get("/static/js/admin-impersonation.js")
+    assert impersonation_js.status_code == 200
+    assert b"}, true);" in impersonation_js.data
+
     started = client.post(
         "/api/admin/impersonation",
         json={"user_id": target.id},

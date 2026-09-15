@@ -4,13 +4,17 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
-from sqlalchemy import DateTime, case, cast, exists, func, literal, or_, select, union_all
+from datetime import date, datetime, time, timedelta, timezone
+
+from sqlalchemy import case, exists, func, literal, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
-from iitk_api_integration.models import IITKApiProjectConfig, IITKApiSessionLink
+from iitk_api_integration.models import IITKApiProjectConfig
 from models import (
     DirectImageUpload,
+    DirectImageVerify,
+    ImagePiiVerification,
     Disease,
     DiabeticRetinopathyReport,
     AMDReport,
@@ -28,7 +32,6 @@ from models import (
     Role,
     User,
 )
-from remidio_api_integration.models import RemidioApiExamEncounter
 from upload_profiles.models import (
     ProjectUploadProfile,
     UploadProfile,
@@ -42,15 +45,22 @@ from .dto import (
     ProjectGradingDTO,
     ProjectGradingsDTO,
     ProjectMetricDTO,
+    ProjectLabUnitChoiceDTO,
     ProjectProfileDTO,
     ProjectScopeDTO,
     ProjectSummaryDTO,
     ProjectUploadDTO,
     ProjectUploadPageDTO,
+    DirectImageVerificationDTO,
 )
 from .exceptions import ProjectReviewNotFound
 from .configuration import effective_configuration
-from authz.project_access import can_manage_project_access
+from authz.project_access import (
+    allowed_project_lab_unit_ids,
+    can_manage_project_access,
+    can_manage_project_uploaders,
+    can_verify_direct_images,
+)
 from authz.project_roles import PROJECT_ASSIGNABLE_ROLES
 
 
@@ -154,12 +164,20 @@ def get_uploads(
     project_id: int,
     page: int = 1,
     per_page: int = 100,
+    status: str = "all",
+    lab_unit_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> ProjectUploadPageDTO:
     project, scope = _project_and_scope(db, user=user, project_id=project_id)
     page = max(1, page)
     per_page = min(200, max(1, per_page))
     rows, total_rows, source_counts = _upload_rows(
-        db, project.id, scope, page=page, per_page=per_page
+        db, project.id, scope, page=page, per_page=per_page,
+        status=status, lab_unit_id=lab_unit_id, date_from=date_from, date_to=date_to,
+        verifier_lab_unit_ids=allowed_project_lab_unit_ids(
+            db, user, project_id=project.id, roles={"verifier", "project_admin"}
+        ),
     )
     totals = [ProjectMetricDTO("all", "All uploads", total_rows)]
     totals.extend(
@@ -170,11 +188,106 @@ def get_uploads(
         project=_project_dto(project),
         scope=_scope_dto(db, scope),
         rows=rows,
+        lab_units=_scope_lab_units(db, scope),
         totals=tuple(totals),
         page=page,
         per_page=per_page,
         total_rows=total_rows,
     )
+
+
+def get_direct_image_verification(
+    db: Session, *, user: User, project_id: int, uuid: str
+) -> DirectImageVerificationDTO:
+    _project, scope = _project_and_scope(db, user=user, project_id=project_id)
+    upload = db.execute(
+        select(DirectImageUpload)
+        .where(
+            DirectImageUpload.project_id == project_id,
+            DirectImageUpload.uuid == uuid,
+            _direct_scope_clause(scope),
+        )
+        .options(
+            selectinload(DirectImageUpload.disease),
+            selectinload(DirectImageUpload.hospital),
+            selectinload(DirectImageUpload.lab_unit),
+            selectinload(DirectImageUpload.camera),
+            selectinload(DirectImageUpload.area),
+            selectinload(DirectImageUpload.uploader),
+        )
+    ).scalar_one_or_none()
+    if upload is None or not can_verify_direct_images(
+        db, user, project_id=project_id, lab_unit_id=upload.lab_unit_id
+    ):
+        raise ProjectReviewNotFound("Direct image not found.")
+    verification = db.execute(select(DirectImageVerify).where(
+        DirectImageVerify.image_upload_id == upload.id
+    )).scalar_one_or_none()
+    variant = "edited" if upload.edited_filename else "original"
+    pii = db.execute(select(ImagePiiVerification).where(
+        ImagePiiVerification.image_uuid == upload.uuid,
+        ImagePiiVerification.image_variant == variant,
+    )).scalar_one_or_none()
+    return DirectImageVerificationDTO(
+        project_id=project_id, upload_id=upload.id, uuid=upload.uuid,
+        filename=upload.filename, image_url_uuid=upload.uuid,
+        uploaded_at=upload.created_at, disease_name=upload.disease.name,
+        hospital_name=upload.hospital.name, lab_unit_name=upload.lab_unit.name,
+        camera_name=upload.camera.name, area_name=upload.area.name,
+        uploader_name=upload.uploader.username,
+        verification_status=verification.verified_status if verification else "pending",
+        remarks=verification.remarks if verification else "",
+        upload_remarks=upload.remarks,
+        pii_status=pii.pii_status if pii else None,
+        pii_source=pii.source if pii else None,
+        pii_checked_at=pii.checked_at if pii else None,
+        can_edit=can_manage_project_uploaders(
+            db, user, project_id=project_id, lab_unit_id=upload.lab_unit_id
+        ),
+    )
+
+
+def verify_direct_image(
+    db: Session, *, user: User, project_id: int, uuid: str, status: str, remarks: str
+) -> DirectImageVerificationDTO | None:
+    current = get_direct_image_verification(db, user=user, project_id=project_id, uuid=uuid)
+    if status not in {"verified", "not_gradable"}:
+        raise ValueError("Unsupported verification status.")
+    remarks = remarks.strip()
+    if status == "not_gradable" and not remarks:
+        raise ValueError("An ungradable reason is required.")
+    if status == "verified" and current.pii_status == "detected":
+        raise ValueError("PII is detected. Edit and clear the image before verification.")
+    verification = db.execute(select(DirectImageVerify).where(
+        DirectImageVerify.image_upload_id == current.upload_id
+    )).scalar_one_or_none()
+    if verification is None:
+        verification = DirectImageVerify(image_upload_id=current.upload_id, verified_by_id=user.id)
+        db.add(verification)
+    verification.verified_status = status
+    verification.remarks = remarks
+    verification.verified_by_id = user.id
+    verification.verified_at = func.now()
+    db.flush()
+    if status == "verified":
+        from services.taskCreationServices import ensure_task
+        upload = db.get(DirectImageUpload, current.upload_id)
+        ensure_task(upload.uuid, upload.disease_id, db)
+    next_uuid = db.execute(
+        select(DirectImageUpload.uuid)
+        .outerjoin(DirectImageVerify, DirectImageVerify.image_upload_id == DirectImageUpload.id)
+        .where(
+            DirectImageUpload.project_id == project_id,
+            DirectImageUpload.lab_unit_id.in_(_project_and_scope(db, user=user, project_id=project_id)[1].lab_unit_ids or {-1}),
+            or_(DirectImageVerify.id.is_(None), DirectImageVerify.verified_status.in_({"pending", "unverified"})),
+            DirectImageUpload.id != current.upload_id,
+        )
+        .order_by(DirectImageUpload.created_at, DirectImageUpload.id)
+        .limit(1)
+    ).scalar_one_or_none()
+    return get_direct_image_verification(
+        db, user=user, project_id=project_id, uuid=next_uuid
+    ) if next_uuid else None
 
 
 def get_gradings(db: Session, *, user: User, project_id: int) -> ProjectGradingsDTO:
@@ -319,39 +432,13 @@ def _upload_rows(
     *,
     page: int,
     per_page: int,
+    status: str = "all",
+    lab_unit_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    verifier_lab_unit_ids: frozenset[int] = frozenset(),
 ) -> tuple[tuple[ProjectUploadDTO, ...], int, dict[str, int]]:
-    encounter_scope = _encounter_scope_clause(scope)
-    image_count = select(func.count(EncounterSetImage.id)).where(
-        EncounterSetImage.patient_encounter_id == PatientEncounters.id
-    ).correlate(PatientEncounters).scalar_subquery()
-    encounter_source = case(
-        (exists().where(
-            RemidioApiExamEncounter.patient_encounter_id == PatientEncounters.id
-        ), "Remidio API"),
-        (exists().where(
-            IITKApiSessionLink.patient_encounter_id == PatientEncounters.id
-        ), "IITK API"),
-        (PatientEncounters.zip_file_id.isnot(None), "EncounterSet ZIP"),
-        else_="EncounterSet",
-    )
-    from models import ZipFile
-
-    encounters = select(
-        literal("EncounterSet").label("entity_type"),
-        PatientEncounters.uuid.label("uuid"),
-        encounter_source.label("source"),
-        Hospital.name.label("hospital_name"),
-        LabUnit.name.label("lab_unit_name"),
-        func.coalesce(PatientEncounters.encounter_verified_status, "pending").label("status"),
-        image_count.label("image_count"),
-        cast(ZipFile.upload_date, DateTime(timezone=True)).label("uploaded_at"),
-    ).join(
-        LabUnit, LabUnit.id == PatientEncounters.lab_unit_id
-    ).join(Hospital, Hospital.id == LabUnit.hospital_id).where(
-        PatientEncounters.project_id == project_id,
-        PatientEncounters.is_set_based.is_(True),
-        encounter_scope,
-    ).outerjoin(ZipFile, ZipFile.id == PatientEncounters.zip_file_id)
+    direct_status = func.coalesce(DirectImageVerify.verified_status, "pending")
     directs = select(
         literal("Single image").label("entity_type"),
         DirectImageUpload.uuid.label("uuid"),
@@ -361,19 +448,37 @@ def _upload_rows(
         ).label("source"),
         Hospital.name.label("hospital_name"),
         LabUnit.name.label("lab_unit_name"),
-        case(
-            (DirectImageUpload.is_pregraded.is_(True), "pre-graded"),
-            else_="uploaded",
-        ).label("status"),
+        LabUnit.id.label("lab_unit_id"),
+        direct_status.label("status"),
         literal(1).label("image_count"),
         DirectImageUpload.created_at.label("uploaded_at"),
+        DirectImageUpload.id.label("upload_id"),
+        DirectImageUpload.filename.label("filename"),
+        User.username.label("uploader_name"),
+        Disease.name.label("disease_name"),
+        DirectImageUpload.remarks.label("upload_remarks"),
     ).join(
         LabUnit, LabUnit.id == DirectImageUpload.lab_unit_id
-    ).join(Hospital, Hospital.id == DirectImageUpload.hospital_id).where(
+    ).join(Hospital, Hospital.id == DirectImageUpload.hospital_id).join(
+        User, User.id == DirectImageUpload.uploader_id
+    ).join(Disease, Disease.id == DirectImageUpload.disease_id).outerjoin(
+        DirectImageVerify, DirectImageVerify.image_upload_id == DirectImageUpload.id
+    ).where(
         DirectImageUpload.project_id == project_id,
         _direct_scope_clause(scope),
     )
-    inventory = union_all(encounters, directs).subquery("project_upload_inventory")
+    if lab_unit_id is not None:
+        if lab_unit_id not in scope.lab_unit_ids:
+            directs = directs.where(literal(False))
+        else:
+            directs = directs.where(DirectImageUpload.lab_unit_id == lab_unit_id)
+    if status in {"pending", "verified", "not_gradable", "unverified"}:
+        directs = directs.where(direct_status == status)
+    if date_from is not None:
+        directs = directs.where(DirectImageUpload.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to is not None:
+        directs = directs.where(DirectImageUpload.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc))
+    inventory = directs.subquery("project_upload_inventory")
     total_rows = _scalar_count(db, select(func.count()).select_from(inventory))
     source_counts = dict(db.execute(select(
         inventory.c.source, func.count()
@@ -388,11 +493,28 @@ def _upload_rows(
         source=row["source"],
         hospital_name=row["hospital_name"],
         lab_unit_name=row["lab_unit_name"],
+        lab_unit_id=row["lab_unit_id"],
         status=row["status"],
         image_count=int(row["image_count"] or 0),
         uploaded_at=row["uploaded_at"],
+        upload_id=row["upload_id"],
+        filename=row["filename"],
+        uploader_name=row["uploader_name"],
+        disease_name=row["disease_name"],
+        upload_remarks=row["upload_remarks"],
+        can_verify=row["lab_unit_id"] in verifier_lab_unit_ids,
     ) for row in result)
     return rows, total_rows, {source: int(count) for source, count in source_counts.items()}
+
+
+def _scope_lab_units(db: Session, scope: _ResolvedScope) -> tuple[ProjectLabUnitChoiceDTO, ...]:
+    rows = db.execute(
+        select(LabUnit.id, LabUnit.name, Hospital.name)
+        .join(Hospital, Hospital.id == LabUnit.hospital_id)
+        .where(LabUnit.id.in_(scope.lab_unit_ids or {-1}))
+        .order_by(Hospital.name, LabUnit.name)
+    ).all()
+    return tuple(ProjectLabUnitChoiceDTO(id=row[0], name=row[1], hospital_name=row[2]) for row in rows)
 
 
 def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[ProjectGradingDTO, ...]:

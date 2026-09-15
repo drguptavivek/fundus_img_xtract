@@ -7,7 +7,7 @@ from uuid import UUID
 import logging
 
 from flask import render_template, redirect, url_for, flash, current_app, jsonify, request, session
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy import select, func, exists, and_
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +21,8 @@ from authz.behaviors import (
     clinical_rows,
     role_lab_units,
 )
+from authz.rows import role_scoped_rows
+from authz.context import access_context
 from utils.fileUtils import abs_from_parts
 from utils.log_sanitize import sanitize_log_value, escape_like
 from utils.sensitive_operations import _log_sensitive_operation
@@ -173,6 +175,34 @@ def _classical_upload(db_session, uuid_value):
                 user_id=DirectImageUpload.uploader_id,
                 classical_only=True,
             ),
+        )
+    ).one_or_none()
+
+
+def _verification_upload(db_session, uuid_value):
+    """Load one direct image through classical or exact project verification scope."""
+    return db_session.scalars(
+        role_scoped_rows(
+            select(DirectImageUpload).where(
+                DirectImageUpload.uuid == str(uuid_value),
+                DirectImageUpload.hospital_id.is_not(None),
+                DirectImageUpload.lab_unit_id.is_not(None),
+                exists(select(LabUnit.id).where(
+                    LabUnit.id == DirectImageUpload.lab_unit_id,
+                    LabUnit.hospital_id == DirectImageUpload.hospital_id,
+                )),
+            ),
+            access_context(db_session, current_user),
+            RecordColumns(
+                project_id=DirectImageUpload.project_id,
+                hospital_id=DirectImageUpload.hospital_id,
+                lab_unit_id=DirectImageUpload.lab_unit_id,
+                user_id=DirectImageUpload.uploader_id,
+            ),
+            lab_roles=CLINICAL_CLASSICAL_ROLES,
+            hospital_roles=HOSPITAL_MANAGER_ROLES,
+            project_roles={"verifier", "project_admin"},
+            allow_admin=True,
         )
     ).one_or_none()
 
@@ -743,16 +773,11 @@ def anonymization_dashboard():
 # ---------------------------
 
 @bp.route("/anonymize_image/<uuid:uuid>", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@login_required
 def anonymize_image(uuid: UUID):
     # Use stack trace context manager to capture any exceptions
     db_session = Session()
     try:
-        allowed_lab_unit_ids, _ = _allowed_lab_and_hospital_ids(db_session)
-        if not allowed_lab_unit_ids:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
         uuid_val = _uuid_str(uuid)
 
         # Log request details for debugging
@@ -764,12 +789,31 @@ def anonymize_image(uuid: UUID):
         )
 
         # Load the image by UUID
-        upload = _classical_upload(db_session, uuid_val)
+        upload = _verification_upload(db_session, uuid_val)
 
         if not upload:
             editing_logger.warning("Anonymize image: Upload with UUID %s not found.", uuid_val)
             flash("Image not found.", "danger")
-            return redirect(url_for("preprocess.anonymization_dashboard"))
+            return redirect(url_for("projects.index"))
+
+        project_mode = upload.project_id is not None
+        project_edit_mode = False
+        if project_mode:
+            from authz.project_access import can_manage_project_uploaders
+            project_edit_mode = bool(
+                request.args.get("edit") == "1"
+                and can_manage_project_uploaders(
+                    db_session,
+                    current_user,
+                    project_id=upload.project_id,
+                    lab_unit_id=upload.lab_unit_id,
+                )
+            )
+            if request.method == "GET" and not project_edit_mode:
+                return redirect(url_for("projects.uploads", project_id=upload.project_id))
+        allowed_lab_unit_ids = (
+            _allowed_lab_and_hospital_ids(db_session)[0] if not project_mode else set()
+        )
 
         editing_locked = False
         blocking_task_states: list[str] = []
@@ -780,6 +824,8 @@ def anonymize_image(uuid: UUID):
             normalized_task_states = [_normalize_task_state(state) for state in task_state_rows]
             blocking_task_states = sorted({state for state in normalized_task_states if state and state != "pending"})
             editing_locked = False
+        if project_mode and not project_edit_mode:
+            editing_locked = True
 
         # Access control logging scoped to assigned lab units
         editing_logger.debug(
@@ -1012,7 +1058,7 @@ def anonymize_image(uuid: UUID):
                         flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 
                 # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
-                next_uuid = _get_next_unverified_uuid(db_session)
+                next_uuid = None if project_mode else _get_next_unverified_uuid(db_session)
                 editing_logger.debug(
                     "Redirect logic - Current upload ID: %s, Next UUID: %s", 
                     upload.id, next_uuid
@@ -1023,6 +1069,8 @@ def anonymize_image(uuid: UUID):
                     return redirect(url_for("preprocess.anonymize_image", uuid=next_uuid))
 
                 editing_logger.debug("No more images to anonymize, redirecting to dashboard")
+                if project_mode:
+                    return redirect(url_for("projects.uploads", project_id=upload.project_id))
                 flash("No more images to anonymize.", "info")
                 return redirect(url_for("preprocess.anonymization_dashboard"))
 
@@ -1057,7 +1105,7 @@ def anonymize_image(uuid: UUID):
                 .where(DirectImageVerify.image_upload_id == upload.id, DirectImageVerify.verified_status == 'verified'))
                 .scalar_one_or_none() is not None
         )
-        next_unverified_uuid = _get_next_unverified_uuid(db_session, allowed_lab_unit_ids)
+        next_unverified_uuid = None if project_mode else _get_next_unverified_uuid(db_session, allowed_lab_unit_ids)
         
         editing_logger.debug(
             "GET request processing - Upload ID: %s, Is verified: %s, Next unverified UUID: %s",
@@ -1084,6 +1132,13 @@ def anonymize_image(uuid: UUID):
             editing_locked=editing_locked,
             blocking_task_states=blocking_task_states,
             override_required=override_required,
+            project_mode=project_mode,
+            can_edit_project_image=bool(project_mode and can_manage_project_uploaders(
+                db_session,
+                current_user,
+                project_id=upload.project_id,
+                lab_unit_id=upload.lab_unit_id,
+            )),
         )
 
     finally:

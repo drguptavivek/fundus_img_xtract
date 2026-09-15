@@ -1,44 +1,37 @@
 {% extends "base.html" %}
-{% block title %}{{ data.project.title }} · Uploads{% endblock %}
+{% block title %}{{ data.project.title }} · Direct images{% endblock %}
+{% block extra_styles %}
+<style>
+  .upload-card { transition: transform .15s ease, box-shadow .15s ease; }
+  .upload-card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.12)!important; }
+  .upload-thumb { aspect-ratio: 4/3; width:100%; object-fit:contain; background:#101418; cursor:zoom-in; }
+  .quick-view-image { width:100%; max-height:72vh; object-fit:contain; background:#101418; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="container-fluid px-3 px-lg-4 pb-5">
   {% include "projects/_header.html" %}
   {% with metrics=data.totals %}{% include "projects/_metrics.html" %}{% endwith %}
-
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold">Upload inventory</span>
-      <span class="text-muted small">{{ data.total_rows }} records</span>
+  <form method="get" action="{{ url_for('projects.uploads',project_id=data.project.id) }}" class="card card-body shadow-sm mb-3" hx-get="{{ url_for('fundus_api.project_review_uploads',project_id=data.project.id) }}" hx-target="#direct-image-workspace" hx-swap="innerHTML" hx-push-url="true" hx-indicator="#uploads-loading">
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-lg-2"><label class="form-label" for="verification-status">Status</label><select class="form-select" id="verification-status" name="status">
+        {% for value, label in [('all','All statuses'),('pending','Pending'),('verified','Verified'),('not_gradable','Not gradable'),('unverified','Unverified')] %}<option value="{{ value }}" {{ 'selected' if request.args.get('status','all') == value }}>{{ label }}</option>{% endfor %}
+      </select></div>
+      <div class="col-6 col-lg-3"><label class="form-label" for="lab-unit">Lab unit</label><select class="form-select" id="lab-unit" name="lab_unit_id"><option value="">All accessible lab units</option>
+        {% for lab in data.lab_units %}<option value="{{ lab.id }}" {{ 'selected' if request.args.get('lab_unit_id','') == lab.id|string }}>{{ lab.name }} · {{ lab.hospital_name }}</option>{% endfor %}
+      </select></div>
+      <div class="col-6 col-lg-2"><label class="form-label" for="date-from">Uploaded from</label><input class="form-control" id="date-from" name="date_from" type="date" value="{{ request.args.get('date_from','') }}"></div>
+      <div class="col-6 col-lg-2"><label class="form-label" for="date-to">Uploaded through</label><input class="form-control" id="date-to" name="date_to" type="date" value="{{ request.args.get('date_to','') }}"></div>
+      <div class="col-12 col-lg-3 d-flex gap-2"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel"></i> Apply</button><a class="btn btn-outline-secondary" href="{{ url_for('projects.uploads',project_id=data.project.id) }}">Clear</a><span id="uploads-loading" class="htmx-indicator spinner-border spinner-border-sm align-self-center" aria-label="Loading"></span></div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead><tr><th>Type</th><th>Identifier</th><th>Source</th><th>Hospital / Lab unit</th><th>Status</th><th class="text-end">Images</th><th>Uploaded</th></tr></thead>
-        <tbody>
-          {% for row in data.rows %}
-          <tr>
-            <td>{{ row.entity_type }}</td>
-            <td><code>{{ row.uuid }}</code></td>
-            <td><span class="badge text-bg-light border text-dark">{{ row.source }}</span></td>
-            <td>{{ row.hospital_name }} / {{ row.lab_unit_name }}</td>
-            <td>{{ row.status|replace('_', ' ')|title }}</td>
-            <td class="text-end">{{ row.image_count }}</td>
-            <td>{{ row.uploaded_at|user_datetime if row.uploaded_at else '—' }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No uploads in your project scope.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if data.total_rows > data.per_page %}
-    <div class="card-footer d-flex justify-content-between">
-      <a class="btn btn-sm btn-outline-secondary {{ 'disabled' if data.page <= 1 else '' }}"
-         href="{{ url_for('projects.uploads', project_id=data.project.id, page=data.page - 1) }}">Previous</a>
-      <span class="small text-muted align-self-center">Page {{ data.page }}</span>
-      <a class="btn btn-sm btn-outline-secondary {{ 'disabled' if data.page * data.per_page >= data.total_rows else '' }}"
-         href="{{ url_for('projects.uploads', project_id=data.project.id, page=data.page + 1) }}">Next</a>
-    </div>
-    {% endif %}
-  </div>
+    <div class="form-text">Direct image uploads only. Dates are upload dates, not patient capture dates.</div>
+  </form>
+  <div class="row g-3"><div class="col-12 col-xl-8"><div id="direct-image-workspace">{% include "projects/_uploads_workspace.html" %}</div></div><aside class="col-12 col-xl-4"><div id="direct-verification-panel" class="position-sticky" style="top:1rem"><div class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-layout-sidebar-inset-reverse fs-2 d-block mb-2"></i>Select Verify on an image to review it here.</div></div></div></aside></div>
 </div>
+<div class="modal fade" id="quickViewModal" tabindex="-1" aria-labelledby="quickViewTitle" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5" id="quickViewTitle">Quick view</h2><div class="small text-muted" id="quickViewMeta"></div></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body p-0"><img id="quickViewImage" class="quick-view-image" alt="Selected direct upload"></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button><a id="quickViewVerify" class="btn btn-primary" href="#">Open verification</a></div></div></div></div>
 {% endblock %}
+{% block page_scripts %}<script src="{{ url_for('static',filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>{% if csp_script_nonce %}<script nonce="{{ csp_script_nonce() }}">{% else %}<script>{% endif %}
+document.getElementById('quickViewModal')?.addEventListener('show.bs.modal',function(event){const t=event.relatedTarget,v=document.getElementById('quickViewVerify');document.getElementById('quickViewImage').src=t.dataset.imageUrl;document.getElementById('quickViewTitle').textContent=t.dataset.filename||'Quick view';document.getElementById('quickViewMeta').textContent=[t.dataset.disease,t.dataset.status,t.dataset.uploaded,t.dataset.lab].filter(Boolean).join(' · ');v.href=t.dataset.verifyUrl||'#';v.classList.toggle('d-none',!t.dataset.verifyUrl);});
+document.body.addEventListener('direct-image-verified',function(){htmx.trigger(document.querySelector('form[hx-get]'),'submit');});
+document.body.addEventListener('click',function(event){const button=event.target.closest('.js-direct-reason');if(!button)return;const box=button.form?.querySelector('textarea[name="remarks"]');if(!box)return;box.value=box.value.trim()?box.value.trim()+'; '+button.dataset.reason:button.dataset.reason;box.focus();});
+</script>{% endblock %}

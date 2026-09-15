@@ -2,11 +2,10 @@ import traceback
 import logging
 from pathlib import Path
 from flask import request, jsonify, current_app, session
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy import exists, select
 from . import bp
 from db_transaction_manager import get_db_session
-from auth.roles import roles_required
 from authz.behaviors import upload_rows
 from services.uploads.access import upload_columns
 from models import DirectImageUpload, LabUnit, GradingTask, ImagePiiVerification
@@ -48,10 +47,7 @@ def _normalize_task_state(state):
     return state.strip().lower()
 
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
-@roles_required(
-    "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
-    "project_pi", "site_pi", "project_admin",
-)
+@login_required
 def save_edited_image(upload_id: int):
     with get_db_session() as db:
         try:

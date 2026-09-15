@@ -101,6 +101,16 @@ def can_run_wai(db, user, *, project_id: int, lab_unit_id: int | None = None) ->
     )
 
 
+def can_verify_direct_images(db, user, *, project_id: int, lab_unit_id: int | None = None) -> bool:
+    return _allowed(
+        db,
+        user,
+        project_id=project_id,
+        lab_unit_id=lab_unit_id,
+        roles={"verifier", PROJECT_ADMIN},
+    )
+
+
 def can_view_wai_results(db, user, *, project_id: int, lab_unit_id: int | None = None) -> bool:
     return _allowed(
         db,
@@ -176,6 +186,7 @@ class ProjectCapabilities:
     can_manage_uploaders: bool
     can_run_wai: bool
     can_view_wai_results: bool
+    can_verify_direct_images: bool
     upload_kinds: frozenset[str]
     can_sync_remidio: bool
 
@@ -202,6 +213,7 @@ def project_capabilities(db, *, user, project_id: int) -> ProjectCapabilities:
         can_manage_uploaders=can_manage_project_uploaders(db, user, project_id=project_id),
         can_run_wai=can_run_wai(db, user, project_id=project_id),
         can_view_wai_results=can_view_wai_results(db, user, project_id=project_id),
+        can_verify_direct_images=can_verify_direct_images(db, user, project_id=project_id),
         upload_kinds=kinds,
         can_sync_remidio=can_sync_remidio(db, user, project_id=project_id),
     )

@@ -5,6 +5,7 @@ from data_authorization.models import ProjectRoleGrant
 from encounter_set_types.models import EncounterSetType
 from models import (
     DirectImageUpload,
+    DirectImageVerify,
     Disease,
     DiseaseGrading,
     EncounterSetGradingPackage,
@@ -47,6 +48,7 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
     camera = db_session.merge(core_test_data["camera"])
     area = db_session.merge(core_test_data["area"])
     collaborator = _role(db_session, "collaborator")
+    verifier = _role(db_session, "verifier")
     user = User(
         username="project_review_only_user",
         password_hash="x",
@@ -67,6 +69,14 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         role_id=collaborator.id,
         scope_type="lab_unit",
         lab_unit_id=allowed_lab.id,
+        active=True,
+    ))
+    db_session.add(ProjectRoleGrant(
+        project_id=project.id,
+        user_id=user.id,
+        role_id=verifier.id,
+        scope_type="project",
+        lab_unit_id=None,
         active=True,
     ))
     profile = UploadProfile(name="Review Direct Intake", active=True)
@@ -235,6 +245,7 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         area_id=area.id,
         is_mydriatic=False,
         is_pregraded=True,
+        remarks="Uploader reports a low-light image",
     )
     package = EncounterSetGradingPackage(
         patient_encounter_id=allowed_encounter.id,
@@ -325,11 +336,47 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         uploads = client.get(f"/projects/{project.id}/uploads")
         assert uploads.status_code == 200
         html = uploads.get_data(as_text=True)
-        assert allowed_encounter.uuid in html
+        assert allowed_encounter.uuid not in html
         assert direct.uuid in html
+        assert "Dates are upload dates, not patient capture dates" in html
+        assert "Direct image browser" in html
+        assert "hx-get" in html
+        assert ">Verify<" in html
+        assert "project_direct_image_verification" not in html
+        assert user.username in html
+        assert "Upload remark" in html
+        assert "Uploader reports a low-light image" in html
+        assert "direct.jpg" in html
         assert blocked_encounter.uuid not in html
         assert "SECRET PATIENT NAME" not in html
         assert "SECRET-MRN-100" not in html
+
+        direct_only = client.get(f"/api/projects/{project.id}/review/uploads?status=pending")
+        assert direct_only.status_code == 200
+        direct_rows = direct_only.get_json()["data"]["rows"]
+        assert [row["uuid"] for row in direct_rows] == [direct.uuid]
+        assert direct_rows[0]["filename"] == "direct.jpg"
+        assert direct_rows[0]["uploaded_at"] is not None
+
+        verify_panel = client.get(
+            f"/api/projects/{project.id}/direct-images/{direct.uuid}/verification",
+            headers={"HX-Request": "true"},
+        )
+        assert verify_panel.status_code == 200
+        assert b"PII detector" in verify_panel.data
+        assert b"Verify and next" in verify_panel.data
+        assert b"Poor focus / blurry" in verify_panel.data
+        assert b"Uploader reports a low-light image" in verify_panel.data
+
+        htmx_uploads = client.get(
+            f"/api/projects/{project.id}/review/uploads?status=pending",
+            headers={"HX-Request": "true"},
+        )
+        assert htmx_uploads.status_code == 200
+        assert b"Direct image browser" in htmx_uploads.data
+        assert htmx_uploads.headers["HX-Push-Url"].endswith(
+            f"/projects/{project.id}/uploads?status=pending"
+        )
 
         gradings = client.get(f"/api/projects/{project.id}/review/gradings")
         grading_rows = gradings.get_json()["data"]["rows"]
@@ -341,6 +388,18 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert gradings_page.status_code == 200
         assert b"Pending adjudication" in gradings_page.data
         assert b"SECRET-MRN-100" not in gradings_page.data
+
+        verified = client.post(
+            f"/api/projects/{project.id}/direct-images/{direct.uuid}/verification",
+            data={"status": "verified", "remarks": "Project verifier checked image"},
+            headers={"HX-Request": "true"},
+        )
+        assert verified.status_code == 200
+        assert verified.headers["HX-Trigger"] == "direct-image-verified"
+        assert b"Queue complete" in verified.data
+        verification = db_session.query(DirectImageVerify).filter_by(image_upload_id=direct.id).one()
+        assert verification.verified_status == "verified"
+        assert verification.verified_by_id == user.id
 
         blocked = client.get(f"/api/projects/{blocked_project.id}/review/summary")
         assert blocked.status_code == 404
@@ -356,6 +415,47 @@ def test_projects_navbar_is_available_to_project_only_members(app, db_session):
 
     assert response.status_code == 200
     assert 'href="/projects/"' in response.get_data(as_text=True)
+
+
+def test_encounter_set_browser_shows_empty_state_for_authorized_empty_project(
+    app, db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_unit"])
+    user = User(username="empty_encounter_project_verifier", password_hash="x", is_active=True)
+    project = Project(title="Empty EncounterSet Project", code="EMPTY_ES", active=True)
+    verifier = _role(db_session, "verifier")
+    db_session.add_all([user, project])
+    db_session.flush()
+    db_session.add_all([
+        ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
+        ProjectRoleGrant(
+            project_id=project.id, user_id=user.id, role_id=verifier.id,
+            scope_type="project", lab_unit_id=None, active=True,
+        ),
+    ])
+    db_session.commit()
+
+    with app.test_client(user=user) as client:
+        response = client.get(f"/uploads/encountersets/browse?project_id={project.id}")
+
+    assert response.status_code == 200
+    assert b"No EncounterSets configured for the selected project." in response.data
+
+    profile = UploadProfile(name="Empty configured EncounterSet profile", active=True)
+    db_session.add(profile)
+    db_session.flush()
+    db_session.add_all([
+        ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True),
+        UploadProfileKind(upload_profile_id=profile.id, upload_kind="encounter_set"),
+    ])
+    db_session.commit()
+
+    with app.test_client(user=user) as client:
+        configured_response = client.get(
+            f"/uploads/encountersets/browse?project_id={project.id}"
+        )
+    assert configured_response.status_code == 200
+    assert b"EncounterSets are configured, but none are present for the selected project." in configured_response.data
 
 
 def test_upload_assignment_alone_does_not_grant_project_review(

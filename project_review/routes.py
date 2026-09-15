@@ -1,6 +1,8 @@
 """Thin HTML routes for the non-PII project review workspace."""
 from __future__ import annotations
 
+from datetime import date
+
 from flask import abort, render_template, request, url_for
 from flask_login import current_user, login_required
 
@@ -10,6 +12,14 @@ from authz.project_access import project_capabilities
 from .exceptions import ProjectReviewNotFound
 from .service import get_gradings, get_summary, get_uploads, list_projects
 from . import bp
+
+
+def _date_arg(name: str) -> date | None:
+    value = request.args.get(name, "").strip()
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
 
 
 @bp.route("/")
@@ -65,6 +75,11 @@ def uploads(project_id: int):
                 user=current_user,
                 project_id=project_id,
                 page=request.args.get("page", 1, type=int),
+                per_page=24,
+                status=request.args.get("status", "all"),
+                lab_unit_id=request.args.get("lab_unit_id", type=int),
+                date_from=_date_arg("date_from"),
+                date_to=_date_arg("date_to"),
             )
             projects = list_projects(db, user=current_user)
     except ProjectReviewNotFound:

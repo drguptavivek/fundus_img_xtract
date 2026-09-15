@@ -1,6 +1,6 @@
 # Project Review API
 
-The Project Review workspace is a read-only, non-PII interpretation of one
+The Project Review workspace is a non-PII interpretation of one
 project's configuration and operational data. The HTML workspace is available
 from the `Projects` navbar link and uses the same service DTOs as these APIs.
 
@@ -74,14 +74,41 @@ the server-returned accessible project list; otherwise it opens the first
 accessible project. This navigation preference never grants access and is not
 used by the API authorization layer.
 
-## Upload inventory
+## Direct image browser
 
-`GET /api/projects/{project_id}/review/uploads?page=1&per_page=100`
+`GET /api/projects/{project_id}/review/uploads?page=1&per_page=100&status=pending&lab_unit_id=6&date_from=2026-09-01&date_to=2026-09-15`
 
-`per_page` is capped at 200. The database-paginated inventory includes manual
-EncounterSet ZIPs, Remidio API and IITK API EncounterSets, other EncounterSets,
-direct images, and pre-graded images. Each row includes only source, UUID,
-hospital/lab unit, workflow status, image count, and intake timestamp.
+`per_page` is capped at 200. This database-paginated browser contains direct
+and pre-graded single-image uploads only; EncounterSets remain in the separate
+EncounterSet browser. Filters accept verification `status`, an accessible
+`lab_unit_id`, and inclusive ISO upload-date bounds. Each row includes UUID,
+filename, disease, uploader, hospital/lab unit, verification status, and upload
+timestamp. The date is never interpreted as a patient capture date.
+
+The HTML page at `/projects/{project_id}/uploads` renders the first page. Its
+filter and pagination controls issue HTMX GETs to this API. With
+`HX-Request: true`, the API returns the shared image-grid partial and an
+`HX-Push-Url` header preserving the browser URL; otherwise it returns JSON.
+The grid provides an immediate full-image quick view and shows uploader name;
+an upload remark is exposed on hover. Users with an active project `verifier`
+or `project_admin` grant in the image's exact project/lab scope can HTMX-load a
+verification panel on the right of the browser. It keeps PII status, uploader
+remark, rapid Verify/Not Gradable actions, and the same ungradable reason
+choices as EncounterSet verification together. A decision advances the panel
+to the next pending accessible image and refreshes the grid. Project Admins
+also receive an audited editor link that opens in a new tab. Verification
+remains blocked while the active PII detector result is `detected`.
+
+### Direct-image verification panel
+
+`GET /api/projects/{project_id}/direct-images/{uuid}/verification` returns the
+HTMX panel for an exact, authorized image. `POST` to the same endpoint accepts
+form fields `status` (`verified` or `not_gradable`) and `remarks`. A non-empty
+reason is required for `not_gradable`. Both operations require an active
+`verifier` or `project_admin` grant containing the image's project and lab
+unit; out-of-scope images return `404`. POST requires the normal CSRF form
+token. A successful response contains the next pending accessible image panel,
+or the queue-complete partial, and emits `HX-Trigger: direct-image-verified`.
 
 ## Gradings
 

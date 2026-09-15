@@ -46,7 +46,7 @@ from models import (
     RemidioSite,
     User,
 )
-from upload_profiles.models import ProjectUploadProfile
+from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileKind
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
 from utils.log_sanitize import sanitize_log_value
 from iitk_api_integration.models import IITKApiSessionLink
@@ -95,6 +95,20 @@ def list_encounter_set_browser(
     no_pii: bool = False,
 ) -> dict[str, Any]:
     projects = _encounter_set_browser_projects(db, user, no_pii=no_pii)
+    if project_id is not None and not any(project["id"] == project_id for project in projects):
+        from authz.project_access import can_browse_project, can_browse_project_pii
+
+        project = db.get(Project, project_id)
+        can_browse = can_browse_project if no_pii else can_browse_project_pii
+        if project is not None and project.active and can_browse(
+            db, user, project_id=project_id
+        ):
+            projects.append({
+                "id": project.id,
+                "title": project.title,
+                "code": project.code,
+                "encounter_count": 0,
+            })
     selected_project_id = project_id if any(project["id"] == project_id for project in projects) else None
     if selected_project_id is None and projects:
         selected_project_id = projects[0]["id"]
@@ -137,6 +151,20 @@ def list_encounter_set_browser(
         "selected_encounter_id": selected_encounter_id,
         "detail": detail,
         "no_pii": no_pii,
+        "encounter_sets_configured": bool(
+            selected_project_id and db.execute(
+                select(ProjectUploadProfile.id)
+                .join(UploadProfile, UploadProfile.id == ProjectUploadProfile.upload_profile_id)
+                .join(UploadProfileKind, UploadProfileKind.upload_profile_id == UploadProfile.id)
+                .where(
+                    ProjectUploadProfile.project_id == selected_project_id,
+                    ProjectUploadProfile.active.is_(True),
+                    UploadProfile.active.is_(True),
+                    UploadProfileKind.upload_kind == "encounter_set",
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+        ),
     }
 
 

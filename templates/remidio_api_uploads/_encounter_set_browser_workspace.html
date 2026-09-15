@@ -80,7 +80,7 @@
             <span class="small">{{ date_row.count }}</span>
           </button>
           {% else %}
-          <div class="text-muted">No dated EncounterSets are available for this project.</div>
+          <div class="text-muted">{% if encounter_sets_configured %}EncounterSets are configured, but none are present for the selected project.{% else %}No EncounterSets configured for the selected project.{% endif %}</div>
           {% endfor %}
         </div>
         {% if selected_month %}

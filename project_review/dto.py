@@ -153,9 +153,23 @@ class ProjectUploadDTO:
     source: str
     hospital_name: str
     lab_unit_name: str
+    lab_unit_id: int
     status: str
     image_count: int
     uploaded_at: date | datetime | None
+    upload_id: int | None = None
+    filename: str | None = None
+    uploader_name: str | None = None
+    disease_name: str | None = None
+    upload_remarks: str | None = None
+    can_verify: bool = False
+
+
+@dataclass(frozen=True)
+class ProjectLabUnitChoiceDTO:
+    id: int
+    name: str
+    hospital_name: str
 
 
 @dataclass(frozen=True)
@@ -163,10 +177,34 @@ class ProjectUploadPageDTO:
     project: ProjectChoiceDTO
     scope: ProjectScopeDTO
     rows: tuple[ProjectUploadDTO, ...]
+    lab_units: tuple[ProjectLabUnitChoiceDTO, ...]
     totals: tuple[ProjectMetricDTO, ...]
     page: int
     per_page: int
     total_rows: int
+
+
+@dataclass(frozen=True)
+class DirectImageVerificationDTO:
+    project_id: int
+    upload_id: int
+    uuid: str
+    filename: str
+    image_url_uuid: str
+    uploaded_at: datetime
+    disease_name: str
+    hospital_name: str
+    lab_unit_name: str
+    camera_name: str
+    area_name: str
+    uploader_name: str
+    verification_status: str
+    remarks: str
+    upload_remarks: str | None
+    pii_status: str | None
+    pii_source: str | None
+    pii_checked_at: datetime | None
+    can_edit: bool
 
 
 @dataclass(frozen=True)

@@ -39,8 +39,14 @@ configuration. The response also includes that enabled configuration:
 
 The summary also returns `grading_completion_percent`, `grading_stage_metrics`
 for every persisted grading stage, and `grading_rows` grouped by task target
-type, disease, grading mode, and stage. These are calculated from the same
-project/lab-scoped task rows as the Gradings page and contain no patient data.
+type, disease, grading mode, and stage. Each row includes `target_group` and
+`target_type`, plus `scope_role`, `scope_name`, and `parent_scope_name` for
+unified, root, and linked EncounterSet disease scopes. These values come from
+persisted lineage: EncounterSets contain whole-set and per-image targets
+separated by unified/disease-specific mode; independent
+direct uploads are Single images; older `EncounterFile` tasks are Classic ZIP
+encounter images. These are calculated from the same project/lab-scoped task
+rows as the Gradings page and contain no patient data.
 
 - upload-profile sources and uploader-selectable modes, diseases, cameras,
   areas, dilation states, EncounterSet types, and authorised assignments;

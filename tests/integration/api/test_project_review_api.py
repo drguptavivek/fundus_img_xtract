@@ -9,6 +9,8 @@ from models import (
     Disease,
     DiseaseGrading,
     EncounterSetGradingPackage,
+    EncounterSetGradingScope,
+    EncounterFile,
     EncounterSetImage,
     GradingTask,
     LinkedDiseaseGrading,
@@ -254,7 +256,48 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         grading_mode="unified",
         state="pending",
     )
-    db_session.add_all([image, direct, package])
+    disease_package = EncounterSetGradingPackage(
+        patient_encounter_id=allowed_encounter.id,
+        name="Disease-specific Package",
+        code="disease_review",
+        grading_mode="disease_specific",
+        root_scope_disease_id=disease.id,
+        state="pending",
+    )
+    db_session.add_all([image, direct, package, disease_package])
+    db_session.flush()
+    root_scope = EncounterSetGradingScope(
+        encounter_set_package_id=disease_package.id,
+        scope_disease_id=disease.id,
+        image_grading_scheme_id=disease.id,
+        encounter_grading_scheme_id=encounter_disease.id,
+        link_role="root",
+        display_order=0,
+    )
+    linked_scope = EncounterSetGradingScope(
+        encounter_set_package_id=disease_package.id,
+        scope_disease_id=linked_disease.id,
+        image_grading_scheme_id=linked_disease.id,
+        encounter_grading_scheme_id=encounter_disease.id,
+        parent_scope_disease_id=disease.id,
+        link_role="linked",
+        display_order=1,
+    )
+    db_session.add_all([root_scope, linked_scope])
+    db_session.flush()
+    legacy_encounter = PatientEncounters(
+        uuid=str(uuid.uuid4()), name="LEGACY SECRET", patient_id="LEGACY-MRN",
+        capture_date="2026-08-13", capture_date_dt=date(2026, 8, 13),
+        lab_unit_id=allowed_lab.id, project_id=project.id, is_set_based=False,
+    )
+    db_session.add(legacy_encounter)
+    db_session.flush()
+    legacy_file = EncounterFile(
+        patient_encounter_id=legacy_encounter.id, filename="legacy.jpg",
+        file_type="image/jpeg", uuid=str(uuid.uuid4()), lab_unit_id=allowed_lab.id,
+        hospital_id=hospital.id, project_id=project.id,
+    )
+    db_session.add(legacy_file)
     db_session.flush()
     db_session.add_all([
         GradingTask(
@@ -271,6 +314,20 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
             lab_unit_id=allowed_lab.id,
             state="arbitration",
             grading_target_level="encounter",
+        ),
+        GradingTask(
+            encounter_file_id=legacy_file.id, disease_id=disease.id,
+            lab_unit_id=allowed_lab.id, state="pending", grading_target_level="image",
+        ),
+        GradingTask(
+            encounter_set_image_id=image.id, encounter_set_package_id=disease_package.id,
+            encounter_set_scope_id=root_scope.id, disease_id=disease.id,
+            lab_unit_id=allowed_lab.id, state="pending", grading_target_level="image",
+        ),
+        GradingTask(
+            encounter_set_image_id=image.id, encounter_set_package_id=disease_package.id,
+            encounter_set_scope_id=linked_scope.id, disease_id=linked_disease.id,
+            lab_unit_id=allowed_lab.id, state="pending", grading_target_level="image",
         ),
     ])
     db_session.commit()
@@ -289,12 +346,12 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert metrics["encounter_sets"] == 1
         assert metrics["single_uploads"] == 1
         assert metrics["total_images"] == 2
-        assert metrics["grading_tasks"] == 2
-        assert metrics["grading_packages"] == 1
+        assert metrics["grading_tasks"] == 5
+        assert metrics["grading_packages"] == 2
         assert allowed_encounter.uuid not in metric_rows["grading_packages"]["help_text"]
-        assert configuration["grading_completion_percent"] == 50
+        assert configuration["grading_completion_percent"] == 20
         assert {row["key"]: row["value"] for row in configuration["grading_stage_metrics"]} == {
-            "pending": 0,
+            "pending": 3,
             "resident_done": 0,
             "resident2_done": 0,
             "arbitration": 1,
@@ -346,8 +403,19 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert b"EncounterSet grading workflows" in summary_page.data
         assert b"contains one or more grading tasks" in summary_page.data
         assert b"Grading workflow progress" in summary_page.data
-        assert b"50% finalised" in summary_page.data
+        assert b"20% finalised" in summary_page.data
         assert b"Pending adjudication" in summary_page.data
+        assert b"EncounterSets" in summary_page.data
+        assert b"Unified grading" in summary_page.data
+        assert b"Whole EncounterSet" in summary_page.data
+        assert b"Single images" in summary_page.data
+        assert b"Independent image" in summary_page.data
+        assert b"Classic ZIP encounters" in summary_page.data
+        assert b"Individual image" in summary_page.data
+        assert b"Root" in summary_page.data
+        assert b"Linked to Glaucoma" in summary_page.data
+        assert b"LEGACY SECRET" not in summary_page.data
+        assert b"LEGACY-MRN" not in summary_page.data
         assert b'<p>Readable <strong>guidance</strong>.</p>' in summary_page.data
         assert b"onclick" not in summary_page.data
         assert b"&lt;p&gt;Readable" not in summary_page.data
@@ -400,10 +468,15 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
 
         gradings = client.get(f"/api/projects/{project.id}/review/gradings")
         grading_rows = gradings.get_json()["data"]["rows"]
-        assert {(row["target_type"], row["grading_mode"], row["state"]) for row in grading_rows} == {
-            ("Single image", "disease specific", "final"),
-            ("EncounterSet", "unified", "arbitration"),
+        assert {(row["target_group"], row["target_type"], row["grading_mode"], row["state"]) for row in grading_rows} == {
+            ("Single images", "Independent image", "disease specific", "final"),
+            ("EncounterSets", "Whole EncounterSet", "unified", "arbitration"),
+            ("Classic ZIP encounters", "Individual image", "disease specific", "pending"),
+            ("EncounterSets", "Image within EncounterSet", "disease specific", "pending"),
         }
+        linked_row = next(row for row in grading_rows if row["scope_role"] == "linked")
+        assert linked_row["scope_name"] == "Review Linked Image Disease"
+        assert linked_row["parent_scope_name"] == "Glaucoma"
         gradings_page = client.get(f"/projects/{project.id}/gradings")
         assert gradings_page.status_code == 200
         assert b"Pending adjudication" in gradings_page.data

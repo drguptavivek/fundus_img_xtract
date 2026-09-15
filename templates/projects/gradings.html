@@ -12,19 +12,23 @@
     </div>
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
-        <thead><tr><th>Target</th><th>Package mode</th><th>Disease</th><th>Completion state</th><th class="text-end">Tasks</th><th class="text-end">Images in scope</th></tr></thead>
+        <thead><tr><th>Hierarchy / target</th><th>Grading scheme</th><th>Completion state</th><th class="text-end">Tasks</th><th class="text-end">Images in scope</th></tr></thead>
         <tbody>
+          {% set hierarchy = namespace(group='', mode='', scope='') %}
           {% for row in data.rows %}
+          {% if row.target_group != hierarchy.group %}<tr class="table-light"><th colspan="5">{{ row.target_group }}</th></tr>{% set hierarchy.group = row.target_group %}{% set hierarchy.mode = '' %}{% set hierarchy.scope = '' %}{% endif %}
+          {% if row.grading_mode != hierarchy.mode %}<tr><th class="ps-4 text-muted" colspan="5">{{ 'Unified grading' if row.grading_mode == 'unified' else 'Disease-specific grading' }}</th></tr>{% set hierarchy.mode = row.grading_mode %}{% set hierarchy.scope = '' %}{% endif %}
+          {% set scope_key = (row.scope_role or '') ~ ':' ~ (row.scope_name or '') %}
+          {% if row.scope_role and scope_key != hierarchy.scope %}<tr><th class="ps-5" colspan="5">{{ 'Unified scope' if row.scope_role == 'unified' else row.scope_name ~ ' scope' }}{% if row.scope_role == 'root' %} <span class="badge text-bg-primary">Root</span>{% elif row.scope_role == 'linked' %} <span class="badge text-bg-info">Linked to {{ row.parent_scope_name }}</span>{% endif %}</th></tr>{% set hierarchy.scope = scope_key %}{% endif %}
           <tr>
-            <td>{{ row.target_type }}</td>
-            <td>{{ row.grading_mode|title }}</td>
+            <td class="ps-5">{{ row.target_type }}</td>
             <td>{{ row.disease_name }}</td>
             <td><span class="badge {{ 'text-bg-success' if row.state == 'final' else 'text-bg-warning' }}">{{ row.state_label }}</span></td>
             <td class="text-end">{{ row.task_count }}</td>
             <td class="text-end">{{ row.image_count }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">No grading tasks in your project scope.</td></tr>
+          <tr><td colspan="5" class="text-center text-muted py-4">No grading tasks in your project scope.</td></tr>
           {% endfor %}
         </tbody>
       </table>

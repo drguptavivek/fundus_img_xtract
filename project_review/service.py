@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import case, exists, func, literal, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
 from iitk_api_integration.models import IITKApiProjectConfig
@@ -23,6 +23,7 @@ from models import (
     AIModelIntegration,
     EncounterFile,
     EncounterSetGradingPackage,
+    EncounterSetGradingScope,
     EncounterSetImage,
     GradingTask,
     Hospital,
@@ -543,7 +544,7 @@ def _scope_lab_units(db: Session, scope: _ResolvedScope) -> tuple[ProjectLabUnit
 
 def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[ProjectGradingDTO, ...]:
     allowed_labs = _allowed_lab_ids(db, scope)
-    grouped: dict[tuple[str, str, str, str], list[int]] = defaultdict(lambda: [0, 0])
+    grouped: dict[tuple[str, str, str, str | None, str | None, str | None, str, str], list[int]] = defaultdict(lambda: [0, 0])
 
     direct_query = select(GradingTask, Disease).join(
         DirectImageUpload, DirectImageUpload.id == GradingTask.direct_image_upload_id
@@ -552,18 +553,33 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
     )
     direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}))
     for task, disease in db.execute(direct_query):
-        bucket = grouped[("Single image", "disease specific", disease.name, task.state)]
+        bucket = grouped[("Single images", "Independent image", "disease specific", None, None, None, disease.name, task.state)]
         bucket[0] += 1
         bucket[1] += 1
 
+    scope_disease = aliased(Disease)
+    parent_scope_disease = aliased(Disease)
     encounter_query = select(
         GradingTask,
         Disease,
         EncounterSetGradingPackage.grading_mode,
+        EncounterSetGradingScope.link_role,
+        scope_disease.name,
+        parent_scope_disease.name,
         PatientEncounters.id,
+        PatientEncounters.is_set_based,
     ).join(Disease, Disease.id == GradingTask.disease_id).outerjoin(
         EncounterSetGradingPackage,
         EncounterSetGradingPackage.id == GradingTask.encounter_set_package_id,
+    ).outerjoin(
+        EncounterSetGradingScope,
+        EncounterSetGradingScope.id == GradingTask.encounter_set_scope_id,
+    ).outerjoin(
+        scope_disease,
+        scope_disease.id == EncounterSetGradingScope.scope_disease_id,
+    ).outerjoin(
+        parent_scope_disease,
+        parent_scope_disease.id == EncounterSetGradingScope.parent_scope_disease_id,
     ).outerjoin(
         EncounterSetImage,
         EncounterSetImage.id == GradingTask.encounter_set_image_id,
@@ -586,22 +602,43 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         PatientEncounters.project_id == project_id,
         _encounter_scope_clause(scope),
     ).group_by(EncounterSetImage.patient_encounter_id)).all())
-    for task, disease, grading_mode, encounter_id in db.execute(encounter_query):
-        target = "EncounterSet image" if task.encounter_set_image_id or task.encounter_file_id else "EncounterSet"
+    for task, disease, grading_mode, scope_role, scope_name, parent_scope_name, encounter_id, is_set_based in db.execute(encounter_query):
+        if task.encounter_set_image_id:
+            target_group, target = "EncounterSets", "Image within EncounterSet"
+        elif task.encounter_file_id and not is_set_based:
+            target_group, target = "Classic ZIP encounters", "Individual image"
+        elif task.encounter_file_id:
+            target_group, target = "EncounterSets", "Image within EncounterSet"
+        else:
+            target_group, target = "EncounterSets", "Whole EncounterSet"
         mode = (grading_mode or "disease_specific").replace("_", " ")
-        bucket = grouped[(target, mode, disease.name, task.state)]
+        bucket = grouped[(target_group, target, mode, scope_role, scope_name, parent_scope_name, disease.name, task.state)]
         bucket[0] += 1
         bucket[1] += 1 if task.encounter_set_image_id or task.encounter_file_id else int(encounter_image_counts.get(encounter_id, 0))
 
     return tuple(ProjectGradingDTO(
-        target_type=key[0],
-        grading_mode=key[1],
-        disease_name=key[2],
-        state=key[3],
-        state_label=STATE_LABELS.get(key[3], key[3].replace("_", " ").title()),
+        target_group=key[0],
+        target_type=key[1],
+        grading_mode=key[2],
+        scope_role=key[3],
+        scope_name=key[4],
+        parent_scope_name=key[5],
+        disease_name=key[6],
+        state=key[7],
+        state_label=STATE_LABELS.get(key[7], key[7].replace("_", " ").title()),
         task_count=value[0],
         image_count=value[1],
-    ) for key, value in sorted(grouped.items()))
+    ) for key, value in sorted(
+        grouped.items(),
+        key=lambda item: (
+            {"EncounterSets": 0, "Single images": 1, "Classic ZIP encounters": 2}.get(item[0][0], 9),
+            {"unified": 0, "disease specific": 1}.get(item[0][2], 9),
+            {"unified": 0, "root": 1, "linked": 2, None: 3}.get(item[0][3], 9),
+            item[0][4] or "",
+            item[0][1],
+            item[0][6:],
+        ),
+    ))
 
 
 def _scope_dto(db: Session, scope: _ResolvedScope) -> ProjectScopeDTO:

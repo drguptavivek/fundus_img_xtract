@@ -213,8 +213,12 @@ class DirectImageVerificationDTO:
 
 @dataclass(frozen=True)
 class ProjectGradingDTO:
+    target_group: str
     target_type: str
     grading_mode: str
+    scope_role: str | None
+    scope_name: str | None
+    parent_scope_name: str | None
     disease_name: str
     state: str
     state_label: str

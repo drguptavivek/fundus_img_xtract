@@ -37,6 +37,11 @@ DR/AMD/glaucoma report and Wadhwani inference counts are included only when
 their respective integrations are currently active in the project's effective
 configuration. The response also includes that enabled configuration:
 
+The summary also returns `grading_completion_percent`, `grading_stage_metrics`
+for every persisted grading stage, and `grading_rows` grouped by task target
+type, disease, grading mode, and stage. These are calculated from the same
+project/lab-scoped task rows as the Gradings page and contain no patient data.
+
 - upload-profile sources and uploader-selectable modes, diseases, cameras,
   areas, dilation states, EncounterSet types, and authorised assignments;
 - currently effective Remidio API bindings (including active date windows) and

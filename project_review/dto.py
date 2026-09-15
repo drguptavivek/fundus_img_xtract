@@ -145,6 +145,9 @@ class ProjectSummaryDTO:
     metadata_fields: tuple[MetadataFieldDTO, ...]
     configured_users: tuple[ConfiguredUserDTO, ...]
     referral_diseases: tuple[ReferralDiseaseDTO, ...]
+    grading_rows: tuple[ProjectGradingDTO, ...]
+    grading_stage_metrics: tuple[ProjectMetricDTO, ...]
+    grading_completion_percent: int
 
 
 @dataclass(frozen=True)

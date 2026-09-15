@@ -283,20 +283,27 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
 
         summary = client.get(f"/api/projects/{project.id}/review/summary")
         assert summary.status_code == 200
-        metric_rows = {item["key"]: item for item in summary.get_json()["data"]["metrics"]}
+        configuration = summary.get_json()["data"]
+        metric_rows = {item["key"]: item for item in configuration["metrics"]}
         metrics = {key: item["value"] for key, item in metric_rows.items()}
         assert metrics["encounter_sets"] == 1
         assert metrics["single_uploads"] == 1
         assert metrics["total_images"] == 2
         assert metrics["grading_tasks"] == 2
         assert metrics["grading_packages"] == 1
-        assert "Unified Package" in metric_rows["grading_packages"]["help_text"]
-        assert allowed_encounter.uuid in metric_rows["grading_packages"]["help_text"]
+        assert allowed_encounter.uuid not in metric_rows["grading_packages"]["help_text"]
+        assert configuration["grading_completion_percent"] == 50
+        assert {row["key"]: row["value"] for row in configuration["grading_stage_metrics"]} == {
+            "pending": 0,
+            "resident_done": 0,
+            "resident2_done": 0,
+            "arbitration": 1,
+            "final": 1,
+        }
         assert "remidio_dr_reports" not in metrics
         assert "remidio_amd_reports" not in metrics
         assert "remidio_glaucoma_reports" not in metrics
         assert "wadhwani_inferences" not in metrics
-        configuration = summary.get_json()["data"]
         assert [source["name"] for source in configuration["sources"]] == ["Review Direct Intake"]
         assert configuration["grading_targets"][0]["target_type"] == "Single-image disease-wise"
         sampled_target = next(row for row in configuration["grading_targets"] if row["package"] == "Review Glaucoma Package")
@@ -338,7 +345,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert b"Effective configuration" in summary_page.data
         assert b"EncounterSet grading workflows" in summary_page.data
         assert b"contains one or more grading tasks" in summary_page.data
-        assert allowed_encounter.uuid.encode() in summary_page.data
+        assert b"Grading workflow progress" in summary_page.data
+        assert b"50% finalised" in summary_page.data
+        assert b"Pending adjudication" in summary_page.data
         assert b'<p>Readable <strong>guidance</strong>.</p>' in summary_page.data
         assert b"onclick" not in summary_page.data
         assert b"&lt;p&gt;Readable" not in summary_page.data

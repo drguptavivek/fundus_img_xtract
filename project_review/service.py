@@ -119,23 +119,20 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         PatientEncounters,
         PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
     ).where(PatientEncounters.project_id == project.id, encounter_scope))
-    package_rows = db.execute(
-        select(
-            EncounterSetGradingPackage.name,
-            PatientEncounters.uuid,
-            EncounterSetGradingPackage.state,
+    package_help = "Each workflow is created for one EncounterSet from a configured grading package and contains one or more grading tasks."
+    grading_rows = _grading_rows(db, project.id, scope)
+    task_count = sum(row.task_count for row in grading_rows)
+    finalised_count = sum(row.task_count for row in grading_rows if row.state == "final")
+    grading_stage_metrics = tuple(
+        ProjectMetricDTO(state, label, sum(row.task_count for row in grading_rows if row.state == state))
+        for state, label in (
+            ("pending", "Not graded"),
+            ("resident_done", "Pending Resident 2"),
+            ("resident2_done", "Pending Resident"),
+            ("arbitration", "Pending adjudication"),
+            ("final", "Finalised"),
         )
-        .join(PatientEncounters, PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id)
-        .where(PatientEncounters.project_id == project.id, encounter_scope)
-        .order_by(EncounterSetGradingPackage.name, PatientEncounters.uuid)
-    ).all()
-    package_help = "Each workflow is created for one EncounterSet and contains one or more grading tasks."
-    if package_rows:
-        package_help += "\n\n" + "\n".join(
-            f"{name} — EncounterSet {encounter_uuid} — {STATE_LABELS.get(state, state.replace('_', ' ').title())}"
-            for name, encounter_uuid, state in package_rows
-        )
-    task_count = sum(row.task_count for row in _grading_rows(db, project.id, scope))
+    )
     allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
         db,
@@ -151,7 +148,7 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         ProjectMetricDTO("total_images", "Total images", set_image_count + direct_count),
         ProjectMetricDTO("pregraded_images", "Pre-graded images", pregraded_count),
         ProjectMetricDTO("grading_packages", "EncounterSet grading workflows", package_count, package_help),
-        ProjectMetricDTO("grading_tasks", "Grading tasks", task_count),
+        ProjectMetricDTO("grading_tasks", "All grading tasks", task_count),
     ]
     if any(source.name == "Remidio API" for source in configuration["sources"]):
         report_counts = {
@@ -177,6 +174,9 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         scope=_scope_dto(db, scope),
         metrics=tuple(metrics),
         profiles=_profile_configuration(db, project.id),
+        grading_rows=grading_rows,
+        grading_stage_metrics=grading_stage_metrics,
+        grading_completion_percent=round((finalised_count / task_count) * 100) if task_count else 0,
         **configuration,
     )
 

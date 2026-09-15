@@ -7,6 +7,15 @@
   {% with metrics=data.metrics %}{% include "projects/_metrics.html" %}{% endwith %}
   <p class="small text-muted mt-2 mb-4">Integration counters appear only when that integration is currently configured for this project.</p>
 
+  <section class="card shadow-sm mb-4" aria-labelledby="grading-progress-heading">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"><h2 class="h6 mb-0" id="grading-progress-heading">Grading workflow progress</h2><span class="badge text-bg-primary">{{ data.grading_completion_percent }}% finalised</span></div>
+    <div class="card-body">
+      <div class="progress mb-3" role="progressbar" aria-label="Finalised grading tasks" aria-valuenow="{{ data.grading_completion_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width:{{ data.grading_completion_percent }}%">{{ data.grading_completion_percent }}%</div></div>
+      <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2 mb-3">{% for metric in data.grading_stage_metrics %}<div class="col"><div class="border rounded p-2 h-100"><div class="small text-muted">{{ metric.label }}</div><div class="h4 mb-0">{{ metric.value }}</div></div></div>{% endfor %}</div>
+      <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Task type</th><th>Disease</th><th>Mode</th><th>Stage</th><th class="text-end">Tasks</th></tr></thead><tbody>{% for row in data.grading_rows %}<tr><td>{{ row.target_type }}</td><td>{{ row.disease_name }}</td><td>{{ row.grading_mode|title }}</td><td>{{ row.state_label }}</td><td class="text-end fw-semibold">{{ row.task_count }}</td></tr>{% else %}<tr><td colspan="5" class="text-center text-muted py-3">No grading tasks are present in your project and lab-unit scope.</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+  </section>
+
   <div class="mb-3">
     <h2 class="h5 mb-1">Quick actions</h2>
     <p class="small text-muted mb-0">Available actions depend on your role and upload profile assignments in this project.</p>

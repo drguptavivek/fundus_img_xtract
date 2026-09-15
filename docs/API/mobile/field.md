@@ -99,9 +99,13 @@ matches what the user considers "today".
       "report": {
         "pdf_available": true,
         "pdf_url": "/api/mobile/v1/field/encounters/…/report",
-        "ocr_status": "pending",
-        "ocr_result": null,
-        "report_datetime": null
+        "ocr_status": "completed",
+        "ocr_result": "Moderate NPDR",
+        "report_datetime": "2026-08-20T09:58:00",
+        "dr": {"result": "Moderate NPDR", "qualitative_result": "Refer",
+               "vcdr_right": null, "vcdr_left": null},
+        "glaucoma": {"result": "Glaucoma suspect", "qualitative_result": "Refer",
+                     "vcdr_right": "0.7", "vcdr_left": "0.5"}
       }
     }
   ]
@@ -148,7 +152,21 @@ field staff wait for text extraction would withhold a report they could already 
 The structured OCR result appears alongside it once complete, and the PDF stays
 reachable afterwards.
 
-`ocr_status` is `absent` | `pending` | `completed` | `failed`.
+`ocr_status` is `absent` | `pending` | `completed` | `failed`. `completed` means the
+OCR finished, including the case where the PDF held no recognisable report page; the
+verdict fields say what was actually found.
+
+The camera's own verdicts are exposed per report page, read from the OCR pipeline's
+`<kind>_report.<kind>_data` block and only when that block is `detected`:
+
+- `dr` — the Remidio DR report: `result`, `qualitative_result`.
+- `glaucoma` — the Remidio glaucoma report: `result`, `qualitative_result`,
+  `vcdr_right`, `vcdr_left`.
+- `ocr_result` duplicates `dr.result` as a single string for clients that only read
+  that field.
+
+Each is `null` when the OCR did not detect that report. These are the camera's
+readings, distinct from the WAI answers under `ai`.
 
 ## `POST /field/encounters/<uuid>/inference`
 

@@ -36,7 +36,7 @@ from remote_inference.models import (
     EncounterAITargetResult,
 )
 
-from .dto import AIEyeResultDTO, AIStatusDTO, RemidioReportDTO
+from .dto import AIEyeResultDTO, AIStatusDTO, RemidioReportDTO, RemidioVerdictDTO
 
 logger = logging.getLogger("field_workbench.status")
 
@@ -300,11 +300,40 @@ def glaucoma_status(db, encounter: PatientEncounters, *, workflow_enabled: bool)
     )
 
 
+def _verdict(report: Any, data_key: str) -> RemidioVerdictDTO | None:
+    """Read one OCR report block as the pipeline writes it.
+
+    ``process_pdfs`` stores ``{"detected": bool, "page": n, "<kind>_data": {...}}``;
+    the verdict text lives under the ``*_data`` mapping, never at the top level.
+    A block that was not detected carries no verdict.
+    """
+    if not isinstance(report, dict) or not report.get("detected"):
+        return None
+    data = report.get(data_key) if isinstance(report.get(data_key), dict) else {}
+    result = data.get("result") or None
+    qualitative = data.get("qualitative_result") or None
+    if result is None and qualitative is None:
+        return None
+    return RemidioVerdictDTO(
+        result=result,
+        qualitative_result=qualitative,
+        vcdr_right=data.get("vcdr_right") or None,
+        vcdr_left=data.get("vcdr_left") or None,
+    )
+
+
+def _ocr_finished(status: str) -> bool:
+    # The pipeline also writes ``completed_no_reports_detected`` when the PDF
+    # held no recognisable report page. That is a finished OCR, not a pending one.
+    return status in OCR_COMPLETE_STATES or status.startswith("completed")
+
+
 def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> RemidioReportDTO | None:
     """The camera's report: PDF as soon as it lands, OCR structure when ready."""
     pdf_attachment = None
     ocr_status = "absent"
-    ocr_result = None
+    dr_verdict: RemidioVerdictDTO | None = None
+    glaucoma_verdict: RemidioVerdictDTO | None = None
     report_datetime = None
 
     for attachment in encounter.encounter_set_attachments or []:
@@ -318,20 +347,16 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
         if not ocr:
             continue
         status = str(ocr.get("status") or "").lower()
-        report = ocr.get("dr_report")
-        if status in OCR_COMPLETE_STATES and report:
+        if _ocr_finished(status):
             ocr_status = "completed"
-            if isinstance(report, dict):
-                ocr_result = (
-                    report.get("result") or report.get("impression") or report.get("classification")
-                )
-            else:
-                ocr_result = str(report)
-            report_datetime = ocr.get("source_report_datetime") or ocr.get("completed_at")
+            # A real encounter carries several attachments; each may hold a
+            # different report page. Keep the first verdict found per kind.
+            dr_verdict = dr_verdict or _verdict(ocr.get("dr_report"), "dr_data")
+            glaucoma_verdict = glaucoma_verdict or _verdict(ocr.get("glaucoma_report"), "glaucoma_data")
+            report_datetime = report_datetime or ocr.get("source_report_datetime") or ocr.get("completed_at")
         elif ocr_status == "completed":
-            # A real encounter carries several attachments. Once one has produced
-            # a report, a later still-queued attachment must not drag the status
-            # back to pending while the result from the first one is still shown.
+            # Once one attachment has finished, a later still-queued attachment
+            # must not drag the status back to pending while its result is shown.
             continue
         elif status in {"failed", "error"}:
             ocr_status = "failed"
@@ -350,6 +375,8 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
         pdf_available=pdf_attachment is not None,
         pdf_url=pdf_url if pdf_attachment is not None else None,
         ocr_status=ocr_status,
-        ocr_result=ocr_result,
+        ocr_result=dr_verdict.result if dr_verdict else None,
         report_datetime=str(report_datetime) if report_datetime else None,
+        dr=dr_verdict,
+        glaucoma=glaucoma_verdict,
     )

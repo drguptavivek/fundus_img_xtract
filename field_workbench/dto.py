@@ -95,11 +95,26 @@ class RemidioReportDTO:
     pdf_available: bool
     pdf_url: str | None
     ocr_status: str  # pending | completed | failed | absent
+    # The camera's DR verdict as one string; kept for clients that only read this.
     ocr_result: str | None = None
     report_datetime: str | None = None
+    # Structured verdicts per report page the camera produced. ``None`` when the
+    # OCR finished without detecting that report.
+    dr: RemidioVerdictDTO | None = None
+    glaucoma: RemidioVerdictDTO | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class RemidioVerdictDTO:
+    """One report page's OCR-extracted verdict, exactly as the camera printed it."""
+
+    result: str | None
+    qualitative_result: str | None = None
+    vcdr_right: str | None = None
+    vcdr_left: str | None = None
 
 
 @dataclass(frozen=True)

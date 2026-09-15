@@ -41,7 +41,24 @@ def test_structured_result_appears_once_ocr_completes(db_session, field_data):
             metadata={
                 "ocr": {
                     "status": "completed",
-                    "dr_report": {"result": "Moderate NPDR"},
+                    # The exact shape process_pdfs writes: the verdict sits under
+                    # dr_data, never at the top of the report block.
+                    "dr_report": {
+                        "detected": True,
+                        "page": 1,
+                        "dr_data": {"result": "Moderate NPDR", "qualitative_result": "Refer"},
+                    },
+                    "glaucoma_report": {
+                        "detected": True,
+                        "page": 2,
+                        "glaucoma_data": {
+                            "result": "Glaucoma suspect",
+                            "qualitative_result": "Refer",
+                            "vcdr_right": "0.7",
+                            "vcdr_left": "0.5",
+                        },
+                    },
+                    "amd_report": {"detected": False, "page": None, "amd_data": {}},
                     "completed_at": "2026-08-20T10:00:00+00:00",
                 }
             },
@@ -54,6 +71,38 @@ def test_structured_result_appears_once_ocr_completes(db_session, field_data):
 
     assert report.ocr_status == "completed"
     assert report.ocr_result == "Moderate NPDR"
+    assert report.dr.result == "Moderate NPDR"
+    assert report.dr.qualitative_result == "Refer"
+    assert report.glaucoma.result == "Glaucoma suspect"
+    assert report.glaucoma.vcdr_right == "0.7"
+    assert report.glaucoma.vcdr_left == "0.5"
+
+
+def test_ocr_that_found_no_report_page_is_finished_with_no_verdict(db_session, field_data):
+    """``completed_no_reports_detected`` is a finished OCR, and a detected=False
+    block must not be mistaken for a verdict."""
+    encounter = field_data["encounter"]
+    db_session.add(
+        _attachment(
+            encounter.id,
+            metadata={
+                "ocr": {
+                    "status": "completed_no_reports_detected",
+                    "dr_report": {"detected": False, "page": None, "dr_data": {}},
+                    "glaucoma_report": {"detected": False, "page": None, "glaucoma_data": {}},
+                }
+            },
+        )
+    )
+    db_session.flush()
+    db_session.refresh(encounter)
+
+    report = remidio_report(encounter, pdf_url="/pdf")
+
+    assert report.ocr_status == "completed"
+    assert report.ocr_result is None
+    assert report.dr is None
+    assert report.glaucoma is None
     # The PDF stays reachable after OCR, not replaced by it.
     assert report.pdf_available is True
 
@@ -115,7 +164,12 @@ def test_a_later_pending_attachment_does_not_undo_a_completed_report(db_session,
     db_session.add(
         _attachment(
             encounter.id,
-            metadata={"ocr": {"status": "completed", "dr_report": {"result": "Mild DR"}}},
+            metadata={
+                "ocr": {
+                    "status": "completed",
+                    "dr_report": {"detected": True, "page": 1, "dr_data": {"result": "Mild DR"}},
+                }
+            },
         )
     )
     db_session.add(_attachment(encounter.id, metadata={"ocr": {"status": "queued"}}))

@@ -118,6 +118,15 @@
                     {% endif %}
                   </div>
                   <div class="d-flex gap-2">
+                    {% if current_user.has_role('admin') and current_user.id != u.id and u.is_active and not u.has_role('admin') and not session.get('impersonation_original_user_id') %}
+                    <button type="button"
+                            class="btn btn-sm btn-outline-warning"
+                            data-impersonate-user-id="{{ u.id }}"
+                            data-impersonate-username="{{ u.username }}"
+                            onclick="event.stopPropagation();">
+                      Impersonate
+                    </button>
+                    {% endif %}
                     <a class="btn btn-sm btn-outline-primary"
                        href="{{ url_for('admin.user_detail', user_id=u.id) }}"
                        hx-get="{{ url_for('admin.user_detail', user_id=u.id, format='shell') }}"

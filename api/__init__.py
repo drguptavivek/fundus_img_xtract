@@ -13,6 +13,7 @@ from . import project_review
 from . import review_queues
 from . import regrade_tasks
 from . import discrepancy_review
+from . import admin_impersonation
 from . import my_discrepancy_reviews
 from . import encounter_viewer
 from . import field_encounter_refresh

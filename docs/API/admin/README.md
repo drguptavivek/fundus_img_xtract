@@ -13,6 +13,7 @@ This folder documents the admin routes that back management pages, dashboard JS,
 - [Database Export and Restore](database.md)
 - [Rate Limits](rate-limits.md)
 - [Stuck Remidio Upload Cleanup](stuck-remidio-uploads.md)
+- [User Impersonation](user-impersonation.md)
 
 ## Contract Notes
 

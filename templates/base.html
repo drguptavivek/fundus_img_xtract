@@ -139,6 +139,14 @@
 
   {% include "partials/navbar.html" %}
 
+  {% if session.get('impersonation_original_user_id') %}
+  <div class="alert alert-warning rounded-0 border-start-0 border-end-0 mb-0 d-flex flex-wrap align-items-center justify-content-center gap-2" role="alert">
+    <strong>Impersonating {{ current_user.username }}</strong>
+    <span>Read-only session. Signed in originally as {{ session.get('impersonation_original_username') }}.</span>
+    <button type="button" class="btn btn-sm btn-dark" data-stop-impersonation>Return to admin account</button>
+  </div>
+  {% endif %}
+
   {# Flash toasts (fixed, compact, top-right, offset under navbar) #}
   <div id="flash-toasts" class="toast-container position-fixed end-0 p-3"
     style="z-index:1200; top: var(--toast-top, 64px); --bs-toast-max-width: 300px; --bs-toast-padding-x: .5rem; --bs-toast-padding-y: .25rem;">
@@ -210,6 +218,9 @@
 
   <!-- Global JS  -->
   <script src="{{ url_for('static', filename='js/app.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+  {% if current_user.is_authenticated %}
+  <script src="{{ url_for('static', filename='js/admin-impersonation.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='js/flash-toasts.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
     defer></script>
   <script src="{{ url_for('static', filename='js/encounter-viewer.js', v=config.get('ASSETS_VERSION','')) }}"

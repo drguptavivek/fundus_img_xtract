@@ -102,21 +102,24 @@ defined, with `color-interpolation-filters="sRGB"`, in both layouts.
 breakpoint but under 400px tall, and used to get the desktop workbench.
 
 - **The image owns the screen.** `grader-pwa.js` sets `data-fit-mode="fill"`
-  on every `.imggr-main`; the viewer then sizes the image box to the image's own
-  aspect ratio inside the stage (no square, no 72dvh cap) and the stage centres
-  it. On an iPhone 14 Pro the image is 393px wide in portrait and the full
-  320px height in landscape.
+  on every `.imggr-main`; the viewer then makes the image box the whole stage
+  (no square, no 72dvh cap). The pan model centres the fitted image in the box
+  and, once a pinch grows it past the box, lets the whole stage show image -
+  in fullscreen, the full viewport. On an iPhone 14 Pro the fitted image is
+  393px wide in portrait and the full 320px height in landscape. iOS Safari
+  keeps the box's clip at its old size when the box grows, so the viewer
+  rebuilds the box's layer on every fill resize.
 - **Overlay chrome.** The workbench header is a translucent strip over the top
   edge of the stage (in flow again in landscape so it never covers the image);
   the filter strip (`N R G B Y H E`, reset, Tools) sits over the bottom edge.
   A sliders button unfolds brightness / contrast beneath it; a chevron folds
   the whole strip to a single pill (remembered in `localStorage`).
-- **Three-height grade sheet.** Rail: a 44px bar naming the disease and the
-  chosen grade. Peek (default): grade options and Save. Open: features,
-  guidelines, comment and Clear as well. Tap the handle to step peek <-> open,
-  the chevron to minimise to the rail, or swipe the header up / down. In
-  landscape the sheet is a right-hand column; minimised, a 3rem sliver.
-  Choosing a grade that carries features opens the sheet.
+- **Grade drawer.** Closed (default) it is a 44px rail naming the disease and
+  the chosen grade, so the image has the screen. Pulled up it takes most of
+  the screen (82dvh): grade options, guidelines, features, comment, Clear and
+  Save. Tap the rail or the chevron, or swipe the drawer header up / down. In
+  landscape the drawer is a right-hand column; closed, a 3rem sliver.
+  Choosing a grade that carries features opens the drawer.
 - **Fullscreen that works on iPhone.** iPhone Safari has no element
   fullscreen, so `grading-viewer.js` falls back to a CSS fullscreen: the
   `.imggr-main-wrap` is pinned over the viewport (`imggr-pseudo-fullscreen`),
@@ -132,6 +135,15 @@ breakpoint but under 400px tall, and used to get the desktop workbench.
 
 ## Touch: pan versus draw
 
+- **Double-tap** the image to toggle between the fitted image and a zoom that
+  fills the box's height (or width), centred - on a portrait phone this crops
+  only the fundus image's own black margins. Pinch zoom and one-finger pan
+  work from either state. Off while a drawing tool or CDR measurement is active.
+
+- **Pinch zooms about the fingers' midpoint and pans with them**, as in a photo
+  viewer: the image point between the fingers stays between them; lifting one
+  finger continues as a one-finger pan. The image's transform easing is off
+  during touch gestures so they track the fingers.
 - One finger draws when a tool is active; **two fingers always pan / pinch-zoom**
   (`grading-viewer.js` consults the pan lock only for single-touch gestures).
 - While two fingers are down the viewer sets `data-imggr-multi-touch="true"` on

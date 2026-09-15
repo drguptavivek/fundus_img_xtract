@@ -53,7 +53,7 @@ HISTORY_PER_PAGE = 20
 # Mirrors ``--bs-body-bg`` of the dark Bootstrap build (static/css/bootstrap.min.css)
 # so the splash and title bar match the page; the viewer stage itself stays black.
 THEME_COLOR = "#151c20"
-PWA_RELEASE = "v14"
+PWA_RELEASE = "v17"
 
 
 def pwa_version() -> str:

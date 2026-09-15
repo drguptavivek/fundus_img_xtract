@@ -126,7 +126,7 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
 
 /* Phones, either orientation: the image owns the screen. The header and the
    filter strip are translucent overlays on the stage's black letterbox; the
-   grade sheet is a bottom sheet with three heights - rail, peek, open. */
+   grade drawer is a bottom sheet: a rail by default, most of the screen when open. */
 @media (max-width: 767.98px), (max-height: 500px) {
   body.gpwa-workbench .gwb-shell.is-expanded { padding: 0; }
 
@@ -281,11 +281,11 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   }
 
   /* Grade sheet. Rail: a 44px bar naming the disease and the chosen grade.
-     Peek: grade options and Save. Open: features, comment, Clear as well. */
+     Open: most of the screen - grades, guidelines, features, comment, Save. */
   body.gpwa-workbench .gwb-grade-card {
     display: flex;
     flex-direction: column;
-    max-height: 62dvh;
+    max-height: 82dvh;
     height: auto !important;
     border: 0;
     border-top: 1px solid var(--bs-border-color);
@@ -365,17 +365,15 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
     font-size: .85rem;
     line-height: 1.15;
   }
+  body.gpwa-workbench .gwb-grade-card [data-grade-guidelines] { font-size: .85rem; margin-bottom: .6rem !important; }
+  body.gpwa-workbench .gwb-grade-card [data-grade-guidelines]:empty { display: none; }
+  body.gpwa-workbench .gwb-grade-card .gwb-comment { height: 5rem; min-height: 5rem; }
+  body.gpwa-workbench .gwb-grade-card [data-workbench-submit-actions] { margin-top: .75rem !important; }
   body.gpwa-workbench .gwb-grade-card [data-workbench-submit-actions] .btn {
-    min-height: 40px;
+    min-height: 44px;
     padding: .3rem .7rem;
     font-size: .9rem;
   }
-  body.gpwa-workbench .gwb-grade-card.is-peek [data-feature-fieldset],
-  body.gpwa-workbench .gwb-grade-card.is-peek [data-grade-guidelines],
-  body.gpwa-workbench .gwb-grade-card.is-peek .gwb-comment,
-  body.gpwa-workbench .gwb-grade-card.is-peek label[for^="comment-"],
-  body.gpwa-workbench .gwb-grade-card.is-peek [data-clear-selection] { display: none !important; }
-  body.gpwa-workbench .gwb-grade-card.is-peek [data-workbench-submit-actions] { margin-top: .25rem !important; }
 
   /* Target pager / previous-next: one slim row under the sheet. */
   body.gpwa-workbench .gwb-footer {

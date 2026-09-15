@@ -445,7 +445,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ (current_user.id if current_user.is_authenticated else none)|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v1')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v7')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v3-viewport-canvas-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>

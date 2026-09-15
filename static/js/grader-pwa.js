@@ -139,7 +139,7 @@
   const phone = window.matchMedia(PHONE_QUERY);
   const panels = Array.from(workbench.querySelectorAll('[data-task-uuid]'));
   const TOOLBAR_HIDDEN_KEY = 'grader.toolbar_hidden';
-  const SHEET_STATES = ['rail', 'peek', 'open'];
+  const SHEET_STATES = ['rail', 'open'];
 
   function refreshViewer(panel) {
     const viewer = panel.querySelector('.imggr-viewer-root');
@@ -183,16 +183,15 @@
       label.append(value);
     };
 
-    const current = () => card.dataset.sheetState || 'peek';
+    const current = () => card.dataset.sheetState || 'rail';
     const setState = state => {
       card.dataset.sheetState = state;
       card.classList.toggle('is-rail', state === 'rail');
-      card.classList.toggle('is-peek', state === 'peek');
       handle.setAttribute('aria-expanded', state === 'rail' ? 'false' : 'true');
-      handle.setAttribute('aria-label', state === 'open' ? 'Show fewer grading controls' : 'Show more grading controls');
+      handle.setAttribute('aria-label', state === 'open' ? 'Hide grading controls' : 'Show grading controls');
       const rail = state === 'rail';
       minimise.querySelector('i').className = `fa-solid ${rail ? 'fa-chevron-up' : 'fa-chevron-down'}`;
-      const minimiseLabel = rail ? 'Show grade sheet' : 'Minimise grade sheet';
+      const minimiseLabel = rail ? 'Open grade sheet' : 'Minimise grade sheet';
       minimise.setAttribute('aria-label', minimiseLabel);
       minimise.title = minimiseLabel;
       updateLabel();
@@ -203,14 +202,14 @@
       setState(SHEET_STATES[Math.min(SHEET_STATES.length - 1, Math.max(0, index + delta))]);
     };
 
-    // Tap the handle: rail -> peek, peek <-> open. The chevron: anything -> rail, rail -> peek.
+    // Tap the handle or the chevron: rail <-> open. Swipe the header up / down likewise.
     let swiped = false;
+    const toggle = () => setState(current() === 'rail' ? 'open' : 'rail');
     handle.addEventListener('click', () => {
       if (swiped) { swiped = false; return; }
-      setState(current() === 'open' ? 'peek' : (current() === 'rail' ? 'peek' : 'open'));
+      toggle();
     });
-    minimise.addEventListener('click', () => setState(current() === 'rail' ? 'peek' : 'rail'));
-    // Swipe the header up or down to step through the heights.
+    minimise.addEventListener('click', toggle);
     let startY = null;
     header.addEventListener('pointerdown', event => { startY = event.clientY; swiped = false; });
     header.addEventListener('pointerup', event => {
@@ -233,7 +232,8 @@
         });
       });
     });
-    setState('peek');
+    // Starts as the rail so the image has the screen; pull up for the grades.
+    setState('rail');
   }
 
   function setupToolbar(panel) {
@@ -289,6 +289,10 @@
     sync();
     workbench.querySelector('#workbench-panels')?.addEventListener('slid.bs.carousel', sync);
     ['fullscreenchange', 'webkitfullscreenchange'].forEach(type => document.addEventListener(type, () => window.requestAnimationFrame(sync)));
+    // Leaving via the viewer's own exit button fires no fullscreenchange in the CSS fallback.
+    workbench.addEventListener('click', event => {
+      if (event.target.closest('.imggr-full')) window.requestAnimationFrame(() => window.requestAnimationFrame(sync));
+    });
   }
 
   function setupAnnotateMode(panel) {

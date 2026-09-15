@@ -121,12 +121,21 @@ def test_phone_workbench_gives_the_image_the_screen():
     assert "body.gpwa-workbench.imggr-fullscreen-active .gwb-viewer-toolbar" in pwa_styles
     assert "gpwa-fullscreen" in pwa_script
 
-    # Three-height sheet with an explicit minimise control, and a foldable filter strip.
-    assert "const SHEET_STATES = ['rail', 'peek', 'open']" in pwa_script
+    # Rail / open grade drawer with an explicit minimise control, and a foldable filter strip.
+    assert "const SHEET_STATES = ['rail', 'open']" in pwa_script
     assert "gpwa-sheet-minimise" in pwa_script
+    assert "setState('rail');" in pwa_script  # the drawer starts minimised
     assert "body.gpwa-workbench .gwb-grade-card.is-rail .card-body { display: none; }" in pwa_styles
     assert "gpwa-toolbar-toggle" in pwa_script
     assert "body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: none !important; }" in pwa_styles
+
+    # Photo-viewer gestures: the box fills the stage, the pan model centres a
+    # smaller image, pinch zooms about the fingers and double-tap fills.
+    assert "const centred = -overflow / 2;" in viewer
+    assert "pinchAnchor = {" in viewer
+    assert "function toggleCoverZoom" in viewer
+    assert "main.classList.add('imggr-gesturing')" in viewer
+    assert ".imggr-main.imggr-gesturing .imggr-main-img { transition: none; }" in viewer_styles
 
     # Landscape phones are phones: the same query in every layer.
     phone_query = "(max-width: 767.98px), (max-height: 500px)"

@@ -499,6 +499,9 @@
 
     // Single image; just wire up fullscreen and activation
     fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); syncFullscreenButtons(); });
+    // The stage's touch handlers preventDefault() on touchend, which cancels
+    // the tap's click on iOS; a touch that starts on the button is not a pan.
+    ['touchstart', 'touchend', 'pointerdown'].forEach(type => fullBtn?.addEventListener(type, event => event.stopPropagation()));
 
     // Compose and apply filter (SVG + brightness/contrast)
     const card = root.closest('.card');
@@ -1283,24 +1286,25 @@
       }
 
       if (main.dataset.fitMode === 'fill') {
-        // The largest box of the image's own aspect ratio that fits the wrap
-        // (or the viewer root when the wrap has no height of its own): no
-        // square, no viewport cap. The wrap centres it, so pan maths - which
-        // assume the image starts at the box's top-left - are untouched.
-        const fillW = Math.max(1, Math.floor(availableW));
+        // The box is the whole wrap (or the viewer root when the wrap has no
+        // height of its own): no square, no viewport cap. The pan model
+        // centres the fitted image inside it and, once a pinch grows the
+        // image past the box, lets the whole box - the full screen in
+        // fullscreen - show image.
+        const targetW = Math.max(1, Math.floor(availableW));
         const wrapH = wrapRect && wrapRect.height > 0 ? wrapRect.height : availableH;
-        const fillH = Math.max(1, Math.floor(wrapH));
-        const natW = mainImg?.naturalWidth || 0;
-        const natH = mainImg?.naturalHeight || 0;
-        let targetW = fillW;
-        let targetH = fillH;
-        if (natW > 0 && natH > 0) {
-          const scale = Math.min(fillW / natW, fillH / natH);
-          targetW = Math.max(1, Math.floor(natW * scale));
-          targetH = Math.max(1, Math.floor(natH * scale));
-        }
+        const targetH = Math.max(1, Math.floor(wrapH));
+        const grew = main.style.width !== `${targetW}px` || main.style.height !== `${targetH}px`;
         main.style.width = `${targetW}px`;
         main.style.height = `${targetH}px`;
+        if (grew) {
+          // iOS Safari keeps the box's overflow clip (it composites the
+          // transformed image inside) at the previous size, so a box that
+          // grows shows a cropped image until its layer is rebuilt.
+          main.style.display = 'none';
+          void main.offsetHeight;
+          main.style.display = '';
+        }
         return;
       }
 
@@ -1374,9 +1378,18 @@
       const scale = Math.max(0.01, zoomPercent / 100);
       const scaledW = baseW * scale;
       const scaledH = baseH * scale;
-      const overflowX = Math.max(0, scaledW - containerW);
-      const overflowY = Math.max(0, scaledH - containerH);
-      return { minX: -overflowX, maxX: 0, minY: -overflowY, maxY: 0 };
+      // An axis the image does not fill is centred (a single fixed pan value);
+      // an axis it overflows pans between its two edges. Centring makes the
+      // transition continuous as a pinch grows the image past the box.
+      const range = (scaled, container) => {
+        const overflow = scaled - container;
+        if (overflow > 0) return [-overflow, 0];
+        const centred = -overflow / 2;
+        return [centred, centred];
+      };
+      const [minX, maxX] = range(scaledW, containerW);
+      const [minY, maxY] = range(scaledH, containerH);
+      return { minX, maxX, minY, maxY };
     }
 
     function clampPanToBounds(){
@@ -2275,13 +2288,80 @@
         dragStartY = e.touches[0].clientY;
         touchStartPanX = imgPanX;
         touchStartPanY = imgPanY;
+        tapCandidate = true;
       } else if (e.touches.length === 2) {
-        // Two touches - prepare for pinch zoom
+        // Two touches - prepare for pinch zoom about the fingers' midpoint
         isDragging = false;
+        tapCandidate = false;
         touchStartDistance = getTouchDistance(e.touches);
         touchStartZoom = currentZoom;
+        const rect = main.getBoundingClientRect();
+        const centre = getTouchCentre(e.touches);
+        // The image point under the midpoint, in fitted-image pixels; it stays
+        // under the (moving) midpoint for the rest of the gesture.
+        pinchAnchor = {
+          contentX: (centre.x - rect.left - imgPanX) / (currentZoom / 100),
+          contentY: (centre.y - rect.top - imgPanY) / (currentZoom / 100),
+        };
       }
+      main.classList.add('imggr-gesturing');
       e.preventDefault();
+    }
+    let pinchAnchor = null;
+    function getTouchCentre(touches){
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2,
+      };
+    }
+
+    // Double-tap: toggle between the fitted image and a zoom that fills the
+    // box's height (or width), which on a letterboxed phone screen crops only
+    // the image's own margins. Kept centred so the retina stays in view.
+    let tapCandidate = false;
+    let lastTapAt = 0;
+    const TAP_SLOP_PX = 10;
+    const DOUBLE_TAP_MS = 300;
+    function coverZoomPercent(){
+      const containerW = main.clientWidth || 0;
+      const containerH = main.clientHeight || 0;
+      const natW = mainImg?.naturalWidth || 0;
+      const natH = mainImg?.naturalHeight || 0;
+      if (!containerW || !containerH || !natW || !natH) return 100;
+      const imgAspect = natW / natH;
+      const containerAspect = containerW / containerH;
+      const baseW = imgAspect > containerAspect ? containerW : containerH * imgAspect;
+      const baseH = imgAspect > containerAspect ? containerW / imgAspect : containerH;
+      return Math.max(containerW / baseW, containerH / baseH) * 100;
+    }
+    function toggleCoverZoom(){
+      if (isPanLocked()) return;
+      const atFit = Math.abs(currentZoom - 100) < 1;
+      const target = atFit ? clamp(coverZoomPercent(), ZOOM_MIN, ZOOM_MAX) : 100;
+      currentZoom = target;
+      const { minX, maxX, minY, maxY } = getPanRangePx(currentZoom);
+      imgPanX = (minX + maxX) / 2;
+      imgPanY = (minY + maxY) / 2;
+      setCdrOverlayVisible(false);
+      scheduleCdrRedrawAfterIdle();
+      applyImagePan();
+      updateZoomDisplay();
+      if (loupeEnabled) updateLoupeAssets();
+      saveViewerSettingsToStorage();
+    }
+    function handleTapEnd(e) {
+      if (!tapCandidate || cdrActive || isPanLocked()) { tapCandidate = false; return; }
+      tapCandidate = false;
+      const touch = e.changedTouches && e.changedTouches[0];
+      if (!touch || (e.touches && e.touches.length)) return;
+      if (Math.abs(touch.clientX - dragStartX) > TAP_SLOP_PX || Math.abs(touch.clientY - dragStartY) > TAP_SLOP_PX) return;
+      const now = Date.now();
+      if (now - lastTapAt < DOUBLE_TAP_MS) {
+        lastTapAt = 0;
+        toggleCoverZoom();
+      } else {
+        lastTapAt = now;
+      }
     }
     
     function handleTouchMove(e) {
@@ -2305,23 +2385,44 @@
         // Save settings to localStorage for rapid loading
         saveViewerSettingsToStorage();
       } else if (e.touches.length === 2) {
-        // Two touches - pinch zoom
+        // Two touches - pinch zoom about the midpoint, panning with the fingers
         const currentDistance = getTouchDistance(e.touches);
-        if (touchStartDistance > 0) {
+        if (touchStartDistance > 0 && pinchAnchor) {
           const scale = currentDistance / touchStartDistance;
-          const newZoom = clamp(touchStartZoom * scale, ZOOM_MIN, ZOOM_MAX);
-          setZoomLevel(newZoom);
+          currentZoom = clamp(touchStartZoom * scale, ZOOM_MIN, ZOOM_MAX);
+          const rect = main.getBoundingClientRect();
+          const centre = getTouchCentre(e.touches);
+          const factor = currentZoom / 100;
+          imgPanX = centre.x - rect.left - pinchAnchor.contentX * factor;
+          imgPanY = centre.y - rect.top - pinchAnchor.contentY * factor;
+          clampPanToBounds();
+          setCdrOverlayVisible(false);
+          scheduleCdrRedrawAfterIdle();
+          applyImagePan();
+          updateZoomDisplay();
         }
       }
       e.preventDefault();
     }
     
     function handleTouchEnd(e) {
+      if (e.type === 'touchend') handleTapEnd(e); else tapCandidate = false;
       isDragging = false;
       touchStartDistance = 0;
-      if (!e.touches || e.touches.length === 0) root.dataset.imggrMultiTouch = 'false';
-      if (isLiteMode) {
+      pinchAnchor = null;
+      if (!e.touches || e.touches.length === 0) {
+        root.dataset.imggrMultiTouch = 'false';
+        main.classList.remove('imggr-gesturing');
         saveViewerSettingsToStorage();
+        if (loupeEnabled) updateLoupeAssets();
+      } else if (e.touches.length === 1) {
+        // One finger lifted after a pinch: carry on as a one-finger pan.
+        isDragging = true;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        touchStartPanX = imgPanX;
+        touchStartPanY = imgPanY;
+        tapCandidate = false;
       }
       e.preventDefault();
     }

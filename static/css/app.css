@@ -840,6 +840,8 @@ body {
   right: calc(.5rem + env(safe-area-inset-right));
 }
 body.imggr-fullscreen-active { overflow: hidden; }
+/* Touch gestures track the fingers directly; the transform easing is for keys and wheel. */
+.imggr-viewer-root .imggr-main.imggr-gesturing .imggr-main-img { transition: none; }
 
 /* Grading filters: button active state */
 .imggr-filters .btn-check:checked + .btn {

@@ -283,11 +283,18 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
 
         summary = client.get(f"/api/projects/{project.id}/review/summary")
         assert summary.status_code == 200
-        metrics = {item["key"]: item["value"] for item in summary.get_json()["data"]["metrics"]}
+        metric_rows = {item["key"]: item for item in summary.get_json()["data"]["metrics"]}
+        metrics = {key: item["value"] for key, item in metric_rows.items()}
         assert metrics["encounter_sets"] == 1
         assert metrics["single_uploads"] == 1
         assert metrics["total_images"] == 2
         assert metrics["grading_tasks"] == 2
+        assert metrics["grading_packages"] == 1
+        assert "Unified Package: 1" in metric_rows["grading_packages"]["help_text"]
+        assert "remidio_dr_reports" not in metrics
+        assert "remidio_amd_reports" not in metrics
+        assert "remidio_glaucoma_reports" not in metrics
+        assert "wadhwani_inferences" not in metrics
         configuration = summary.get_json()["data"]
         assert [source["name"] for source in configuration["sources"]] == ["Review Direct Intake"]
         assert configuration["grading_targets"][0]["target_type"] == "Single-image disease-wise"
@@ -328,6 +335,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         summary_page = client.get(f"/projects/{project.id}/summary")
         assert summary_page.status_code == 200
         assert b"Effective configuration" in summary_page.data
+        assert b"EncounterSet grading workflows" in summary_page.data
+        assert b"contains one or more grading tasks" in summary_page.data
+        assert b"Unified Package: 1" in summary_page.data
         assert b'<p>Readable <strong>guidance</strong>.</p>' in summary_page.data
         assert b"onclick" not in summary_page.data
         assert b"&lt;p&gt;Readable" not in summary_page.data

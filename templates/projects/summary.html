@@ -4,6 +4,7 @@
 <div class="container-fluid px-3 px-lg-4 pb-5">
   {% include "projects/_header.html" %}
   {% with metrics=data.metrics %}{% include "projects/_metrics.html" %}{% endwith %}
+  <p class="small text-muted mt-2 mb-4">Integration counters appear only when that integration is currently configured for this project.</p>
 
   <div class="mb-3">
     <h2 class="h5 mb-1">Quick actions</h2>
@@ -130,4 +131,9 @@
 {% if data.metadata_fields %}<div class="modal fade" id="metadata-details" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Captured metadata</h2><div class="small text-muted">PII field values remain restricted to EncounterSet processing and verification.</div></div><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Field</th><th>Scope / type</th><th>Capture</th><th>PII</th><th>Sources</th></tr></thead><tbody>{% for field in data.metadata_fields %}<tr><td><strong>{{ field.label }}</strong><div class="small text-muted">{{ field.key }}</div>{% if field.choices %}<div class="small">{{ field.choices|join(', ') }}</div>{% endif %}</td><td>{{ field.scope|title }} / {{ field.field_type|replace('_',' ')|title }}</td><td>{{ field.requirement }}{% if field.verifier_editable %}<div class="small">Verifier editable</div>{% endif %}</td><td>{{ 'PII' if field.is_pii else 'Non-PII' }}</td><td>{% for source in field.sources %}<span class="badge text-bg-light border text-dark me-1">{{ source }}</span>{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div></div></div></div>{% endif %}
 
 {% if data.configured_users and capabilities.can_manage_access %}<div class="modal fade" id="configured-users" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5">Configured users</h2><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>User</th><th>Scope</th><th>Roles / grants</th><th>Upload assignments</th><th>Grading slots</th></tr></thead><tbody>{% for member in data.configured_users %}<tr><td><strong>{{ member.name }}</strong></td><td>{{ member.scopes|join('; ') or 'Assignment scope only' }}</td><td>{{ member.roles|join(', ') or '—' }}</td><td>{{ member.upload_assignments|join('; ') or '—' }}</td><td>{{ member.grading_allocations|join('; ') or '—' }}</td></tr>{% endfor %}</tbody></table></div></div></div></div></div>{% endif %}
+{% endblock %}
+{% block page_scripts %}
+{% if csp_script_nonce %}<script nonce="{{ csp_script_nonce() }}">{% else %}<script>{% endif %}
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(element){new bootstrap.Tooltip(element);});
+</script>
 {% endblock %}

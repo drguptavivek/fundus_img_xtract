@@ -26,6 +26,7 @@ class ProjectMetricDTO:
     key: str
     label: str
     value: int
+    help_text: str | None = None
 
 
 @dataclass(frozen=True)

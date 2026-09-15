@@ -30,8 +30,12 @@ Returns projects in the caller's membership scope.
 `GET /api/projects/{project_id}/review/summary`
 
 Returns project/scope details; EncounterSet, single-image, total-image,
-pre-graded image, package, and task counts; Remidio DR/AMD/glaucoma report and
-Wadhwani inference counts; and the currently effective, enabled configuration:
+pre-graded image, EncounterSet grading-workflow, and task counts. The workflow
+metric includes hover help explaining its relationship to grading tasks and
+listing the underlying configured package names and runtime counts. Remidio
+DR/AMD/glaucoma report and Wadhwani inference counts are included only when
+their respective integrations are currently active in the project's effective
+configuration. The response also includes that enabled configuration:
 
 - upload-profile sources and uploader-selectable modes, diseases, cameras,
   areas, dilation states, EncounterSet types, and authorised assignments;

@@ -119,26 +119,19 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         PatientEncounters,
         PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
     ).where(PatientEncounters.project_id == project.id, encounter_scope))
+    package_breakdown = db.execute(
+        select(EncounterSetGradingPackage.name, func.count(EncounterSetGradingPackage.id))
+        .join(PatientEncounters, PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id)
+        .where(PatientEncounters.project_id == project.id, encounter_scope)
+        .group_by(EncounterSetGradingPackage.name)
+        .order_by(EncounterSetGradingPackage.name)
+    ).all()
+    package_help = "Each workflow is created for one EncounterSet from a configured grading package and contains one or more grading tasks."
+    if package_breakdown:
+        package_help += " " + "; ".join(
+            f"{name}: {count}" for name, count in package_breakdown
+        )
     task_count = sum(row.task_count for row in _grading_rows(db, project.id, scope))
-    report_counts = {
-        "dr": _report_count(db, DiabeticRetinopathyReport, project.id, encounter_scope),
-        "amd": _report_count(db, AMDReport, project.id, encounter_scope),
-        "glaucoma": _report_count(db, GlaucomaReport, project.id, encounter_scope),
-    }
-    wadhwani_count = _wadhwani_count(db, project.id, scope)
-
-    metrics = (
-        ProjectMetricDTO("encounter_sets", "EncounterSets", encounter_count),
-        ProjectMetricDTO("single_uploads", "Single-image uploads", direct_count),
-        ProjectMetricDTO("total_images", "Total images", set_image_count + direct_count),
-        ProjectMetricDTO("pregraded_images", "Pre-graded images", pregraded_count),
-        ProjectMetricDTO("grading_packages", "EncounterSet packages", package_count),
-        ProjectMetricDTO("grading_tasks", "Grading tasks", task_count),
-        ProjectMetricDTO("remidio_dr_reports", "Remidio DR reports", report_counts["dr"]),
-        ProjectMetricDTO("remidio_amd_reports", "Remidio AMD reports", report_counts["amd"]),
-        ProjectMetricDTO("remidio_glaucoma_reports", "Remidio glaucoma reports", report_counts["glaucoma"]),
-        ProjectMetricDTO("wadhwani_inferences", "Wadhwani glaucoma inferences", wadhwani_count),
-    )
     allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
         db,
@@ -148,10 +141,37 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
             db, user, project_id=project.id
         ),
     )
+    metrics = [
+        ProjectMetricDTO("encounter_sets", "EncounterSets", encounter_count),
+        ProjectMetricDTO("single_uploads", "Single-image uploads", direct_count),
+        ProjectMetricDTO("total_images", "Total images", set_image_count + direct_count),
+        ProjectMetricDTO("pregraded_images", "Pre-graded images", pregraded_count),
+        ProjectMetricDTO("grading_packages", "EncounterSet grading workflows", package_count, package_help),
+        ProjectMetricDTO("grading_tasks", "Grading tasks", task_count),
+    ]
+    if any(source.name == "Remidio API" for source in configuration["sources"]):
+        report_counts = {
+            "dr": _report_count(db, DiabeticRetinopathyReport, project.id, encounter_scope),
+            "amd": _report_count(db, AMDReport, project.id, encounter_scope),
+            "glaucoma": _report_count(db, GlaucomaReport, project.id, encounter_scope),
+        }
+        metrics.extend([
+            ProjectMetricDTO("remidio_dr_reports", "Remidio DR reports", report_counts["dr"]),
+            ProjectMetricDTO("remidio_amd_reports", "Remidio AMD reports", report_counts["amd"]),
+            ProjectMetricDTO("remidio_glaucoma_reports", "Remidio glaucoma reports", report_counts["glaucoma"]),
+        ])
+    if any(
+        analysis.provider == "wadhwani_glaucoma"
+        for analysis in configuration["automated_analyses"]
+    ):
+        metrics.append(ProjectMetricDTO(
+            "wadhwani_inferences", "Wadhwani glaucoma inferences",
+            _wadhwani_count(db, project.id, scope),
+        ))
     return ProjectSummaryDTO(
         project=_project_dto(project),
         scope=_scope_dto(db, scope),
-        metrics=metrics,
+        metrics=tuple(metrics),
         profiles=_profile_configuration(db, project.id),
         **configuration,
     )

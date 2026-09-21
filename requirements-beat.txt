@@ -16,6 +16,8 @@ celery==5.6.3
     # via fundus-img-xtract
 certifi==2026.4.22
     # via requests
+cffi==2.0.0 ; platform_python_implementation != 'PyPy'
+    # via cryptography
 charset-normalizer==3.4.7
     # via requests
 click==8.3.3
@@ -33,10 +35,14 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
+cryptography==50.0.0
+    # via fido2
 cyclonedx-python-lib==11.7.0
     # via pip-audit
 defusedxml==0.7.1
     # via py-serializable
+fido2==2.2.1
+    # via fundus-img-xtract
 filelock==3.29.0
     # via cachecontrol
 flask==3.1.3
@@ -98,6 +104,8 @@ psycopg2-binary==2.9.12
     # via fundus-img-xtract
 py-serializable==2.1.0
     # via cyclonedx-python-lib
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pygments==2.20.0
     # via rich
 pyparsing==3.3.2

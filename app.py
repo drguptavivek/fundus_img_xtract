@@ -638,7 +638,10 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/login/passkey/verify",
     }
 )
-PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
+# "/mobile/" covers the whole hosted Flutter build. The bare "/mobile" above only
+# 308-redirects here, and the manifest is fetched with credentials omitted, so
+# without the prefix an anonymous caller gets /login HTML in place of every asset.
+PUBLIC_SESSION_PREFIXES = ("/static/", "/help", "/mobile/")
 
 # Where a mobile bearer token may stand in for a web session: the grader PWA
 # and the grading / viewer / media APIs it needs. Nowhere else - a leaked

@@ -253,6 +253,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Public KPI API](docs/API/public-analytics/README.md) - Cached system-wide JSON and HTMX aggregates for public and mobile consumers
 - [Mobile API and hosted PWA](docs/API/mobile/README.md) - Bearer-auth mobile surface (auth, device enrolment, uploads, field encounter browser) and the `/mobile/` PWA served from `static/mobile-pwa/`
+- [Mobile PWA console errors](docs/errors/mobile-pwa-console-errors.md) - Triage of `/mobile/#/login` DevTools errors: the firewalled CanvasKit fetch that stops the app loading, the Roboto webfont timeout, the host-dependent `manifest.webmanifest` login-guard gap, and the extension noise to ignore
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation

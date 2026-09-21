@@ -83,13 +83,23 @@
           <div class="text-muted">{% if encounter_sets_configured %}EncounterSets are configured, but none are present for the selected project.{% else %}No EncounterSets configured for the selected project.{% endif %}</div>
           {% endfor %}
         </div>
-        {% if selected_month %}
-        <a class="btn btn-sm btn-outline-success flex-shrink-0"
-           href="{{ url_for('fundus_api.export_encounter_sets', project_id=selected_project_id, month=selected_month) }}"
-           title="Export selected month as Excel">
-          <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
-          <span>Export month</span>
-        </a>
+        {% if selected_project_id %}
+        <div class="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Export EncounterSets as Excel">
+          {% if selected_month %}
+          <a class="btn btn-outline-success"
+             href="{{ url_for('fundus_api.export_encounter_sets', project_id=selected_project_id, month=selected_month) }}"
+             title="Export selected month as Excel">
+            <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
+            <span>Export month</span>
+          </a>
+          {% endif %}
+          <a class="btn btn-outline-success"
+             href="{{ url_for('fundus_api.export_encounter_sets', project_id=selected_project_id) }}"
+             title="Export all months for this project as Excel">
+            <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
+            <span>Export all months</span>
+          </a>
+        </div>
         {% endif %}
       </div>
     </div>

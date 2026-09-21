@@ -36,8 +36,12 @@ from models import (
 @dataclass(frozen=True)
 class EncounterSetExportFilters:
     project_id: int | None
-    month: str
+    month: str | None
     lab_unit_id: int | None = None
+
+    @property
+    def all_months(self) -> bool:
+        return not (self.month or "").strip()
 
 
 class EncounterSetExportValidationError(ValueError):
@@ -95,7 +99,7 @@ def export_encounter_sets_xlsx(
 ) -> bytes:
     """Build a masked sheet unless the explicit PII action was selected."""
 
-    month_start, month_end = parse_export_month(filters.month)
+    month_start, month_end = (None, None) if filters.all_months else parse_export_month(filters.month or "")
     encounters = _load_encounters(
         db,
         user,
@@ -112,10 +116,13 @@ def export_encounter_sets_xlsx(
         for prefix, _model, relationship in _OCR_MODELS
     }
 
+    metadata_headers = collect_metadata_headers(encounters)
+
     headers = list(BASE_HEADERS)
     for prefix, model, _relationship in _OCR_MODELS:
         for index in range(1, max_rows[prefix] + 1):
             headers.extend(f"{prefix}_{index}_{column.name}" for column in model.__table__.columns)
+    headers.extend(metadata_headers)
 
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet("EncounterSet EMR Data")
@@ -126,6 +133,7 @@ def export_encounter_sets_xlsx(
             target_timezone,
             max_rows,
             include_identifiers=include_identifiers,
+            metadata_headers=metadata_headers,
         )
         for encounter in encounters
     )
@@ -135,13 +143,62 @@ def export_encounter_sets_xlsx(
     return buffer.getvalue()
 
 
+_METADATA_SECTIONS = ("patient", "encounter")
+
+
+def _metadata_sections(metadata: Any) -> dict[str, dict[str, Any]]:
+    """Return the browser-visible metadata sections plus flat top-level scalars.
+
+    Remidio API and IITK API rows nest values under ``patient``/``encounter``;
+    IITK ZIP rows keep flat top-level keys. Both shapes are exported so the data
+    manager can correlate EncounterSets with other data sources. Internal
+    sections such as ``upload`` are not exported.
+    """
+
+    if not isinstance(metadata, dict):
+        return {}
+    sections: dict[str, dict[str, Any]] = {}
+    for section in _METADATA_SECTIONS:
+        value = metadata.get(section)
+        if isinstance(value, dict) and value:
+            sections[section] = value
+    flat = {key: value for key, value in metadata.items() if not isinstance(value, dict)}
+    if flat:
+        sections[""] = flat
+    return sections
+
+
+def _metadata_header(section: str, key: str) -> str:
+    return f"metadata_{section}_{key}" if section else f"metadata_{key}"
+
+
+def collect_metadata_headers(encounters: Iterable[PatientEncounters]) -> list[str]:
+    """Return the sorted union of metadata columns across the exported rows."""
+
+    headers: set[str] = set()
+    for encounter in encounters:
+        for section, values in _metadata_sections(encounter.metadata_json).items():
+            headers.update(_metadata_header(section, str(key)) for key in values)
+    return sorted(headers)
+
+
+def _metadata_values(metadata: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for section, section_values in _metadata_sections(metadata).items():
+        for key, value in section_values.items():
+            if isinstance(value, (list, tuple)) and all(not isinstance(item, (dict, list, tuple)) for item in value):
+                value = ", ".join("" if item is None else str(item) for item in value)
+            values[_metadata_header(section, str(key))] = value
+    return values
+
+
 def _load_encounters(
     db: Session,
     user,
     project_id: int | None,
     lab_unit_id: int | None,
-    month_start: date,
-    month_end: date,
+    month_start: date | None,
+    month_end: date | None,
     *,
     include_identifiers: bool,
 ) -> list[PatientEncounters]:
@@ -178,9 +235,13 @@ def _load_encounters(
     filters = (
         PatientEncounters.is_set_based.is_(True),
         PatientEncounters.project_id == project_id,
-        PatientEncounters.capture_date_dt >= month_start,
-        PatientEncounters.capture_date_dt < month_end,
     )
+    if month_start is not None and month_end is not None:
+        filters = (
+            *filters,
+            PatientEncounters.capture_date_dt >= month_start,
+            PatientEncounters.capture_date_dt < month_end,
+        )
     columns = encounter_columns(PatientEncounters)
     if lab_unit_id is not None:
         filters = (*filters, PatientEncounters.lab_unit_id == lab_unit_id)
@@ -232,6 +293,7 @@ def _encounter_row(
     max_rows: dict[str, int],
     *,
     include_identifiers: bool,
+    metadata_headers: Iterable[str] = (),
 ) -> dict[str, Any]:
     metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
     patient_metadata = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
@@ -283,6 +345,9 @@ def _encounter_row(
             value = values[index] if index < len(values) else None
             for column in model.__table__.columns:
                 row[f"{prefix}_{index + 1}_{column.name}"] = getattr(value, column.name) if value else ""
+    metadata_values = _metadata_values(metadata)
+    for header in metadata_headers:
+        row[header] = metadata_values.get(header, "")
     if not include_identifiers:
         for key in tuple(row):
             lowered = key.lower()
@@ -297,6 +362,14 @@ def _encounter_row(
                     "filename",
                     "metadata_json",
                     "remarks",
+                    "mrn",
+                    "patient_folder",
+                    "dob",
+                    "date_of_birth",
+                    "phone",
+                    "mobile",
+                    "email",
+                    "address",
                 )
             ):
                 row[key] = "Anonymous" if "name" in lowered and "file" not in lowered else "masked"

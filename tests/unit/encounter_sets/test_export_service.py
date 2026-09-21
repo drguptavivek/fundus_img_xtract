@@ -205,3 +205,212 @@ def test_non_remidio_flat_metadata_fills_demographics_and_capture_time():
 @pytest.mark.parametrize("value", ["=1+1", "+cmd", "-2+3", "@SUM(A1:A2)"])
 def test_xlsx_value_neutralizes_formula_prefixes(value):
     assert export_service._xlsx_value(value) == f"'{value}"
+
+
+def _iitk_api_encounter(encounter_id: int = 4921):
+    return SimpleNamespace(
+        id=encounter_id,
+        patient_id="107999738",
+        name="MRN107999738",
+        capture_date="2026-09-18",
+        capture_date_dt=date(2026, 9, 18),
+        metadata_json={
+            "patient": {
+                "hospital_UHID": "107999738",
+                "patient_age_yrs": 63,
+                "sex": "male",
+                "site_recruitment": "delhi",
+            },
+            "encounter": {
+                "source_session_id": "929555bc-ae92-43d8-8525-5f36127e7528",
+                "capture_datetime": "2026-09-18T11:05:10.597253Z",
+                "mode_capture": "closeup",
+                "eye_laterality": "ou",
+                "patient_diagnosis": "other",
+                "patient_diagnosis_other": "Blephrospasm",
+                "captured_positions": ["primary", "up_left", "composite", "consent"],
+                "expected_positions": 9,
+                "capture_status": "complete",
+                "clinician_uid": None,
+            },
+            "upload": {"source_kind": "iitk_api", "mapped_lab_unit_id": 7},
+        },
+        encounter_set_images=[SimpleNamespace(id=1)],
+        encounter_set_attachments=[],
+        dr_reports=[],
+        glaucoma_reports=[],
+        glaucoma_results_cleaned=[],
+        amd_reports=[],
+    )
+
+
+def test_collect_metadata_headers_unions_sections_and_flat_keys_but_skips_upload():
+    nested = _iitk_api_encounter()
+    flat = SimpleNamespace(metadata_json={"source_kind": "iitk_zip", "age": 51, "captured_positions": ["primary"]})
+    headers = export_service.collect_metadata_headers([nested, flat, SimpleNamespace(metadata_json=None)])
+
+    assert headers == sorted(headers)
+    assert "metadata_patient_site_recruitment" in headers
+    assert "metadata_encounter_patient_diagnosis_other" in headers
+    assert "metadata_age" in headers
+    assert "metadata_captured_positions" in headers
+    assert not any(header.startswith("metadata_upload") for header in headers)
+
+
+@pytest.mark.parametrize("include_identifiers", [True, False])
+def test_export_includes_patient_and_encounter_metadata_columns(monkeypatch, include_identifiers):
+    encounter = _iitk_api_encounter()
+    monkeypatch.setattr(export_service, "_load_encounters", lambda *_args, **_kwargs: [encounter])
+    monkeypatch.setattr(export_service, "_load_remidio_exams", lambda *_args: {})
+
+    content = export_encounter_sets_xlsx(
+        object(),
+        user=object(),
+        filters=EncounterSetExportFilters(project_id=5, month="2026-09"),
+        timezone_name="Asia/Kolkata",
+        include_identifiers=include_identifiers,
+    )
+    sheet = load_workbook(io.BytesIO(content), read_only=True).active
+    headers = list(next(sheet.iter_rows(values_only=True)))
+    values = list(next(sheet.iter_rows(min_row=2, max_row=2, values_only=True)))
+    row = dict(zip(headers, values, strict=True))
+
+    assert headers.index("metadata_encounter_capture_status") > headers.index("has_AMD_PDF")
+    assert row["metadata_patient_sex"] == "male"
+    assert row["metadata_patient_patient_age_yrs"] == 63
+    assert row["metadata_patient_site_recruitment"] == "delhi"
+    assert row["metadata_encounter_mode_capture"] == "closeup"
+    assert row["metadata_encounter_eye_laterality"] == "ou"
+    assert row["metadata_encounter_patient_diagnosis"] == "other"
+    assert row["metadata_encounter_patient_diagnosis_other"] == "Blephrospasm"
+    assert row["metadata_encounter_captured_positions"] == "primary, up_left, composite, consent"
+    assert row["metadata_encounter_expected_positions"] == 9
+    assert row["metadata_encounter_capture_status"] == "complete"
+    assert row["metadata_encounter_clinician_uid"] in (None, "")
+    assert row["metadata_encounter_source_session_id"] == "929555bc-ae92-43d8-8525-5f36127e7528"
+    assert row["metadata_encounter_capture_datetime"] == "2026-09-18T11:05:10.597253Z"
+    assert row["capture_date"] == "2026-09-18"
+    assert row["capture_time"] == "16:35:10"
+    expected_uhid = "107999738" if include_identifiers else "masked"
+    assert row["metadata_patient_hospital_UHID"] == expected_uhid
+    assert row["hospital_UHID"] == expected_uhid
+    assert "metadata_upload_source_kind" not in headers
+
+
+def test_missing_metadata_columns_are_blank_for_rows_without_that_key(monkeypatch):
+    nested = _iitk_api_encounter()
+    flat = SimpleNamespace(
+        id=4002,
+        patient_id="IITK-9",
+        name="MRNIITK-9",
+        capture_date="2026-09-15",
+        capture_date_dt=date(2026, 9, 15),
+        metadata_json={"source_kind": "iitk_zip", "age": 51, "gender": "M"},
+        encounter_set_images=[],
+        encounter_set_attachments=[],
+        dr_reports=[],
+        glaucoma_reports=[],
+        glaucoma_results_cleaned=[],
+        amd_reports=[],
+    )
+    monkeypatch.setattr(export_service, "_load_encounters", lambda *_args, **_kwargs: [nested, flat])
+    monkeypatch.setattr(export_service, "_load_remidio_exams", lambda *_args: {})
+
+    content = export_encounter_sets_xlsx(
+        object(),
+        user=object(),
+        filters=EncounterSetExportFilters(project_id=5, month="2026-09"),
+        timezone_name="UTC",
+        include_identifiers=True,
+    )
+    sheet = load_workbook(io.BytesIO(content), read_only=True).active
+    rows = list(sheet.iter_rows(values_only=True))
+    headers = list(rows[0])
+    first = dict(zip(headers, rows[1], strict=True))
+    second = dict(zip(headers, rows[2], strict=True))
+
+    assert first["metadata_source_kind"] in (None, "")
+    assert first["metadata_patient_site_recruitment"] == "delhi"
+    assert second["metadata_source_kind"] == "iitk_zip"
+    assert second["metadata_age"] == 51
+    assert second["metadata_patient_site_recruitment"] in (None, "")
+
+
+def test_blank_month_exports_all_months(monkeypatch):
+    captured = {}
+
+    def fake_load(_db, _user, project_id, lab_unit_id, month_start, month_end, *, include_identifiers):
+        captured.update(
+            project_id=project_id,
+            lab_unit_id=lab_unit_id,
+            month_start=month_start,
+            month_end=month_end,
+            include_identifiers=include_identifiers,
+        )
+        return []
+
+    monkeypatch.setattr(export_service, "_load_encounters", fake_load)
+    monkeypatch.setattr(export_service, "_load_remidio_exams", lambda *_args: {})
+
+    filters = EncounterSetExportFilters(project_id=5, month="")
+    assert filters.all_months is True
+    assert EncounterSetExportFilters(project_id=5, month="2026-09").all_months is False
+
+    content = export_encounter_sets_xlsx(
+        object(), user=object(), filters=filters, timezone_name="UTC", include_identifiers=False
+    )
+    sheet = load_workbook(io.BytesIO(content), read_only=True).active
+    assert list(next(sheet.iter_rows(values_only=True))) == export_service.BASE_HEADERS
+    assert captured == {
+        "project_id": 5,
+        "lab_unit_id": None,
+        "month_start": None,
+        "month_end": None,
+        "include_identifiers": False,
+    }
+
+
+@pytest.mark.parametrize("include_identifiers", [True, False])
+def test_masked_export_hides_identifier_bearing_metadata_keys(include_identifiers):
+    encounter = SimpleNamespace(
+        id=4003,
+        patient_id="IITK-9",
+        name="MRNIITK-9",
+        capture_date="2026-09-15",
+        capture_date_dt=date(2026, 9, 15),
+        metadata_json={
+            "source_kind": "iitk_zip",
+            "source_zip_filename": "batch_2026-09.zip",
+            "source_patient_folder": "MRN_IITK-9_2026-09-15",
+            "patient": {"remidio_patient_id": "RP-1", "patient_dob": "1962-01-01", "sex": "M"},
+            "encounter": {"clinician_uid": "clin-7", "mode_capture": "closeup"},
+        },
+        encounter_set_images=[],
+        encounter_set_attachments=[],
+        dr_reports=[],
+        glaucoma_reports=[],
+        glaucoma_results_cleaned=[],
+        amd_reports=[],
+    )
+    headers = export_service.collect_metadata_headers([encounter])
+    row = export_service._encounter_row(
+        encounter,
+        None,
+        export_service._target_timezone("UTC"),
+        {prefix: 0 for prefix, _model, _relationship in export_service._OCR_MODELS},
+        include_identifiers=include_identifiers,
+        metadata_headers=headers,
+    )
+
+    identifier_columns = {
+        "metadata_source_zip_filename": "batch_2026-09.zip",
+        "metadata_source_patient_folder": "MRN_IITK-9_2026-09-15",
+        "metadata_patient_remidio_patient_id": "RP-1",
+        "metadata_patient_patient_dob": "1962-01-01",
+    }
+    for column, raw in identifier_columns.items():
+        assert row[column] == (raw if include_identifiers else "masked")
+    assert row["metadata_source_kind"] == "iitk_zip"
+    assert row["metadata_patient_sex"] == "M"
+    assert row["metadata_encounter_clinician_uid"] == "clin-7"
+    assert row["metadata_encounter_mode_capture"] == "closeup"

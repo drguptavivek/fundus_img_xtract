@@ -31,7 +31,10 @@ def _optional_positive_int(name: str) -> int | None:
 @api_bp.route("/encounter-sets/export.xlsx", methods=["GET"])
 @login_required
 def export_encounter_sets():
-    """Download one row per scoped EncounterSet for a project and month."""
+    """Download one row per scoped EncounterSet for a project and month.
+
+    Omit ``month`` to export every month for the project.
+    """
 
     month = (request.args.get("month") or "").strip()
     try:
@@ -57,7 +60,7 @@ def export_encounter_sets():
         io.BytesIO(content),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
-        download_name=f"encountersets_project_{project_id}_{month}_{timestamp}.xlsx",
+        download_name=f"encountersets_project_{project_id}_{month or 'all-months'}_{timestamp}.xlsx",
     )
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -67,7 +70,10 @@ def export_encounter_sets():
 @login_required
 @reauth_required()
 def export_encounter_sets_pii():
-    """Download the explicit identifier-bearing EncounterSet workbook."""
+    """Download the explicit identifier-bearing EncounterSet workbook.
+
+    Omit ``month`` to export every month for the project.
+    """
     month = (request.args.get("month") or "").strip()
     try:
         project_id = _optional_positive_int("project_id")
@@ -91,7 +97,7 @@ def export_encounter_sets_pii():
         io.BytesIO(content),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
-        download_name=f"encountersets_pii_{project_id or 'classical'}_{month}_{timestamp}.xlsx",
+        download_name=f"encountersets_pii_{project_id or 'classical'}_{month or 'all-months'}_{timestamp}.xlsx",
     )
     response.headers["Cache-Control"] = "no-store"
     return response

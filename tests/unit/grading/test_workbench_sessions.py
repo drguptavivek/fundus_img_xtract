@@ -23,7 +23,7 @@ from grading.workbench.sessions import (
     resume,
 )
 import grading.workbench.sessions as sessions_module
-from models import DiseaseGrading, Grade, GradingTask
+from models import DiseaseGrading, Grade, GradingTask, UserDiseaseUnitRole
 from tests.helpers.test_factories import TestDataFactory
 
 
@@ -175,6 +175,66 @@ def test_resume_restores_session_draft_without_creating_grade(
         "annotation_policy_revision": target_config["annotation_policy_revision"],
         "feature_geometry": None,
     }
+
+
+def test_draft_keeps_geometry_separate_for_linked_task_targets(
+    db_session, resident_user, core_test_data
+):
+    user = db_session.merge(resident_user)
+    lab = db_session.merge(core_test_data["lab_unit"])
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    dr = db_session.merge(core_test_data["dr"])
+    db_session.add(UserDiseaseUnitRole(
+        user_id=user.id,
+        disease_id=dr.id,
+        lab_unit_id=lab.id,
+        can_grade_resident=True,
+    ))
+    db_session.flush()
+    first = _encounter_task(db_session, disease_id=glaucoma.id, lab_unit_id=lab.id)
+    second = _encounter_task(db_session, disease_id=dr.id, lab_unit_id=lab.id)
+    session, token = _session(db_session, user_id=user.id, task=first)
+    session.targets.append(GradingWorkbenchSessionTarget(
+        task_id=second.id,
+        role_slot="resident",
+        target_order=1,
+        acquired_task_state=second.state,
+        acquired_at=session.acquired_at,
+    ))
+    snapshot, fingerprint = configuration_snapshot(
+        db_session, tasks=[first, second], workflow="ordinary", role_slot="resident"
+    )
+    session.configuration_snapshot_json = snapshot
+    session.configuration_fingerprint = fingerprint
+    db_session.flush()
+
+    geometries = {
+        first.uuid: {"items": [{"geometry_type": "box", "roi": [[1, 2], [3, 4]]}]},
+        second.uuid: {"items": [{"geometry_type": "polygon", "polygon": [[5, 6], [7, 8], [9, 10]]}]},
+    }
+    targets = {target["task_uuid"]: target for target in snapshot["targets"]}
+    observations = {
+        task_uuid: {
+            "disease_grading_id": targets[task_uuid]["label_ids"][0],
+            "selected_feature_ids": [],
+            "annotation_policy_revision": targets[task_uuid]["annotation_policy_revision"],
+            "feature_geometry": geometry,
+        }
+        for task_uuid, geometry in geometries.items()
+    }
+
+    result = save_draft(
+        db_session,
+        session_uuid=session.uuid,
+        user_id=user.id,
+        raw_token=token,
+        token_generation=1,
+        payload={"configuration_fingerprint": fingerprint, "observations": observations},
+    )
+
+    assert result["target_count"] == 2
+    assert {task_uuid: saved["feature_geometry"] for task_uuid, saved in session.draft_observations_json.items()} == geometries
+    assert db_session.query(Grade).filter(Grade.task_id.in_([first.id, second.id])).count() == 0
 
 
 def test_stored_token_load_revalidates_access_and_configuration(

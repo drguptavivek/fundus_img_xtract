@@ -1041,6 +1041,14 @@
         chosen = ctx.key;
       }
     });
+    if (chosen !== state.activeContextKey) {
+      state.drawing = null;
+      state.pointDrag = null;
+      state.painting = null;
+      state.pendingCreateType = null;
+      state.brushCursorPoint = null;
+      state.cursorCanvasPoint = null;
+    }
     state.activeContextKey = chosen;
     if (!chosen || (state.selectedBoxRef && state.selectedBoxRef.ctxKey !== chosen)) {
       clearSelectedBox();
@@ -4293,12 +4301,9 @@
     document.addEventListener("fgw:panel-changed", queueRefresh);
     document.addEventListener("fgw:features-changed", queueRefresh);
 
-    const carousel = document.getElementById("linked-grading-carousel");
-    if (carousel) {
-      carousel.addEventListener("slid.bs.carousel", () => {
-        queueRefresh();
-      });
-    }
+    document.querySelectorAll("#linked-grading-carousel, #workbench-panels").forEach((carousel) => {
+      carousel.addEventListener("slid.bs.carousel", queueRefresh);
+    });
 
     if (form) {
       form.addEventListener("submit", () => {

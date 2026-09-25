@@ -65,3 +65,15 @@ def test_annotation_editor_tracks_both_linked_and_package_carousels() -> None:
     assert '#linked-grading-carousel, #workbench-panels' in editor
     assert 'carousel.addEventListener("slid.bs.carousel", queueRefresh)' in editor
     assert 'candidate.canvas.style.display = candidate === ctx ? "block" : "none"' in editor
+
+
+def test_workbench_annotation_class_follows_grade_and_task() -> None:
+    editor = (STATIC_JS_DIR / "feature-geometry-editor.js").read_text()
+    controller = (STATIC_JS_DIR / "grading-workbench-session.js").read_text()
+
+    assert 'workbenchPanel.querySelector("[data-grade-option]:checked")' in editor
+    assert 'prompt.textContent = "Select a class"' in editor
+    assert 'state.activeFeatureId = state.contexts.get(chosen)?.activeFeatureId ?? null' in editor
+    assert 'initial.selected_class_id' in editor
+    assert 'document.addEventListener("gwb:grade-changed"' in editor
+    assert "detail: {taskUuid: panel.dataset.taskUuid}" in controller

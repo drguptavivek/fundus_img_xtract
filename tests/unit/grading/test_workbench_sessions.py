@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from auth.utils import utcnow
 from grading.workbench.configuration import configuration_snapshot
 from grading.workbench.errors import AnnotationPolicyChanged, SessionSuperseded
-from grading.workbench.drafts import save_draft
+from grading.workbench.drafts import _normalize_observation, save_draft
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import (
     _assert_access,
@@ -235,6 +235,31 @@ def test_draft_keeps_geometry_separate_for_linked_task_targets(
     assert result["target_count"] == 2
     assert {task_uuid: saved["feature_geometry"] for task_uuid, saved in session.draft_observations_json.items()} == geometries
     assert db_session.query(Grade).filter(Grade.task_id.in_([first.id, second.id])).count() == 0
+
+
+def test_draft_class_selection_requires_grade_but_grade_does_not_require_class():
+    geometry = {"version": 1, "grid": {"rows": 8, "cols": 8}, "selected_class_id": -17, "items": []}
+    observation = {
+        "disease_grading_id": 5,
+        "selected_feature_ids": [],
+        "annotation_policy_revision": 3,
+        "feature_geometry": geometry,
+    }
+
+    graded = _normalize_observation(observation, allowed_label_ids={5}, annotation_policy_revision=3)
+    ungraded = _normalize_observation(
+        {**observation, "disease_grading_id": None},
+        allowed_label_ids={5}, annotation_policy_revision=3,
+    )
+    grade_only = _normalize_observation(
+        {**observation, "feature_geometry": None},
+        allowed_label_ids={5}, annotation_policy_revision=3,
+    )
+
+    assert graded["feature_geometry"] == geometry
+    assert ungraded["feature_geometry"] is None
+    assert grade_only["disease_grading_id"] == 5
+    assert grade_only["feature_geometry"] is None
 
 
 def test_stored_token_load_revalidates_access_and_configuration(

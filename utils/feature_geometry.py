@@ -53,6 +53,12 @@ def validate_feature_geometry_payload(
         return False, "Invalid feature geometry payload."
 
     allowed_features = set(selected_feature_ids or [])
+    selected_class_id = payload.get("selected_class_id")
+    if selected_class_id is not None:
+        if isinstance(selected_class_id, bool) or not isinstance(selected_class_id, int) or selected_class_id == 0:
+            return False, "Invalid selected annotation class."
+        if selected_class_id > 0 and selected_class_id not in allowed_features:
+            return False, "Selected annotation class does not match selected features."
     if (
         any(
             isinstance(item, dict)
@@ -287,6 +293,8 @@ def prepare_feature_geometry_for_storage(
             "ai_ready": True,
         },
     }
+    if payload.get("selected_class_id") is not None:
+        normalized_payload["selected_class_id"] = payload["selected_class_id"]
     if annotation_context:
         normalized_payload["policy_source"] = annotation_context.get("policy_source")
         normalized_payload["project_id"] = annotation_context.get("project_id")

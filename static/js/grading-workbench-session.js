@@ -285,6 +285,9 @@
       option.addEventListener('change', () => {
         window.linkedGradingData[panel.dataset.taskUuid].existingSelectedFeatures = [];
         renderFeatures(panel);
+        document.dispatchEvent(new CustomEvent('gwb:grade-changed', {
+          detail: {taskUuid: panel.dataset.taskUuid}
+        }));
         updateProgress();
         const fieldset = panel.querySelector('[data-feature-fieldset]');
         if (fieldset && !fieldset.classList.contains('d-none')) {
@@ -301,6 +304,9 @@
       data.existingSelectedFeatures = [];
       panel.querySelector('[data-feature-geometry-field]').value = '';
       renderFeatures(panel);
+      document.dispatchEvent(new CustomEvent('gwb:grade-changed', {
+        detail: {taskUuid: panel.dataset.taskUuid}
+      }));
       updateProgress();
       scheduleDraft(0);
     });

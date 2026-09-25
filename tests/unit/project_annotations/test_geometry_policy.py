@@ -48,6 +48,13 @@ def test_accepts_compatible_project_class_annotation():
     assert error == ""
 
 
+def test_selected_class_without_geometry_must_be_active_in_policy():
+    assert validate_geometry_policy({"selected_class_id": -11, "items": []}, _context()) == (True, "")
+    valid, error = validate_geometry_policy({"selected_class_id": -12, "items": []}, _context())
+    assert valid is False
+    assert "unavailable" in error
+
+
 def test_rejects_stale_policy_and_single_class_duplicates():
     valid, error = validate_geometry_policy(
         {"policy_revision": 2, "items": [_item()]}, _context()

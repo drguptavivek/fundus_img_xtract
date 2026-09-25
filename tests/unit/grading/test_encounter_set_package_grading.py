@@ -36,6 +36,15 @@ def test_package_workflow_orders_scope_images_then_encounter_targets():
     assert [task.id for task in ordered] == [3, 4, 2, 1, 5]
 
 
+def test_encounter_image_buckets_scroll_within_desktop_viewer():
+    root = Path(package_transport.__file__).parents[1]
+    styles = (root / "static/css/grading-workbench.css").read_text()
+
+    assert "grid-template-rows: minmax(0, 1fr)" in styles
+    assert ".gwb-encounter-bucket { min-height: 0; overflow-y: auto;" in styles
+    assert ".gwb-encounter-bucket { overflow: visible;" in styles
+
+
 def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     # The workbench source is split across the page, its shared body partial,
     # its stylesheet and its session controller; assert against the union.
@@ -117,7 +126,7 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "!selectedGrade(activePanel)" in template
     assert "await flushDraft()" in template
     assert "if (!draftDirty) carousel?.to(panelIndex + 1)" in template
-    assert "annotation-tools-v3-viewport-canvas-v2" in template
+    assert "annotation-tools-v3-viewport-canvas-v3" in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
     assert "imggr-cdr-toggle" in template

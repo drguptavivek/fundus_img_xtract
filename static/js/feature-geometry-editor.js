@@ -271,6 +271,8 @@
 
   function getSelectedFeatureIds(ctx) {
     if (!ctx || !ctx.featuresContainerEl) return [];
+    const workbenchPanel = ctx.sectionEl?.closest("#grading-workbench [data-task-uuid]");
+    if (workbenchPanel && !workbenchPanel.querySelector("[data-grade-option]:checked")) return [];
     const boxes = ctx.featuresContainerEl.querySelectorAll('input[type="checkbox"]:checked');
     const ids = [];
     boxes.forEach((b) => {
@@ -281,7 +283,10 @@
     if (policy?.enabled && Array.isArray(policy.project_classes)) {
       policy.project_classes.forEach((projectClass) => {
         const id = Number(projectClass?.id);
-        if (projectClass?.active !== false && Number.isInteger(id) && id > 0) ids.push(-id);
+        const usedBySavedAnnotation = (ctx.payload?.items || []).some(
+          (item) => item.class_source === "project_class" && item.project_class_id === id
+        );
+        if ((projectClass?.active !== false || usedBySavedAnnotation) && Number.isInteger(id) && id > 0) ids.push(-id);
       });
     }
     return ids;
@@ -332,6 +337,7 @@
     return {
       version: 1,
       grid: { rows: grid, cols: grid },
+      selected_class_id: null,
       items: [],
     };
   }
@@ -344,6 +350,9 @@
   function sanitizePayload(raw, fallbackGrid) {
     const grid = sanitizeGrid(raw?.grid?.rows ?? raw?.grid?.cols ?? fallbackGrid ?? DEFAULT_GRID);
     const payload = createEmptyPayload(grid);
+    if (Number.isInteger(raw?.selected_class_id) && raw.selected_class_id !== 0) {
+      payload.selected_class_id = raw.selected_class_id;
+    }
 
     if (!raw || typeof raw !== "object" || !Array.isArray(raw.items)) return payload;
 
@@ -607,7 +616,8 @@
         return serialized;
       });
 
-    if (!items.length) {
+    const selectedClassId = ctx === activeContext() ? state.activeFeatureId : ctx.activeFeatureId;
+    if (!items.length && selectedClassId == null) {
       return "";
     }
 
@@ -615,6 +625,7 @@
       version: 1,
       policy_revision: Number(ctx.annotationContext?.revision || 0),
       grid: { rows: grid, cols: grid },
+      selected_class_id: selectedClassId,
       items,
     });
   }
@@ -761,6 +772,8 @@
     if (!state.canvas) return;
     if (
       activeContext()?.annotationContext?.enabled !== true
+      || state.activeFeatureId == null
+      || !getSelectedFeatureIds(activeContext()).includes(state.activeFeatureId)
       || activeContext()?.historicalProjectClass
     ) {
       state.canvas.style.pointerEvents = "none";
@@ -1042,6 +1055,9 @@
       }
     });
     if (chosen !== state.activeContextKey) {
+      const previous = state.contexts.get(state.activeContextKey);
+      if (previous) previous.activeFeatureId = state.activeFeatureId;
+      state.activeFeatureId = state.contexts.get(chosen)?.activeFeatureId ?? null;
       state.drawing = null;
       state.pointDrag = null;
       state.painting = null;
@@ -1059,10 +1075,11 @@
   function syncFeatureSelection(ctx) {
     if (!ctx) return;
     const selected = getSelectedFeatureIds(ctx);
-    if (!selected.length) return;
     if (!selected.includes(state.activeFeatureId)) {
-      state.activeFeatureId = selected[0];
+      state.activeFeatureId = null;
+      state.mode = MODES.PAN;
     }
+    ctx.activeFeatureId = state.activeFeatureId;
   }
 
   function updatePanelFeatureOptions(ctx) {
@@ -1070,6 +1087,10 @@
     const selected = getSelectedFeatureIds(ctx);
     const previous = state.activeFeatureId;
     ctx.featureSelectEl.replaceChildren();
+    const prompt = document.createElement("option");
+    prompt.value = "";
+    prompt.textContent = "Select a class";
+    ctx.featureSelectEl.appendChild(prompt);
 
     const gradingFeatureGroup = document.createElement("optgroup");
     gradingFeatureGroup.label = "Selected grading features";
@@ -1087,19 +1108,29 @@
 
     if (!selected.length) {
       state.activeFeatureId = null;
+      ctx.activeFeatureId = null;
       ctx.featureSelectEl.disabled = true;
+      ctx.featureSelectEl.value = "";
+      ctx.annotationSelectEl.replaceChildren();
       ctx.annotationSelectEl.disabled = true;
-      if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
+      refreshAnnotationButtons(ctx);
       refreshFeatureDependentButtons(ctx);
       return;
     }
 
     ctx.featureSelectEl.disabled = false;
-    const next = selected.includes(previous) ? previous : selected[0];
+    const next = selected.includes(previous) ? previous : null;
     state.activeFeatureId = next;
-    ctx.featureSelectEl.value = String(next);
-    updateFeatureColorChip(ctx, next);
-    updateAnnotationOptions(ctx);
+    ctx.activeFeatureId = next;
+    ctx.featureSelectEl.value = next == null ? "" : String(next);
+    if (next != null) {
+      updateFeatureColorChip(ctx, next);
+      updateAnnotationOptions(ctx);
+    } else {
+      ctx.annotationSelectEl.replaceChildren();
+      ctx.annotationSelectEl.disabled = true;
+      refreshAnnotationButtons(ctx);
+    }
     refreshFeatureDependentButtons(ctx);
   }
 
@@ -1151,6 +1182,7 @@
       if (ctx.viewAnnotationBtn) ctx.viewAnnotationBtn.disabled = true;
       if (ctx.editAnnotationBtn) ctx.editAnnotationBtn.disabled = true;
       if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
+      if (ctx.clearAllAnnotationsBtn) ctx.clearAllAnnotationsBtn.disabled = true;
       return;
     }
     if (ctx.viewAnnotationBtn) {
@@ -1196,9 +1228,11 @@
     if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !allowed.has("brush_mask");
     const assertButton = ctx.panelTopEl.querySelector("[data-fgx-assert-class]");
     const projectClass = hasFeature ? projectClassForFeature(ctx, state.activeFeatureId) : null;
-    if (assertButton) assertButton.disabled = projectClass?.localization !== "none";
+    if (assertButton) assertButton.disabled = projectClass?.localization !== "none" || !ctx.annotationContext?.enabled;
+    const moveButton = ctx.panelTopEl.querySelector('[data-fgx-mode="move"]');
+    if (moveButton) moveButton.disabled = !hasFeature;
     const undoBtn = ctx.panelTopEl.querySelector("[data-fgx-undo]");
-    if (undoBtn) undoBtn.disabled = !ctx.undoStack?.length;
+    if (undoBtn) undoBtn.disabled = !hasFeature || !ctx.undoStack?.length;
   }
 
   function updateFeatureColorChip(ctx, featureId) {
@@ -1421,13 +1455,23 @@
     }
 
     ctx.featureSelectEl.addEventListener("change", () => {
-      const id = Number(ctx.featureSelectEl.value);
-      if (Number.isNaN(id)) return;
+      const id = ctx.featureSelectEl.value ? Number(ctx.featureSelectEl.value) : null;
+      if (id != null && Number.isNaN(id)) return;
       state.activeFeatureId = id;
+      ctx.activeFeatureId = id;
+      if (id == null) state.mode = MODES.PAN;
       clearSelectedBox();
-      updateFeatureColorChip(ctx, id);
-      updateAnnotationOptions(ctx);
+      if (id != null) {
+        updateFeatureColorChip(ctx, id);
+        updateAnnotationOptions(ctx);
+      } else {
+        ctx.annotationSelectEl.replaceChildren();
+        ctx.annotationSelectEl.disabled = true;
+        refreshAnnotationButtons(ctx);
+      }
       refreshFeatureDependentButtons(ctx);
+      setCanvasPointerMode();
+      syncField(ctx);
       redraw();
     });
 
@@ -1482,6 +1526,7 @@
       clearSelectedBox();
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
+      syncField(ctx);
       redraw();
     });
 
@@ -3122,6 +3167,12 @@
       return;
     }
 
+    const shortcutTool = {u: "box", y: "pyramid", i: "polygon", j: "ellipse", o: "brush_mask", p: "brush_mask"}[key];
+    if (shortcutTool && (
+      state.activeFeatureId == null
+      || !allowedToolsForFeature(ctx, state.activeFeatureId).includes(shortcutTool)
+    )) return;
+
     if (key === "u") { state.mode = MODES.ROI; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Bounding box mode: draw outline ROI."); event.preventDefault(); return; }
     if (key === "y") { state.mode = MODES.PYRAMID; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Pyramid mode."); event.preventDefault(); return; }
     if (key === "i") { enterPolygonEditMode(ctx); setStatus(ctx, "Polygon mode."); event.preventDefault(); return; }
@@ -4024,6 +4075,11 @@
       featuresContainerEl,
       hiddenField,
       payload: initial,
+      activeFeatureId: (
+        initial.selected_class_id
+        ?? initial.items[0]?.feature_id
+        ?? Number(featuresContainerEl.querySelector('input[type="checkbox"]:checked')?.value || 0)
+      ) || null,
       panelTopEl: null,
       panelBottomEl: null,
       featureSelectEl: null,
@@ -4274,6 +4330,17 @@
             const nextId = Number(t.value);
             if (!Number.isNaN(nextId)) {
               state.activeFeatureId = nextId;
+              ctx.activeFeatureId = nextId;
+              clearSelectedBox();
+            }
+          } else {
+            const removedId = Number(t.value);
+            ctx.payload.items = (ctx.payload.items || []).filter((item) => item.feature_id !== removedId);
+            delete ctx.activeAnnotationByFeature[removedId];
+            if (state.activeFeatureId === removedId) {
+              state.activeFeatureId = null;
+              ctx.activeFeatureId = null;
+              state.mode = MODES.PAN;
               clearSelectedBox();
             }
           }
@@ -4292,6 +4359,8 @@
         const ctx = activeContext();
         if (ctx) {
           ctx.payload.items = [];
+          ctx.activeFeatureId = null;
+          state.activeFeatureId = null;
           syncField(ctx);
         }
         window.setTimeout(queueRefresh, 0);
@@ -4300,6 +4369,23 @@
 
     document.addEventListener("fgw:panel-changed", queueRefresh);
     document.addEventListener("fgw:features-changed", queueRefresh);
+    document.addEventListener("gwb:grade-changed", (event) => {
+      const ctx = state.contexts.get(`linked:${event.detail?.taskUuid}`);
+      if (!ctx) return;
+      ctx.payload.items = [];
+      ctx.payload.selected_class_id = null;
+      ctx.activeFeatureId = null;
+      ctx.activeAnnotationByFeature = {};
+      ctx.undoStack = [];
+      if (activeContext() === ctx) {
+        state.activeFeatureId = null;
+        state.mode = MODES.PAN;
+        setCanvasPointerMode();
+      }
+      clearSelectedBox();
+      syncField(ctx);
+      queueRefresh();
+    });
 
     document.querySelectorAll("#linked-grading-carousel, #workbench-panels").forEach((carousel) => {
       carousel.addEventListener("slid.bs.carousel", queueRefresh);

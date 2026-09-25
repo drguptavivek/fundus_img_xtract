@@ -47,6 +47,23 @@ def test_validate_accepts_v1_payload() -> None:
     assert error == ""
 
 
+def test_selected_class_is_preserved_without_drawing_and_must_match_grade_features() -> None:
+    payload = {"version": 1, "grid": {"rows": 8, "cols": 8}, "selected_class_id": 101, "items": []}
+
+    assert validate_feature_geometry_payload(payload, [101], None) == (True, "")
+    assert prepare_feature_geometry_for_storage(payload, None)["selected_class_id"] == 101
+    valid, error = validate_feature_geometry_payload(payload, [], None)
+    assert valid is False
+    assert "selected features" in error
+
+
+def test_project_class_selection_is_preserved_without_drawing() -> None:
+    payload = {"version": 1, "grid": {"rows": 8, "cols": 8}, "selected_class_id": -17, "items": []}
+
+    assert validate_feature_geometry_payload(payload, [], None) == (True, "")
+    assert prepare_feature_geometry_for_storage(payload, None)["selected_class_id"] == -17
+
+
 def test_validate_rejects_wrong_version() -> None:
     payload = _valid_payload()
     payload["version"] = 2

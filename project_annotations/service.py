@@ -466,6 +466,16 @@ def validate_geometry_policy(
     items = payload.get("items")
     if not isinstance(items, list):
         return False, "Invalid feature geometry payload."
+    selected_class_id = payload.get("selected_class_id")
+    if selected_class_id is not None:
+        if isinstance(selected_class_id, bool) or not isinstance(selected_class_id, int) or selected_class_id == 0:
+            return False, "Invalid selected annotation class."
+        if not context.enabled:
+            return False, "Annotations are disabled for this project."
+        if selected_class_id < 0 and not any(
+            item.id == -selected_class_id and item.active for item in context.project_classes
+        ):
+            return False, "A project annotation class is inactive or unavailable."
     if not items:
         return True, ""
     if not context.enabled:

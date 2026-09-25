@@ -102,6 +102,16 @@ grading-scheme scope are obtained from the active grading task or linked panel.
 
 The resolved class palette has two explicit sources.
 
+In the grading workbench, each image task has its own grade, selected annotation
+class, and geometry. The grader selects a grade first. A class is optional, but
+must be selected before an annotation tool can be used. The class list and
+available tools follow the task's grade and project policy. Drafts and saved
+grades retain the selected class and any geometry for that task; returning to
+the image restores them. Changing or clearing the grade clears that task's
+class selection and annotations so geometry from the previous grade is not
+submitted with the new one. Final submission requires a grade for every
+editable target.
+
 ### 4.1 Grading-feature-backed classes
 
 After a grader selects a grade, the features configured for that grade become

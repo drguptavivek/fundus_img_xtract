@@ -189,6 +189,7 @@ class ProjectCapabilities:
     can_verify_direct_images: bool
     upload_kinds: frozenset[str]
     can_sync_remidio: bool
+    can_export_non_pii: bool
 
 
 def project_capabilities(db, *, user, project_id: int) -> ProjectCapabilities:
@@ -216,4 +217,7 @@ def project_capabilities(db, *, user, project_id: int) -> ProjectCapabilities:
         can_verify_direct_images=can_verify_direct_images(db, user, project_id=project_id),
         upload_kinds=kinds,
         can_sync_remidio=can_sync_remidio(db, user, project_id=project_id),
+        can_export_non_pii=_allowed(
+            db, user, project_id=project_id, roles={"data_manager"}
+        ),
     )

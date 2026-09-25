@@ -157,14 +157,23 @@ def job_status_json(job_token: str):
             
         # Add upload_type to the payload
         payload["upload_type"] = job.upload_type
-        if job.upload_type in ("discrepancy_export", "dataset_export"):
+        if job.upload_type in ("discrepancy_export", "dataset_export", "project_export"):
             payload["export_files"] = _list_export_files(job.token)
-            download_endpoint = (
-                "review.discrepancy_export_download"
-                if job.upload_type == "discrepancy_export"
-                else "analytics.dataset_export_download"
-            )
-            payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
+            if job.upload_type == "project_export":
+                payload["download_base"] = url_for(
+                    "fundus_api.download_project_export",
+                    project_id=job.project_id,
+                    job_token=job.token,
+                    filename="",
+                    _external=True,
+                )
+            else:
+                download_endpoint = (
+                    "review.discrepancy_export_download"
+                    if job.upload_type == "discrepancy_export"
+                    else "analytics.dataset_export_download"
+                )
+                payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
         if job.upload_type == "dataset_export":
             dataset_export = db.query(DatasetExport).filter(DatasetExport.job_id == job.id).first()
             if dataset_export and dataset_export.dataset:
@@ -184,7 +193,7 @@ def job_status_page(job_token: str):
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if not job or not _current_user_can_see(job, allowed_lab_units):
             abort(404)
-        is_export = job.upload_type in ("discrepancy_export", "dataset_export")
+        is_export = job.upload_type in ("discrepancy_export", "dataset_export", "project_export")
     if is_export:
         return render_template("jobs/export_job_status.html", job_id=job_token)
     return render_template("jobs/job_status.html", job_id=job_token)

@@ -454,6 +454,8 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert "Hidden Disabled Intake" not in summary.get_data(as_text=True)
         summary_page = client.get(f"/projects/{project.id}/summary")
         assert summary_page.status_code == 200
+        assert b"Project Export" not in summary_page.data
+        assert client.get(f"/projects/{project.id}/export").status_code == 403
         assert b"Effective configuration" in summary_page.data
         assert b"EncounterSet grading workflows" in summary_page.data
         assert b"contains one or more grading tasks" in summary_page.data

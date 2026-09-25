@@ -559,6 +559,7 @@ def _register_blueprints(app: Flask) -> None:
     from grader_pwa import bp as grader_pwa_bp
     from docs import docs_bp
     from datasets import bp as datasets_bp
+    from datasets import routes as _datasets_routes  # noqa: F401
     from glaucoma_ai import bp as glaucoma_ai_bp
     from project_review import bp as project_review_bp
 

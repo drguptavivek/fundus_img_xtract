@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+{% block title %}{{ data.project.title }} · Project Export{% endblock %}
+{% block content %}
+<div class="container-fluid px-3 px-lg-4 pb-5">
+  {% include "projects/_header.html" %}
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-10">
+      <section class="card shadow-sm" aria-labelledby="project-export-heading">
+        <div class="card-header"><h2 class="h5 mb-0" id="project-export-heading">Non-PII EncounterSet export</h2></div>
+        <div class="card-body">
+          <p class="text-muted">Exported filenames use image UUIDs. The same filename links the XLSX sheets, image ZIP, COCO records, and annotation sidecars without exposing uploaded filenames.</p>
+          <form id="project-export-form" class="row g-3">
+            {{ csrf_field() }}
+            <div class="col-md-3">
+              <label class="form-label" for="date_from">Capture date from</label>
+              <input class="form-control" type="date" id="date_from" name="date_from">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="date_to">Capture date to</label>
+              <input class="form-control" type="date" id="date_to" name="date_to">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="grading_filter">Encounter grading filter</label>
+              <select class="form-select" id="grading_filter" name="grading_filter">
+                <option value="any_graded" selected>At least one saved grade</option>
+                <option value="completed">All tasks complete</option>
+                <option value="all">All EncounterSets, including ungraded</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <div id="export-preview" class="alert alert-light border mb-0" role="status">Choose filters to preview the export.</div>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+              <button class="btn btn-primary" type="button" data-export-kind="workbook">Download grading workbook</button>
+              <button class="btn btn-outline-primary" type="button" data-export-kind="images" id="image-export-button">Download images + annotations</button>
+            </div>
+          </form>
+          <hr>
+          <h3 class="h6">Workbook sheets</h3>
+          <ul class="small text-muted mb-0">
+            <li>Encounters: capture date, verification, image/task/grade counts, and completion.</li>
+            <li>Images: encounter UUID, image UUID, exported filename, position, and review state.</li>
+            <li>Tasks: every encounter and image task, including partially graded tasks.</li>
+            <li>Grade Submissions: every saved grading role and selected class features.</li>
+            <li>Final Grades: persisted consensus grade and method.</li>
+          </ul>
+          <p class="small text-muted mt-3 mb-0">Image exports are limited to 250 matched EncounterSets per request. Narrow the capture date range if the preview exceeds the limit.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+(() => {
+  const projectId = {{ data.project.id }};
+  const form = document.getElementById('project-export-form');
+  const preview = document.getElementById('export-preview');
+  const imageButton = document.getElementById('image-export-button');
+  const csrf = form.querySelector('input[name="csrf_token"]').value;
+  let timer;
+
+  function params() {
+    return new URLSearchParams(new FormData(form));
+  }
+
+  async function refreshPreview() {
+    const query = params();
+    query.delete('csrf_token');
+    preview.textContent = 'Calculating scoped export…';
+    const response = await fetch(`/api/projects/${projectId}/exports/preview?${query}`, {cache: 'no-store'});
+    const body = await response.json();
+    if (!response.ok) {
+      preview.className = 'alert alert-danger mb-0';
+      preview.textContent = body.error || 'Unable to preview this export.';
+      imageButton.disabled = true;
+      return;
+    }
+    const item = body.data;
+    preview.className = `alert ${item.image_export_allowed ? 'alert-light' : 'alert-warning'} border mb-0`;
+    preview.textContent = `${item.encounter_count} EncounterSets · ${item.image_count} images · ${item.task_count} tasks` +
+      (item.image_export_allowed ? '' : ` · image export exceeds the ${item.image_export_limit} EncounterSet limit`);
+    imageButton.disabled = !item.image_export_allowed;
+  }
+
+  form.addEventListener('change', () => {
+    clearTimeout(timer);
+    timer = setTimeout(refreshPreview, 250);
+  });
+  form.querySelectorAll('[data-export-kind]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const payload = Object.fromEntries(new FormData(form));
+      delete payload.csrf_token;
+      payload.kind = button.dataset.exportKind;
+      button.disabled = true;
+      const response = await fetch(`/api/projects/${projectId}/exports`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json();
+      if (response.ok) {
+        window.location.assign(body.data.status_url);
+        return;
+      }
+      preview.className = 'alert alert-danger mb-0';
+      preview.textContent = body.error || 'Unable to start this export.';
+      button.disabled = false;
+    });
+  });
+  refreshPreview();
+})();
+</script>
+{% endblock %}

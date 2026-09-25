@@ -96,7 +96,7 @@ def db_get_job_payload(job_token: str) -> dict | None:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job:
             return None
-        is_export = job.upload_type in ("discrepancy_export", "dataset_export")
+        is_export = job.upload_type in ("discrepancy_export", "dataset_export", "project_export")
         
         return {
             "id": job.id,

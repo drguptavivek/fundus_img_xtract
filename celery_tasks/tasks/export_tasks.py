@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from celery_app import celery_app
 from review.discrepancy_export import run_discrepancy_export_job, run_dataset_export_job
+from project_review.export_service import run_project_export_job
 
 
 @celery_app.task(name="celery_tasks.tasks.export_tasks.run_discrepancy_export_task", bind=True, acks_late=True)
@@ -27,3 +28,14 @@ def run_dataset_export_task(
     hospital_id: int | None = None,
 ) -> None:
     run_dataset_export_job(job_token, dataset_id, task_ids, metadata)
+
+
+@celery_app.task(name="celery_tasks.tasks.export_tasks.run_project_export_task", bind=True, acks_late=True)
+def run_project_export_task(
+    self,
+    job_token: str,
+    request_data: dict,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> None:
+    run_project_export_job(job_token, request_data)

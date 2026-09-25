@@ -102,6 +102,21 @@ def gradings(project_id: int):
     return render_template("projects/gradings.html", data=data, projects=projects, capabilities=capabilities)
 
 
+@bp.route("/<int:project_id>/export")
+@login_required
+def export(project_id: int):
+    try:
+        with transaction_scope() as db:
+            capabilities = project_capabilities(db, user=current_user, project_id=project_id)
+            if not capabilities.can_export_non_pii:
+                abort(403)
+            data = get_summary(db, user=current_user, project_id=project_id)
+            projects = list_projects(db, user=current_user)
+    except ProjectReviewNotFound:
+        abort(404)
+    return render_template("projects/export.html", data=data, projects=projects, capabilities=capabilities)
+
+
 def _project_landing_url(project_id: int, capabilities) -> str:
     if capabilities.can_view_overview:
         return url_for("projects.summary", project_id=project_id)

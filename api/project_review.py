@@ -4,8 +4,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date
 
-from flask import jsonify, make_response, render_template, request, url_for
+from flask import current_app, jsonify, make_response, render_template, request, send_from_directory, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import select
 
 from db_transaction_manager import transaction_scope
 from project_review.exceptions import ProjectReviewNotFound
@@ -18,6 +19,16 @@ from project_review.service import (
     verify_direct_image,
 )
 from authz.project_access import project_capabilities
+from job_store import db_create_job
+from models import Job
+from project_review.export_service import (
+    EXPORT_DIR,
+    authorized_project_export_labs,
+    enqueue_project_export,
+    project_export_preview,
+    validate_export_request,
+)
+from werkzeug.utils import secure_filename
 
 from . import api_bp
 
@@ -32,6 +43,18 @@ def _date_arg(name: str) -> date | None:
         return date.fromisoformat(value) if value else None
     except ValueError:
         return None
+
+
+def _project_export_request(project_id: int, actor_user_id: int, *, kind: str | None = None):
+    payload = request.get_json(silent=True) or request.form or request.args
+    return validate_export_request(
+        project_id=project_id,
+        actor_user_id=actor_user_id,
+        kind=kind or str(payload.get("kind", "workbook")),
+        date_from=date.fromisoformat(payload["date_from"]) if payload.get("date_from") else None,
+        date_to=date.fromisoformat(payload["date_to"]) if payload.get("date_to") else None,
+        grading_filter=str(payload.get("grading_filter", "any_graded")),
+    )
 
 
 @api_bp.route("/projects", methods=["GET"])
@@ -121,3 +144,94 @@ def project_review_gradings(project_id: int):
             return _response(get_gradings(db, user=current_user, project_id=project_id))
     except ProjectReviewNotFound as exc:
         return jsonify({"success": False, "error": str(exc)}), 404
+
+
+@api_bp.route("/projects/<int:project_id>/exports/preview", methods=["GET"])
+@login_required
+def project_export_preview_api(project_id: int):
+    try:
+        export_request = _project_export_request(project_id, current_user.id, kind="workbook")
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    with transaction_scope() as db:
+        allowed_labs = authorized_project_export_labs(
+            db, actor=current_user, project_id=project_id
+        )
+        if not allowed_labs:
+            return jsonify({"success": False, "error": "Project not found."}), 404
+        return jsonify({
+            "success": True,
+            "data": project_export_preview(db, export_request, allowed_labs),
+        })
+
+
+@api_bp.route("/projects/<int:project_id>/exports", methods=["POST"])
+@login_required
+def create_project_export(project_id: int):
+    try:
+        export_request = _project_export_request(project_id, current_user.id)
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    with transaction_scope() as db:
+        allowed_labs = authorized_project_export_labs(
+            db, actor=current_user, project_id=project_id
+        )
+        if not allowed_labs:
+            return jsonify({"success": False, "error": "Project not found."}), 404
+        preview = project_export_preview(db, export_request, allowed_labs)
+        if export_request.kind == "images" and not preview["image_export_allowed"]:
+            return jsonify({
+                "success": False,
+                "error": (
+                    f"Image exports are limited to 250 EncounterSets; "
+                    f"the current filters match {preview['encounter_count']}."
+                ),
+            }), 400
+    xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    job_token = db_create_job(
+        ["project_export"], [],
+        uploader_user_id=current_user.id,
+        uploader_username=current_user.username,
+        uploader_ip=xff or request.remote_addr or "-",
+        project_id=project_id,
+        upload_type="project_export",
+    )
+    request_data = {
+        "project_id": export_request.project_id,
+        "actor_user_id": export_request.actor_user_id,
+        "kind": export_request.kind,
+        "date_from": export_request.date_from.isoformat() if export_request.date_from else None,
+        "date_to": export_request.date_to.isoformat() if export_request.date_to else None,
+        "grading_filter": export_request.grading_filter,
+    }
+    enqueue_project_export(current_app._get_current_object(), job_token, request_data)
+    return jsonify({
+        "success": True,
+        "data": {
+            "job_token": job_token,
+            "status_url": url_for("jobs.job_status_page", job_token=job_token),
+        },
+    }), 202
+
+
+@api_bp.route("/projects/<int:project_id>/exports/<job_token>/<filename>", methods=["GET"])
+@login_required
+def download_project_export(project_id: int, job_token: str, filename: str):
+    if secure_filename(filename) != filename:
+        return jsonify({"success": False, "error": "File not found."}), 404
+    with transaction_scope() as db:
+        allowed_labs = authorized_project_export_labs(
+            db, actor=current_user, project_id=project_id
+        )
+        job = db.execute(select(Job).where(
+            Job.token == job_token,
+            Job.project_id == project_id,
+            Job.upload_type == "project_export",
+            Job.uploader_user_id == current_user.id,
+        )).scalar_one_or_none()
+        if not allowed_labs or job is None:
+            return jsonify({"success": False, "error": "File not found."}), 404
+    export_dir = (EXPORT_DIR / job_token).resolve()
+    if EXPORT_DIR.resolve() not in export_dir.parents:
+        return jsonify({"success": False, "error": "File not found."}), 404
+    return send_from_directory(export_dir, filename, as_attachment=True)

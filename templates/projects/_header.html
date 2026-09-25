@@ -33,6 +33,10 @@ try { localStorage.setItem('selectedProjectId', '{{ data.project.id }}'); } catc
     <a class="nav-link {{ 'active' if request.endpoint == 'projects.summary' else '' }}"
        href="{{ url_for('projects.summary', project_id=data.project.id) }}">Summary</a>
   </li>{% endif %}
+  {% if capabilities.can_export_non_pii %}<li class="nav-item">
+    <a class="nav-link {{ 'active' if request.endpoint == 'projects.export' else '' }}"
+       href="{{ url_for('projects.export', project_id=data.project.id) }}">Project Export</a>
+  </li>{% endif %}
   {% if capabilities.can_browse %}
   <li class="nav-item">
     <a class="nav-link {{ 'active' if request.endpoint in ['remidio_api_uploads.encounter_set_browser', 'remidio_api_uploads.encounter_set_browser_no_pii'] else '' }}"

@@ -102,7 +102,7 @@ The `token_auth_required` decorator emits `401/403` JSON errors with a `message`
 
 Auth: bearer access token
 
-Role: `fileUploader`
+Role: `fileUploader`, `field_optometrist`, or `field_ophthalmologist` (administrators are also upload-qualified)
 
 Query parameters:
 - `disease_id`: optional positive integer
@@ -145,7 +145,34 @@ Success response: `200 OK`
       "upload_kinds": ["direct_image"],
       "allow_mydriatic": true,
       "allow_non_mydriatic": true,
-      "default_is_mydriatic": false
+      "default_is_mydriatic": false,
+      "encounter_set_types": [
+        {
+          "id": 7,
+          "name": "Community glaucoma screening",
+          "description": "Two-eye screening encounter",
+          "metadata_schema_json": {
+            "fields": [
+              {
+                "key": "laterality",
+                "label": "Laterality",
+                "scope": "image",
+                "type": "single_select",
+                "required": true,
+                "options": ["OD", "OS"]
+              }
+            ]
+          },
+          "asset_rules_json": {
+            "min_images": 2,
+            "max_images": 2,
+            "allow_document_uploads": false,
+            "allow_report_uploads": false
+          },
+          "manifest_version": 1,
+          "configuration_fingerprint": "sha256-configuration-fingerprint"
+        }
+      ]
     }
   ]
 }
@@ -157,13 +184,13 @@ absent; the Flutter app parses it defensively and does not depend on it. Which
 AI workflows a *project* enables is available from `/field/projects` and
 `/context/me` (`projects[].ai_workflows`).
 
-The response is built from active upload profiles and explicit lab-unit assignment. Admin, local-admin, and data-manager roles do not add upload profiles without an explicit lab-unit assignment. Filters trim `profiles` first, then rebuild the option arrays from the remaining profiles so clients do not display stale projects, lab units, diseases, cameras, or areas.
+The response is built from active upload profiles and explicit assignment to the profile's active project/lab-unit pair. Upload-qualified field users receive only explicitly assigned profiles; a field role alone does not grant access. Admin, local-admin, and data-manager roles likewise do not add upload profiles without an explicit assignment. Filters trim `profiles` first, then rebuild the option arrays from the remaining profiles so clients do not display stale projects, lab units, diseases, cameras, or areas.
 
-This endpoint is for client selector defaults only. Upload endpoints must still validate submitted IDs server-side.
+For `encounter_set` capture, each profile's `encounter_set_types` is the authoritative configured manifest. It includes the metadata fields, required flags, allowed values, regex validations, image/document rules, manifest version, and configuration fingerprint that the app must enforce at capture time. The upload endpoint repeats these validations server-side and rejects a stale fingerprint before persistence.
 
 Errors:
 - `400` when an integer filter is invalid
 - `401` when the bearer token is missing or invalid
-- `403` when the user is inactive or lacks `fileUploader`
+- `403` when the user is inactive or lacks an upload-qualified role
 
 Mobile clients should call `/api/mobile/v1/upload-options`, let the user or app choose the intended profile, and submit that exact `profile_id` to `POST /api/mobile/v1/uploads`. A profile may expose multiple mobile-capable `upload_kinds`; each upload request must choose one. The selected profile is the source of truth for project, lab unit, disease, camera, area, mydriatic scope, and enabled AI workflow.

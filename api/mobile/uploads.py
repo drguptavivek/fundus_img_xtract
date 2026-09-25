@@ -41,7 +41,10 @@ def create_upload():
     except UploadProfileError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), 403
     except MobileUploadError as exc:
-        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+        response = {"error": exc.code, "message": exc.message}
+        if exc.details is not None:
+            response["details"] = exc.details
+        return jsonify(response), exc.status_code
 
 
 @mobile_api_bp.route("/uploads/<upload_token>", methods=["GET"])

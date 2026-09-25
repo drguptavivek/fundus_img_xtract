@@ -16,8 +16,8 @@ These endpoints are consumed by mobile clients. They are JSON-only and use beare
 
 - `POST /auth/login`, `POST /auth/refresh`, and `POST /auth/logout` accept JSON request bodies.
 - Authenticated requests must send `Authorization: Bearer <access_token>`.
-- `GET /upload-options` requires the `fileUploader` role and returns selector options from assigned upload profiles.
-- `POST /uploads` requires the `fileUploader` role and accepts one mobile upload kind per request: `direct_image`, `remidio`, or `encounter_set`.
+- `GET /upload-options` requires an upload-qualified role (`fileUploader`, a field role, or administrator) and returns only explicitly assigned upload profiles, including configured encounter-set capture manifests.
+- `POST /uploads` requires the same role and explicit profile assignment, and accepts one mobile upload kind per request: `direct_image`, `remidio`, or `encounter_set`.
 - Sessions are device-scoped. Refresh tokens are rotated server-side.
 - Mobile access JWTs are checked against Redis `jti` revocation state and DB mobile-session state on every authenticated request.
 - Devices sign in with username and password alone; the device row is created approved unless an administrator has blocked it. Enrolment codes are an optional stricter mode (`MOBILE_DEVICES_AUTO_APPROVE=0`). See [auth.md](auth.md).

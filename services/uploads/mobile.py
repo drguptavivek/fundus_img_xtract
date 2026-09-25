@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
+import mimetypes
 import re
 import uuid
 import zipfile
@@ -37,6 +39,15 @@ from models import (
     PatientEncounters,
     User,
 )
+from encounter_sets.models import EncounterSetAttachment
+from encounter_set_types.capture_validation import (
+    CaptureDocument,
+    CaptureImage,
+    CaptureMetadata,
+    CaptureValidationInput,
+    capture_configuration_fingerprint,
+    validate_capture,
+)
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from services.glaucoma_ai_upload import GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
 from services.encounter_referral_suggestion import normalize_referral_positive_diseases, normalize_referral_suggestion
@@ -54,6 +65,7 @@ from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UPLOAD_KIND_PREGRADED,
     UPLOAD_KIND_REMIDIO,
+    MOBILE_UPLOAD_QUALIFICATION_ROLES,
     UploadOptions,
     validate_profile_upload_scope,
     validate_remedio_upload_scope,
@@ -71,11 +83,12 @@ AI_PREDICTED_CLASS_NAME_PATTERN = re.compile(r"Predicted class name:\s*(.+)")
 
 
 class MobileUploadError(ValueError):
-    def __init__(self, message: str, *, code: str = "invalid_upload", status_code: int = 400) -> None:
+    def __init__(self, message: str, *, code: str = "invalid_upload", status_code: int = 400, details: Any = None) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
         self.status_code = status_code
+        self.details = details
 
 
 @dataclass(frozen=True)
@@ -619,6 +632,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     project_id = _required_int(form, "project_id")
     lab_unit_id = _required_int(form, "lab_unit_id")
     payload = _encounter_json(form)
+    encounter_set_type_id = _required_payload_int(payload, "encounter_set_type_id")
+    configuration_fingerprint = _require_payload_text(payload, "configuration_fingerprint")
     disease_ids = [int(value) for value in payload.get("disease_ids") or ([payload["disease_id"]] if payload.get("disease_id") else [])]
     if not disease_ids:
         raise MobileUploadError("encounter_json must include disease_id or disease_ids.", code="disease_required")
@@ -633,11 +648,38 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         project_id=project_id,
         lab_unit_id=lab_unit_id,
         disease_id=disease_ids[0] if len(disease_ids) == 1 else None,
+        qualification_roles=MOBILE_UPLOAD_QUALIFICATION_ROLES,
     )
     if profile.project_id != project_id or profile.lab_unit_id != lab_unit_id:
         raise MobileUploadError("Selected profile does not match project or lab unit.", code="profile_scope_mismatch", status_code=403)
     if any(disease_id not in profile.disease_ids for disease_id in disease_ids):
         raise MobileUploadError("Selected disease is not allowed for this upload profile.", code="disease_not_allowed", status_code=403)
+    selected_type = next(
+        (row for row in profile.encounter_set_types if row.get("id") == encounter_set_type_id),
+        None,
+    )
+    if selected_type is None:
+        raise MobileUploadError(
+            "Selected EncounterSet type is not allowed for this upload profile.",
+            code="encounter_set_type_not_allowed",
+            status_code=403,
+        )
+    metadata_schema_json = selected_type.get("metadata_schema_json") or {"fields": []}
+    asset_rules_json = selected_type.get("asset_rules_json") or {}
+    try:
+        expected_fingerprint = capture_configuration_fingerprint(metadata_schema_json, asset_rules_json)
+    except (TypeError, ValueError) as exc:
+        raise MobileUploadError(
+            "Selected EncounterSet configuration is invalid.",
+            code="invalid_encounter_set_configuration",
+            status_code=409,
+        ) from exc
+    if configuration_fingerprint != expected_fingerprint:
+        raise MobileUploadError(
+            "EncounterSet configuration changed. Refresh upload options and try again.",
+            code="configuration_fingerprint_mismatch",
+            status_code=409,
+        )
     _require_payload_text(payload, "patient_id")
     _require_payload_text(payload, "patient_name")
     _require_payload_text(payload, "capture_date")
@@ -646,6 +688,53 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     referral_positive_diseases = normalize_referral_positive_diseases(
         payload.get("referral_positive_diseases", payload.get("referral_positive_disease"))
     )
+    scoped_metadata = _metadata_envelope(payload.get("metadata"))
+    if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+        raise MobileUploadError("encounter_json.items must be an array of image objects.", code="invalid_items")
+    attachment_payloads = payload.get("attachments") or []
+    if not isinstance(attachment_payloads, list) or not all(isinstance(item, dict) for item in attachment_payloads):
+        raise MobileUploadError("encounter_json.attachments must be an array of document objects.", code="invalid_attachments")
+    image_metadata = [_metadata_scope(item.get("metadata"), "image") for item in items]
+    document_metadata = [_metadata_scope(item.get("metadata"), "document") for item in attachment_payloads]
+    capture_request = CaptureValidationInput(
+        metadata_schema_json=metadata_schema_json,
+        asset_rules_json=asset_rules_json,
+        metadata=CaptureMetadata(
+            patient=scoped_metadata["patient"],
+            encounter=scoped_metadata["encounter"],
+            upload=scoped_metadata["upload"],
+            images=image_metadata,
+            documents=document_metadata,
+        ),
+        images=tuple(
+            CaptureImage(
+                file_key=item.get("file_key", "") if isinstance(item.get("file_key", ""), str) else "",
+                spatial_position=item.get("spatial_position", 0),
+                metadata=image_metadata[index],
+            )
+            for index, item in enumerate(items)
+        ),
+        multipart_file_keys=tuple(files.keys()),
+        documents=tuple(
+            CaptureDocument(
+                file_key=item.get("file_key", "") if isinstance(item.get("file_key", ""), str) else "",
+                kind=item.get("asset_kind", "document"),
+                metadata=document_metadata[index],
+            )
+            for index, item in enumerate(attachment_payloads)
+        ),
+    )
+    validation = validate_capture(capture_request)
+    if not validation.valid:
+        issues = [
+            {"code": issue.code, "message": issue.message, "scope": issue.scope, "field_key": issue.field_key}
+            for issue in validation.errors
+        ]
+        raise MobileUploadError(
+            "EncounterSet capture metadata or assets are invalid.",
+            code="invalid_capture",
+            details=issues,
+        )
 
     encounter = PatientEncounters(
         name=payload["patient_name"],
@@ -661,6 +750,11 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         referral_suggestion=referral_suggestion,
         referral_suggestion_updated_at=utcnow() if referral_suggestion_raw is not None else None,
         referral_positive_diseases_json=referral_positive_diseases,
+        metadata_json={
+            "encounter_set_type_id": encounter_set_type_id,
+            "configuration_fingerprint": configuration_fingerprint,
+            **scoped_metadata,
+        },
         uuid=str(uuid.uuid4()),
     )
     db.add(encounter)
@@ -681,7 +775,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     )
     accepted = 0
     seen_positions: set[int] = set()
-    for item in items:
+    for image_index, item in enumerate(items):
         file_key = _require_payload_text(item, "file_key")
         spatial_position = int(item.get("spatial_position") or 0)
         if spatial_position < 1 or spatial_position > 9 or spatial_position in seen_positions:
@@ -700,6 +794,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
             camera_id=camera_id,
             area_id=area_id,
             is_mydriatic=is_mydriatic,
+            qualification_roles=MOBILE_UPLOAD_QUALIFICATION_ROLES,
         )
         file = files.get(file_key)
         if file is None:
@@ -716,6 +811,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
             remarks=_remarks(item.get("remarks")),
             referral_suggestion=_image_referral_suggestion(item),
             referral_suggestion_supplied=_image_referral_suggestion_supplied(item),
+            metadata_json=image_metadata[image_index],
         )
         db.add(image)
         db.flush()
@@ -735,6 +831,49 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
                 finished_at=utcnow(),
             )
         )
+    for attachment_index, attachment_payload in enumerate(attachment_payloads):
+        file_key = _require_payload_text(attachment_payload, "file_key")
+        file = files.get(file_key)
+        if file is None:
+            raise MobileUploadError(f"Missing multipart file part for file_key '{file_key}'.", code="file_part_missing")
+        submitted_kind = attachment_payload.get("asset_kind", "document")
+        attachment_kind = {
+            "report": "document",
+            "report_pdf": "pdf",
+            "report_image": "document_image",
+        }.get(submitted_kind, submitted_kind)
+        attachment_metadata = dict(document_metadata[attachment_index])
+        if submitted_kind in {"report", "report_pdf", "report_image"}:
+            attachment_metadata["document_role"] = "report"
+            attachment_metadata["submitted_asset_kind"] = submitted_kind
+        attachment = _save_encounter_set_attachment(
+            file=file,
+            encounter=encounter,
+            project_id=project_id,
+            upload_profile_id=profile_id,
+            hospital_id=profile.hospital_id,
+            actor=actor,
+            asset_kind=attachment_kind,
+            metadata_json=attachment_metadata,
+        )
+        db.add(attachment)
+        db.flush()
+        db.add(
+            JobItem(
+                job_id=job.id,
+                filename=attachment.original_filename,
+                state="completed",
+                detail="Supporting document uploaded successfully.",
+                uploader_user_id=actor.user_id,
+                uploader_username=actor.username,
+                uploader_ip=actor.remote_addr,
+                source_type="encounter_set_attachment",
+                source_id=attachment.id,
+                source_uuid=attachment.uuid,
+                finished_at=utcnow(),
+            )
+        )
+        accepted += 1
     db.flush()
     payload = _upload_response(job, upload_kind=UPLOAD_KIND_ENCOUNTER_SET, accepted=accepted, rejected=0)
     payload["encounter_uuid"] = encounter.uuid
@@ -763,6 +902,7 @@ def _save_encounter_set_image(
     remarks: str | None,
     referral_suggestion: str = "missing",
     referral_suggestion_supplied: bool = False,
+    metadata_json: dict[str, Any] | None = None,
 ) -> EncounterSetImage:
     original = secure_filename(file.filename or "")
     if not original:
@@ -792,7 +932,52 @@ def _save_encounter_set_image(
         remarks=remarks,
         referral_needed_or_positive_image=referral_suggestion,
         referral_needed_or_positive_image_updated_at=utcnow() if referral_suggestion_supplied else None,
+        metadata_json=metadata_json or {},
         created_at=utcnow(),
+    )
+
+
+def _save_encounter_set_attachment(
+    *,
+    file: FileStorage,
+    encounter: PatientEncounters,
+    project_id: int,
+    upload_profile_id: int,
+    hospital_id: int,
+    actor: _Actor,
+    asset_kind: str,
+    metadata_json: dict[str, Any],
+) -> EncounterSetAttachment:
+    original = secure_filename(file.filename or "")
+    if not original:
+        raise MobileUploadError("Encounter-set attachments must have filenames.", code="invalid_filename")
+    if asset_kind not in {"document", "pdf", "document_image"}:
+        raise MobileUploadError("Unsupported EncounterSet attachment kind.", code="invalid_attachment_kind")
+    stored = f"{uuid.uuid4()}{Path(original).suffix.lower()}"
+    folder_rel = f"files/encounter_sets/{utcnow().strftime('%Y_%m_%d')}/{encounter.id}/attachments"
+    save_dir = Path(current_app.root_path) / folder_rel
+    save_dir.mkdir(parents=True, exist_ok=True)
+    raw = file.read()
+    file.stream.seek(0)
+    target = save_dir / stored
+    target.write_bytes(raw)
+    return EncounterSetAttachment(
+        patient_encounter_id=encounter.id,
+        asset_kind=asset_kind,
+        original_filename=original,
+        stored_filename=stored,
+        folder_rel=folder_rel,
+        mime_type=file.mimetype or mimetypes.guess_type(original)[0],
+        file_size_bytes=len(raw),
+        file_hash=hashlib.sha256(raw).hexdigest(),
+        is_pii=True,
+        visible_to_grader=False,
+        creates_task=False,
+        metadata_json=metadata_json,
+        project_id=project_id,
+        upload_profile_id=upload_profile_id,
+        hospital_id=hospital_id,
+        created_by_user_id=actor.user_id,
     )
 
 
@@ -965,8 +1150,8 @@ def _actor(db, user_id: int, remote_addr: str | None) -> _Actor:
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if user is None or not user.is_active:
         raise MobileUploadError("User is inactive.", code="inactive_user", status_code=403)
-    if not user.has_role("fileUploader"):
-        raise MobileUploadError("Uploads require the fileUploader role.", code="forbidden", status_code=403)
+    if not user.has_role(*MOBILE_UPLOAD_QUALIFICATION_ROLES):
+        raise MobileUploadError("Uploads require an upload-qualified role.", code="forbidden", status_code=403)
     return _Actor(user_id=user.id, username=user.username, remote_addr=remote_addr)
 
 
@@ -1017,6 +1202,44 @@ def _encounter_json(form: MultiDict) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise MobileUploadError("encounter_json must be a JSON object.", code="invalid_encounter_json")
     return payload
+
+
+def _required_payload_int(payload: dict[str, Any], name: str) -> int:
+    value = payload.get(name)
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise MobileUploadError(f"{name} is required and must be an integer.", code=f"{name}_required")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise MobileUploadError(f"{name} is required and must be an integer.", code=f"{name}_required") from exc
+    if parsed <= 0:
+        raise MobileUploadError(f"{name} must be a positive integer.", code=f"{name}_required")
+    return parsed
+
+
+def _metadata_envelope(value: Any) -> dict[str, dict[str, Any]]:
+    if value is None:
+        return {scope: {} for scope in ("patient", "encounter", "upload")}
+    if not isinstance(value, dict):
+        raise MobileUploadError("metadata must be an object with patient, encounter, and upload scopes.", code="invalid_metadata")
+    envelope = {}
+    for scope in ("patient", "encounter", "upload"):
+        scoped = value.get(scope, {})
+        if not isinstance(scoped, dict):
+            raise MobileUploadError(f"metadata.{scope} must be an object.", code="invalid_metadata")
+        envelope[scope] = scoped
+    unknown = set(value) - {"patient", "encounter", "upload"}
+    if unknown:
+        raise MobileUploadError("metadata contains an unsupported scope.", code="invalid_metadata")
+    return envelope
+
+
+def _metadata_scope(value: Any, scope: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise MobileUploadError(f"{scope} metadata must be an object.", code="invalid_metadata")
+    return value
 
 
 def _remarks(value: Any) -> str | None:

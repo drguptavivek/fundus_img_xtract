@@ -4,6 +4,8 @@ from itertools import count
 
 import pytest
 
+from encounter_set_types.capture_validation import capture_configuration_fingerprint
+from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role
 from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
@@ -13,9 +15,15 @@ from upload_profiles.models import (
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
     UploadProfileKind,
 )
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO
+from upload_profiles.service import (
+    UPLOAD_KIND_DIRECT_IMAGE,
+    UPLOAD_KIND_ENCOUNTER_SET,
+    UPLOAD_KIND_PREGRADED,
+    UPLOAD_KIND_REMIDIO,
+)
 from tests.helpers.factories import UserFactory, approve_mobile_device
 
 
@@ -77,10 +85,78 @@ def upload_options_data(db_session, core_test_data):
     profile_a = _add_profile(db_session, uploader.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
     profile_b = _add_profile(db_session, uploader.id, lab_b.id, project_b.id, dr.id, camera_b.id, area_b.id)
     _add_profile(db_session, admin_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
+    field_user = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username=f"mobile_options_field_{suffix}",
+        lab_units=[lab_a],
+    )
+    field_unassigned_user = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username=f"mobile_options_field_unassigned_{suffix}",
+        lab_units=[lab_a],
+    )
+    profile_a.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
+    encounter_set_type = EncounterSetType(
+        name=f"Mobile capture manifest {suffix}",
+        code=f"MOBILE_CAPTURE_{suffix}",
+        metadata_schema_json={
+            "fields": [
+                {
+                    "key": "laterality",
+                    "label": "Laterality",
+                    "scope": "image",
+                    "type": "select",
+                    "selection_mode": "single",
+                    "options": ["OD", {"value": "OS", "label": "Left eye"}],
+                    "required_at_upload": True,
+                    "visible_to_grader": True,
+                },
+                {
+                    "key": "visit_code",
+                    "label": "Visit code",
+                    "scope": "encounter",
+                    "type": "text",
+                    "validation_regex": "^[A-Z]{2}-[0-9]+$",
+                    "validation_error_message": "Use the clinic visit code format.",
+                },
+            ]
+        },
+        asset_rules_json={
+            "allow_clinical_images": "true",
+            "min_clinical_images": "2",
+            "allow_pdf_uploads": True,
+            "max_pdfs": "1",
+        },
+    )
+    db_session.add(encounter_set_type)
+    db_session.flush()
+    profile_a.encounter_set_types.append(
+        UploadProfileEncounterSetType(encounter_set_type=encounter_set_type, active=True)
+    )
+    project_profile_a = db_session.query(ProjectUploadProfile).filter_by(
+        project_id=project_a.id, upload_profile_id=profile_a.id
+    ).one()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile_a.id,
+            user_id=field_user.id,
+            lab_unit_id=lab_a.id,
+            active=True,
+        )
+    )
     db_session.flush()
 
     # Every login in this module goes through the device enrolment gate.
-    for member in (uploader, no_upload_role_user, admin_without_lab, elevated_uploader_without_lab):
+    for member in (
+        uploader,
+        no_upload_role_user,
+        admin_without_lab,
+        elevated_uploader_without_lab,
+        field_user,
+        field_unassigned_user,
+    ):
         approve_mobile_device(db_session, member.id, f"device-{member.username}")
 
     return {
@@ -88,6 +164,8 @@ def upload_options_data(db_session, core_test_data):
         "no_upload_role_user": no_upload_role_user,
         "admin_without_lab": admin_without_lab,
         "elevated_uploader_without_lab": elevated_uploader_without_lab,
+        "field_user": field_user,
+        "field_unassigned_user": field_unassigned_user,
         "glaucoma": glaucoma,
         "dr": dr,
         "camera_a": camera_a,
@@ -100,6 +178,7 @@ def upload_options_data(db_session, core_test_data):
         "project_b": project_b,
         "profile_a": profile_a,
         "profile_b": profile_b,
+        "encounter_set_type": encounter_set_type,
     }
 
 
@@ -199,7 +278,50 @@ def test_mobile_upload_options_strips_web_only_pregraded_kind(client, db_session
     assert response.status_code == 200
     profile = next(item for item in response.get_json()["profiles"] if item["profile_id"] == upload_options_data["profile_a"].id)
     assert UPLOAD_KIND_PREGRADED not in profile["upload_kinds"]
-    assert profile["upload_kinds"] == [UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO]
+    assert profile["upload_kinds"] == [UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO]
+
+
+def test_mobile_upload_options_returns_capture_manifest_only_for_assigned_profiles(
+    client, monkeypatch, upload_options_data
+):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user = upload_options_data["field_user"]
+    token = _mobile_access_token(client, user.username)
+
+    response = client.get("/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    profile = next(item for item in payload["profiles"] if item["profile_id"] == upload_options_data["profile_a"].id)
+    manifest = profile["encounter_set_types"][0]
+
+    assert manifest["manifest_version"] == 1
+    assert manifest["metadata_schema_json"]["fields"][0]["required_at_upload"] is True
+    assert manifest["metadata_schema_json"]["fields"][0]["options"] == [
+        {"value": "OD", "label": "OD"},
+        {"value": "OS", "label": "Left eye"},
+    ]
+    assert manifest["metadata_schema_json"]["fields"][0]["visible_to_grader"] is True
+    assert manifest["metadata_schema_json"]["fields"][1]["validation_regex"] == "^[A-Z]{2}-[0-9]+$"
+    assert manifest["asset_rules_json"]["allow_clinical_images"] is True
+    assert manifest["asset_rules_json"]["min_clinical_images"] == 2
+    assert manifest["asset_rules_json"]["allow_pdf_uploads"] is True
+    assert manifest["asset_rules_json"]["max_pdfs"] == 1
+    assert manifest["configuration_fingerprint"] == capture_configuration_fingerprint(
+        manifest["metadata_schema_json"], manifest["asset_rules_json"]
+    )
+
+    repeated_response = client.get("/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {token}"})
+    repeated_profile = next(
+        item for item in repeated_response.get_json()["profiles"] if item["profile_id"] == upload_options_data["profile_a"].id
+    )
+    assert repeated_profile["encounter_set_types"][0]["configuration_fingerprint"] == manifest["configuration_fingerprint"]
+
+    unassigned_token = _mobile_access_token(client, upload_options_data["field_unassigned_user"].username)
+    unassigned_response = client.get(
+        "/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {unassigned_token}"}
+    )
+    assert unassigned_response.status_code == 200
+    assert unassigned_response.get_json()["profiles"] == []
 
 
 def _add_profile(db_session, user_id, lab_unit_id, project_id, disease_id, camera_id, area_id):

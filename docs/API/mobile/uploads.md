@@ -144,8 +144,11 @@ Use when one patient encounter contains multiple positioned images.
 
 Required fields:
 - common fields above
+- `encounter_json.encounter_set_type_id`: required positive integer selected from the chosen profile's `encounter_set_types`
+- `encounter_json.configuration_fingerprint`: required fingerprint returned for that selected type by `GET /upload-options`
 - `encounter_json`: JSON object
 - one multipart file part for each `items[].file_key`
+- one multipart file part for each `attachments[].file_key`, when supporting documents are included
 
 `encounter_json` fields:
 - `patient_id`: required string
@@ -156,7 +159,9 @@ Required fields:
 - `referral_suggestion`: optional encounter-level tri-state value, one of `yes`, `no`, `missing`
 - `referral_positive_diseases`: optional encounter-level list of diseases or referral reasons that are positive or need referral. Values may be configured disease names or free text
 - `referral_positive_disease`: accepted alias for `referral_positive_diseases`
+- `metadata`: optional scoped metadata envelope with `patient`, `encounter`, and `upload` objects. Keys and values are validated against the selected EncounterSet type schema. The server stores these scopes in `PatientEncounters.metadata_json` with the selected type ID and configuration fingerprint.
 - `items`: required non-empty array
+- `attachments`: optional array of supporting document objects. These are stored as `EncounterSetAttachment` records and never create grading tasks.
 
 Each `items[]` entry:
 - `file_key`: multipart field name containing this image file
@@ -167,6 +172,12 @@ Each `items[]` entry:
 - `remarks`: optional image-level plain text
 - `referral_needed_or_positive_image`: optional image-level tri-state value, one of `yes`, `no`, `missing`
 - `refrralneed_or_positive_image`: accepted alias for `referral_needed_or_positive_image`
+- `metadata`: optional object containing fields in the EncounterSet type's `image` scope. It is stored in `EncounterSetImage.metadata_json`.
+
+Each `attachments[]` entry:
+- `file_key`: multipart field name containing this supporting asset
+- `asset_kind`: optional kind (`document`, `pdf`, `document_image`, `report`, `report_pdf`, or `report_image`); the selected EncounterSet type's asset rules must allow it. Report kinds are stored in the existing attachment kind (`document`, `pdf`, or `document_image`) with `metadata_json.document_role = "report"`.
+- `metadata`: optional object containing fields in the type's `document` scope. It is stored in `EncounterSetAttachment.metadata_json`.
 
 The `file_key` value is a mapping key, not a filename. For example, `file_key: "right_eye"` requires a multipart part named `right_eye`.
 
@@ -184,19 +195,25 @@ curl -X POST http://localhost:5001/api/mobile/v1/uploads \
     "patient_id":"MRN-123",
     "patient_name":"Mobile Patient",
     "capture_date":"2026-05-03",
+    "encounter_set_type_id":17,
+    "configuration_fingerprint":"<fingerprint from GET /upload-options>",
     "disease_ids":[2],
+    "metadata":{"patient":{"study_id":"S-123"},"encounter":{},"upload":{}},
     "referral_suggestion":"missing",
     "referral_positive_diseases":["DR","dry AMD","corneal opacity"],
     "items":[
       {"file_key":"right_eye","spatial_position":1,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"yes"},
-      {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"no"}
-    ]
+      {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"no","metadata":{"laterality":"OS"}}
+    ],
+    "attachments":[{"file_key":"report_pdf","asset_kind":"pdf","metadata":{"document_type":"report"}}]
   }' \
   -F "right_eye=@right-eye.png" \
-  -F "left_eye=@left-eye.png"
+  -F "left_eye=@left-eye.png" \
+  -F "report_pdf=@report.pdf"
 ```
 
 Encounter-set image files must be `.jpg`, `.jpeg`, or `.png`.
+Supporting document file types are subject to the selected type's allowed asset rules; all multipart parts must be referenced exactly once by an image or attachment entry. The server rejects stale configuration fingerprints and invalid metadata/assets with `409` or `400` responses. Validation errors include a `details` array with scope and field information when available.
 
 ## `GET /uploads/<upload_token>`
 

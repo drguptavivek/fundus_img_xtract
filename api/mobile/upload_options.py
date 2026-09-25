@@ -8,7 +8,12 @@ from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
 from models import User
 from services.uploads.mobile import serialize_mobile_upload_options
-from upload_profiles.service import UploadOptions, filter_upload_options, get_user_upload_options
+from upload_profiles.service import (
+    MOBILE_UPLOAD_QUALIFICATION_ROLES,
+    UploadOptions,
+    filter_upload_options,
+    get_user_upload_options,
+)
 
 from . import mobile_api_bp
 
@@ -33,10 +38,14 @@ def get_mobile_upload_options():
         ).scalar_one_or_none()
         if user is None or not user.is_active:
             return jsonify({"error": "User is inactive"}), 403
-        if not user.has_role("fileUploader"):
+        if not user.has_role(*MOBILE_UPLOAD_QUALIFICATION_ROLES):
             return jsonify({"error": "Forbidden"}), 403
 
-        options = get_user_upload_options(db, user.id)
+        options = get_user_upload_options(
+            db,
+            user.id,
+            qualification_roles=MOBILE_UPLOAD_QUALIFICATION_ROLES,
+        )
         options = filter_upload_options(db, options, **filters)
         return jsonify(_serialize_upload_options(db, options))
 

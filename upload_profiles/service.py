@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import selectinload
 
+from auth.roles import FIELD_ROLE_NAMES
 from db_transaction_manager import get_db_session
 from models import Area, Camera, LabUnit, Project, User
 from project_configuration.models import ProjectLabUnit
@@ -32,6 +33,7 @@ UPLOAD_KIND_REMIDIO = "remidio"
 UPLOAD_KIND_ENCOUNTER_SET = "encounter_set"
 PREGRADED_QUALIFICATION_ROLES = frozenset({"pregarded_uploader", "admin"})
 STANDARD_UPLOAD_QUALIFICATION_ROLES = frozenset({"fileUploader", "admin"})
+MOBILE_UPLOAD_QUALIFICATION_ROLES = STANDARD_UPLOAD_QUALIFICATION_ROLES | frozenset(FIELD_ROLE_NAMES)
 
 
 class UploadProfileError(ValueError):
@@ -265,9 +267,17 @@ def get_user_upload_profiles(
     return [_assignment_to_dto(assignment) for assignment in assignments]
 
 
-def get_user_upload_options(db: OrmSession, user_id: int) -> UploadOptions:
+def get_user_upload_options(
+    db: OrmSession,
+    user_id: int,
+    *,
+    qualification_roles: frozenset[str] = STANDARD_UPLOAD_QUALIFICATION_ROLES,
+) -> UploadOptions:
     """Return UI-ready upload options for the user's active profiles."""
-    return _build_upload_options(db, get_user_upload_profiles(db, user_id))
+    return _build_upload_options(
+        db,
+        get_user_upload_profiles(db, user_id, qualification_roles=qualification_roles),
+    )
 
 
 def get_user_upload_options_for_kind(db: OrmSession, user_id: int, upload_kind: str) -> UploadOptions:
@@ -404,9 +414,18 @@ def validate_profile_upload_scope(
     camera_id: int | None = None,
     area_id: int | None = None,
     is_mydriatic: bool | None = None,
+    qualification_roles: frozenset[str] = STANDARD_UPLOAD_QUALIFICATION_ROLES,
 ) -> UploadProfileDTO:
     """Validate a concrete upload profile selection."""
-    profiles = [profile for profile in get_user_upload_profiles(db, user_id) if profile.profile_id == profile_id]
+    profiles = [
+        profile
+        for profile in get_user_upload_profiles(
+            db,
+            user_id,
+            qualification_roles=qualification_roles,
+        )
+        if profile.profile_id == profile_id
+    ]
     if project_id is not None:
         profiles = [profile for profile in profiles if profile.project_id == project_id]
     if lab_unit_id is not None:
@@ -672,6 +691,16 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
 
 def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str, Any]:
     encounter_set_type = row.encounter_set_type
+    # Import lazily to avoid the encounter_set_types service's manager helper
+    # importing this module during module initialization.
+    from encounter_set_types.capture_validation import capture_configuration_fingerprint
+    from encounter_set_types.service import normalize_asset_rules, normalize_metadata_schema
+
+    metadata_schema_json = normalize_metadata_schema(encounter_set_type.metadata_schema_json)
+    asset_rules_result = normalize_asset_rules(encounter_set_type.asset_rules_json)
+    if not asset_rules_result.success:
+        raise ValueError(asset_rules_result.message)
+    asset_rules_json = asset_rules_result.payload["asset_rules_json"]
     image_schemes = [
         {
             "id": scheme.disease_id,
@@ -747,5 +776,11 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
             "name": row.encounter_grading_scheme.name if row.encounter_grading_scheme else None,
         },
         "grading_packages": grading_packages,
-        "asset_rules_json": encounter_set_type.asset_rules_json or {},
+        "metadata_schema_json": metadata_schema_json,
+        "asset_rules_json": asset_rules_json,
+        "manifest_version": 1,
+        "configuration_fingerprint": capture_configuration_fingerprint(
+            metadata_schema_json,
+            asset_rules_json,
+        ),
     }

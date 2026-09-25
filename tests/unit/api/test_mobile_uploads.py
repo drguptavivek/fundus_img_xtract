@@ -29,6 +29,7 @@ from models import (
     User,
 )
 from encounter_set_types.models import EncounterSetType
+from encounter_set_types.capture_validation import capture_configuration_fingerprint
 from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -70,8 +71,20 @@ def mobile_upload_data(db_session, core_test_data):
     encounter_set_type = EncounterSetType(
         name=f"Mobile Upload EncounterSet {suffix}",
         code=f"mobile_upload_est_{suffix}",
-        metadata_schema_json={"fields": []},
-        asset_rules_json={"allow_clinical_images": True},
+        metadata_schema_json={
+            "fields": [
+                {"key": "patient_code", "label": "Patient code", "scope": "patient", "type": "text"},
+                {"key": "encounter_site", "label": "Encounter site", "scope": "encounter", "type": "text"},
+                {"key": "upload_source", "label": "Upload source", "scope": "upload", "type": "text"},
+                {"key": "laterality", "label": "Laterality", "scope": "image", "type": "text"},
+                {"key": "document_type", "label": "Document type", "scope": "document", "type": "text"},
+            ]
+        },
+        asset_rules_json={
+            "allow_clinical_images": True,
+            "allow_document_uploads": True,
+            "allow_pdf_uploads": True,
+        },
         active=True,
     )
     db_session.add_all([lab, project, camera, area, encounter_set_type])
@@ -81,6 +94,12 @@ def mobile_upload_data(db_session, core_test_data):
         db_session,
         "fileUploader",
         username=f"mobile_uploads_user_{suffix}",
+        lab_units=[lab],
+    )
+    field_uploader = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username=f"mobile_uploads_field_{suffix}",
         lab_units=[lab],
     )
     profile = UploadProfile(
@@ -124,13 +143,23 @@ def mobile_upload_data(db_session, core_test_data):
             active=True,
         )
     )
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=field_uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
     db_session.flush()
 
     # Every login in this module goes through the device enrolment gate.
     approve_mobile_device(db_session, uploader.id, f"device-{uploader.username}")
+    approve_mobile_device(db_session, field_uploader.id, f"device-{field_uploader.username}")
 
     return {
         "uploader": uploader,
+        "field_uploader": field_uploader,
         "profile": profile,
         "hospital": hospital,
         "lab": lab,
@@ -138,6 +167,7 @@ def mobile_upload_data(db_session, core_test_data):
         "disease": disease,
         "camera": camera,
         "area": area,
+        "encounter_set_type": encounter_set_type,
     }
 
 
@@ -369,10 +399,20 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
         "patient_id": "MRN-123",
         "patient_name": "Mobile Patient",
         "capture_date": "2026-05-03",
+        "encounter_set_type_id": mobile_upload_data["encounter_set_type"].id,
+        "configuration_fingerprint": capture_configuration_fingerprint(
+            mobile_upload_data["encounter_set_type"].metadata_schema_json,
+            mobile_upload_data["encounter_set_type"].asset_rules_json,
+        ),
         "disease_ids": [mobile_upload_data["disease"].id],
         "remarks": "encounter level text",
         "referral_suggestion": "yes",
         "referral_positive_diseases": ["DR", "dry AMD", "corneal opacity"],
+        "metadata": {
+            "patient": {"patient_code": "PC-123"},
+            "encounter": {"encounter_site": "clinic-a"},
+            "upload": {"upload_source": "mobile-app"},
+        },
         "items": [
             {
                 "file_key": "right_eye",
@@ -381,6 +421,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
                 "area_id": mobile_upload_data["area"].id,
                 "remarks": "right eye text",
                 "referral_needed_or_positive_image": "yes",
+                "metadata": {"laterality": "OD"},
             },
             {
                 "file_key": "left_eye",
@@ -389,7 +430,11 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
                 "area_id": mobile_upload_data["area"].id,
                 "remarks": "left eye text",
                 "referral_needed_or_positive_image": "no",
+                "metadata": {"laterality": "OS"},
             },
+        ],
+        "attachments": [
+            {"file_key": "report_pdf", "asset_kind": "pdf", "metadata": {"document_type": "report"}}
         ],
     }
 
@@ -404,15 +449,16 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
             "encounter_json": json.dumps(encounter_json),
             "right_eye": (_png_file("right-eye.png"), "right-eye.png"),
             "left_eye": (_png_file("left-eye.png"), "left-eye.png"),
+            "report_pdf": (io.BytesIO(b"%PDF-test-content"), "report.pdf"),
         },
         headers={"Authorization": f"Bearer {token}"},
         content_type="multipart/form-data",
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 201, response.get_json()
     payload = response.get_json()
     assert payload["upload_kind"] == UPLOAD_KIND_ENCOUNTER_SET
-    assert payload["accepted_count"] == 2
+    assert payload["accepted_count"] == 3
     assert payload["referral_suggestion"] == "yes"
     assert payload["referral_positive_diseases"] == ["DR", "dry AMD", "corneal opacity"]
 
@@ -422,9 +468,105 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
     assert encounter.referral_suggestion == "yes"
     assert encounter.referral_positive_diseases_json == ["DR", "dry AMD", "corneal opacity"]
     assert encounter.referral_suggestion_updated_at is not None
+    assert encounter.metadata_json["patient"] == {"patient_code": "PC-123"}
+    assert encounter.metadata_json["encounter"] == {"encounter_site": "clinic-a"}
+    assert encounter.metadata_json["upload"] == {"upload_source": "mobile-app"}
     assert db_session.query(EncounterSetImage).count() == 2
-    assert {image.remarks for image in db_session.query(EncounterSetImage).all()} == {"right eye text", "left eye text"}
+    images = db_session.query(EncounterSetImage).all()
+    assert {image.remarks for image in images} == {"right eye text", "left eye text"}
+    assert {image.metadata_json["laterality"] for image in images} == {"OD", "OS"}
     assert {image.referral_needed_or_positive_image for image in db_session.query(EncounterSetImage).all()} == {"yes", "no"}
+    from encounter_sets.models import EncounterSetAttachment
+
+    attachment = db_session.query(EncounterSetAttachment).one()
+    assert attachment.metadata_json == {"document_type": "report"}
+    assert attachment.creates_task is False
+    assert attachment.visible_to_grader is False
+    assert (tmp_path / attachment.folder_rel / attachment.stored_filename).exists()
+
+
+def test_mobile_field_user_with_explicit_assignment_can_submit_configured_capture(
+    client, db_session, monkeypatch, tmp_path, mobile_upload_data
+):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    monkeypatch.setattr(client.application, "root_path", str(tmp_path))
+    token = _mobile_access_token(client, mobile_upload_data["field_uploader"].username)
+    encounter_type = mobile_upload_data["encounter_set_type"]
+    encounter_json = {
+        "patient_id": "FIELD-1",
+        "patient_name": "Field Capture",
+        "capture_date": "2026-05-04",
+        "encounter_set_type_id": encounter_type.id,
+        "configuration_fingerprint": capture_configuration_fingerprint(
+            encounter_type.metadata_schema_json, encounter_type.asset_rules_json
+        ),
+        "disease_ids": [mobile_upload_data["disease"].id],
+        "items": [{
+            "file_key": "eye",
+            "spatial_position": 1,
+            "camera_id": mobile_upload_data["camera"].id,
+            "area_id": mobile_upload_data["area"].id,
+            "metadata": {"laterality": "OD"},
+        }],
+    }
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "field-capture-idempotency-key",
+            "upload_kind": UPLOAD_KIND_ENCOUNTER_SET,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "encounter_json": json.dumps(encounter_json),
+            "eye": (_png_file("field-eye.png"), "field-eye.png"),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201, response.get_json()
+    assert db_session.query(PatientEncounters).filter_by(patient_id="FIELD-1").one()
+
+
+def test_mobile_encounter_set_rejects_stale_capture_manifest_before_persistence(
+    client, db_session, monkeypatch, mobile_upload_data
+):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    encounter_json = {
+        "patient_id": "STALE-1",
+        "patient_name": "Stale Capture",
+        "capture_date": "2026-05-04",
+        "encounter_set_type_id": mobile_upload_data["encounter_set_type"].id,
+        "configuration_fingerprint": "0" * 64,
+        "disease_ids": [mobile_upload_data["disease"].id],
+        "items": [{
+            "file_key": "eye",
+            "spatial_position": 1,
+            "camera_id": mobile_upload_data["camera"].id,
+            "area_id": mobile_upload_data["area"].id,
+        }],
+    }
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "stale-capture-idempotency-key",
+            "upload_kind": UPLOAD_KIND_ENCOUNTER_SET,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "encounter_json": json.dumps(encounter_json),
+            "eye": (_png_file("stale-eye.png"), "stale-eye.png"),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "configuration_fingerprint_mismatch"
+    assert db_session.query(PatientEncounters).filter_by(patient_id="STALE-1").count() == 0
 
 
 def test_mobile_upload_inference_returns_not_configured(client, monkeypatch, mobile_upload_data):

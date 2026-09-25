@@ -9,6 +9,7 @@ import pytest
 from PIL import Image
 
 from encounter_set_types.models import EncounterSetType
+from encounter_set_types.capture_validation import capture_configuration_fingerprint
 from models import Area, Camera, Hospital, LabUnit, Project
 from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import UserFactory, approve_mobile_device
@@ -109,6 +110,7 @@ def mobile_upload_contract_data(db_session, core_test_data):
         "disease": disease,
         "camera": camera,
         "area": area,
+        "encounter_set_type": encounter_set_type,
     }
 
 
@@ -152,6 +154,11 @@ def documented_multipart_shapes(mobile_upload_contract_data):
             "patient_id": "MRN-CURL-123",
             "patient_name": "Curl Style Patient",
             "capture_date": "2026-05-03",
+            "encounter_set_type_id": mobile_upload_contract_data["encounter_set_type"].id,
+            "configuration_fingerprint": capture_configuration_fingerprint(
+                mobile_upload_contract_data["encounter_set_type"].metadata_schema_json,
+                mobile_upload_contract_data["encounter_set_type"].asset_rules_json,
+            ),
             "disease_ids": [mobile_upload_contract_data["disease"].id],
             "remarks": "curl-style encounter remarks",
             "referral_suggestion": "missing",

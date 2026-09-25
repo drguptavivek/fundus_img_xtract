@@ -25,6 +25,7 @@ from project_review.export_service import (
     EXPORT_DIR,
     authorized_project_export_labs,
     enqueue_project_export,
+    project_export_history,
     project_export_preview,
     validate_export_request,
 )
@@ -212,6 +213,39 @@ def create_project_export(project_id: int):
             "status_url": url_for("jobs.job_status_page", job_token=job_token),
         },
     }), 202
+
+
+@api_bp.route("/projects/<int:project_id>/exports/recent", methods=["GET"])
+@login_required
+def recent_project_exports(project_id: int):
+    with transaction_scope() as db:
+        allowed_labs = authorized_project_export_labs(
+            db, actor=current_user, project_id=project_id
+        )
+        if not allowed_labs:
+            return jsonify({"success": False, "error": "Project not found."}), 404
+        history = project_export_history(
+            db, project_id=project_id, actor_user_id=current_user.id
+        )
+    return jsonify({
+        "success": True,
+        "data": [{
+            "job_token": item.token,
+            "status": item.status,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+            "status_url": url_for("jobs.job_status_page", job_token=item.token),
+            "files": [{
+                "filename": filename,
+                "download_url": url_for(
+                    "fundus_api.download_project_export",
+                    project_id=project_id,
+                    job_token=item.token,
+                    filename=filename,
+                ),
+            } for filename in item.files],
+        } for item in history],
+    })
 
 
 @api_bp.route("/projects/<int:project_id>/exports/<job_token>/<filename>", methods=["GET"])

@@ -39,13 +39,22 @@
           <hr>
           <h3 class="h6">Workbook sheets</h3>
           <ul class="small text-muted mb-0">
-            <li>Encounters: capture date, verification, image/task/grade counts, and completion.</li>
+            <li>Encounters: capture date, non-PII EncounterSet metadata, verification, image/task/grade counts, and completion.</li>
             <li>Images: encounter UUID, image UUID, exported filename, position, and review state.</li>
             <li>Tasks: every encounter and image task, including partially graded tasks.</li>
             <li>Grade Submissions: every saved grading role and selected class features.</li>
             <li>Final Grades: persisted consensus grade and method.</li>
           </ul>
           <p class="small text-muted mt-3 mb-0">Image exports are limited to 250 matched EncounterSets per request. Narrow the capture date range if the preview exceeds the limit.</p>
+        </div>
+      </section>
+      <section class="card shadow-sm mt-4" aria-labelledby="recent-exports-heading">
+        <div class="card-header d-flex align-items-center justify-content-between gap-2">
+          <h2 class="h5 mb-0" id="recent-exports-heading">Recent exports</h2>
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="refresh-recent-exports">Refresh</button>
+        </div>
+        <div class="card-body">
+          <div id="recent-exports" class="text-muted" role="status">Loading recent exports…</div>
         </div>
       </section>
     </div>
@@ -58,6 +67,8 @@
   const preview = document.getElementById('export-preview');
   const imageButton = document.getElementById('image-export-button');
   const csrf = form.querySelector('input[name="csrf_token"]').value;
+  const recentExports = document.getElementById('recent-exports');
+  const refreshRecentExports = document.getElementById('refresh-recent-exports');
   let timer;
 
   function params() {
@@ -81,6 +92,54 @@
     preview.textContent = `${item.encounter_count} EncounterSets · ${item.image_count} images · ${item.task_count} tasks` +
       (item.image_export_allowed ? '' : ` · image export exceeds the ${item.image_export_limit} EncounterSet limit`);
     imageButton.disabled = !item.image_export_allowed;
+  }
+
+  async function loadRecentExports() {
+    recentExports.replaceChildren(document.createTextNode('Loading recent exports…'));
+    const response = await fetch(`/api/projects/${projectId}/exports/recent`, {cache: 'no-store'});
+    const body = await response.json();
+    if (!response.ok) {
+      recentExports.replaceChildren(document.createTextNode(body.error || 'Unable to load recent exports.'));
+      return;
+    }
+    if (!body.data.length) {
+      recentExports.replaceChildren(document.createTextNode('No exports have been requested yet.'));
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'list-group list-group-flush';
+    body.data.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'list-group-item px-0 d-flex flex-column flex-lg-row justify-content-between gap-2';
+      const summary = document.createElement('div');
+      const statusLink = document.createElement('a');
+      statusLink.href = item.status_url;
+      statusLink.className = 'fw-semibold text-decoration-none';
+      statusLink.textContent = item.created_at ? new Date(item.created_at).toLocaleString() : item.job_token;
+      const status = document.createElement('span');
+      status.className = `badge ms-2 ${item.status === 'done' ? 'text-bg-success' : item.status === 'error' ? 'text-bg-danger' : 'text-bg-secondary'}`;
+      status.textContent = item.status;
+      summary.append(statusLink, status);
+      const downloads = document.createElement('div');
+      downloads.className = 'd-flex flex-wrap gap-2';
+      item.files.forEach(file => {
+        const link = document.createElement('a');
+        link.className = 'btn btn-sm btn-outline-primary';
+        link.href = file.download_url;
+        link.textContent = `Download ${file.filename}`;
+        downloads.append(link);
+      });
+      if (!item.files.length) {
+        const statusOnly = document.createElement('a');
+        statusOnly.className = 'btn btn-sm btn-outline-secondary';
+        statusOnly.href = item.status_url;
+        statusOnly.textContent = 'View status';
+        downloads.append(statusOnly);
+      }
+      row.append(summary, downloads);
+      list.append(row);
+    });
+    recentExports.replaceChildren(list);
   }
 
   form.addEventListener('change', () => {
@@ -109,6 +168,8 @@
     });
   });
   refreshPreview();
+  refreshRecentExports.addEventListener('click', loadRecentExports);
+  loadRecentExports();
 })();
 </script>
 {% endblock %}

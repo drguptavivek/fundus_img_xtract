@@ -46,6 +46,7 @@ def test_data_manager_project_export_page_preview_and_queue(
         name="SHOULD NOT EXPORT", patient_id="SECRET-MRN", capture_date="2026-09-01",
         capture_date_dt=date(2026, 9, 1), lab_unit_id=lab.id, project_id=project.id,
         is_set_based=True,
+        metadata_json={"patient": {"sex": "female"}, "encounter": {"mode_capture": "clinic"}},
     )
     db_session.add(encounter)
     db_session.flush()
@@ -122,6 +123,13 @@ def test_data_manager_project_export_page_preview_and_queue(
         )
         assert download.status_code == 200
         assert download.headers["Content-Disposition"].startswith("attachment;")
+        recent = client.get(f"/api/projects/{project.id}/exports/recent")
+        assert recent.status_code == 200
+        recent_data = recent.get_json()["data"]
+        assert len(recent_data) == 1
+        assert recent_data[0]["job_token"] == token
+        assert recent_data[0]["status"] == "done"
+        assert recent_data[0]["files"][0]["filename"] == "project_encounterset_export.xlsx"
 
 
 def test_project_image_export_rejects_more_than_250_matches(

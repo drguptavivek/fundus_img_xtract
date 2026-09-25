@@ -15,6 +15,9 @@ and Lab Unit scope.
   export.
 - Patient names, MRNs, source upload filenames, grader identity, and free-text
   grade comments are excluded. Images are renamed to `<image_uuid>.<ext>`.
+- The `Encounters` sheet includes the sorted union of browser-visible patient
+  and encounter metadata columns. Identifier-bearing metadata fields are
+  retained as columns with masked values; internal upload metadata is omitted.
 
 ## Filters
 
@@ -57,6 +60,12 @@ and `Final Grades` sheets. Partial grading submissions remain present even if
 the task has not reached `final`. `Final Grades` contains every task and marks
 whether a persisted consensus/final grade exists, so unresolved tasks are not
 silently omitted.
+
+## `GET /api/projects/<project_id>/exports/recent`
+
+Returns up to 10 recent project-export jobs created by the current user. Each
+row includes status and status-page URL. Completed jobs also include artifact
+names and authorized download URLs. Jobs created by other users are excluded.
 
 The image export includes numbered ZIP files, native annotations,
 multi-annotator JSONL, IITK `aiims-eom-v1` JSONL, COCO JSONL, and standard

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,11 @@ from datasets.annotation_export import (
     write_coco_exports,
 )
 from db_transaction_manager import get_db_session
+from encounter_sets.export_service import (
+    _xlsx_value,
+    collect_metadata_headers,
+    non_pii_metadata_values,
+)
 from job_store import db_set_item_state, db_set_job_status
 from models import (
     BASE_DIR,
@@ -25,6 +30,7 @@ from models import (
     EncounterSetImage,
     Grade,
     GradingTask,
+    Job,
     PatientEncounters,
     Project,
     User,
@@ -45,6 +51,15 @@ class ProjectExportRequest:
     date_from: date | None
     date_to: date | None
     grading_filter: str
+
+
+@dataclass(frozen=True)
+class ProjectExportHistoryItem:
+    token: str
+    status: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    files: tuple[str, ...]
 
 
 def validate_export_request(
@@ -155,6 +170,44 @@ def project_export_preview(db, request: ProjectExportRequest, allowed_labs: froz
     }
 
 
+def project_export_history(
+    db, *, project_id: int, actor_user_id: int, limit: int = 10,
+) -> tuple[ProjectExportHistoryItem, ...]:
+    """Return the actor's recent project exports without exposing other users' jobs."""
+
+    jobs = db.execute(
+        select(Job)
+        .where(
+            Job.project_id == project_id,
+            Job.uploader_user_id == actor_user_id,
+            Job.upload_type == "project_export",
+        )
+        .order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(max(1, min(limit, 25)))
+    ).scalars()
+    history = []
+    for job in jobs:
+        export_dir = (EXPORT_DIR / job.token).resolve()
+        files = ()
+        if (
+            job.status == "done"
+            and EXPORT_DIR.resolve() in export_dir.parents
+            and export_dir.is_dir()
+        ):
+            files = tuple(sorted(
+                item.name for item in export_dir.iterdir()
+                if item.is_file()
+            ))
+        history.append(ProjectExportHistoryItem(
+            token=job.token,
+            status=job.status,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            files=files,
+        ))
+    return tuple(history)
+
+
 def _encounters(db, request: ProjectExportRequest, allowed_labs: frozenset[int]):
     task_encounter_id = func.coalesce(
         GradingTask.patient_encounter_id,
@@ -225,6 +278,7 @@ def _export_filename(image: EncounterSetImage) -> str:
 
 
 def _write_workbook(path: Path, encounters, images, tasks) -> None:
+    metadata_headers = collect_metadata_headers(encounters)
     images_by_encounter = {}
     for image in images:
         images_by_encounter.setdefault(image.patient_encounter_id, []).append(image)
@@ -236,7 +290,7 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
     for encounter in encounters:
         encounter_tasks = tasks_by_encounter.get(encounter.id, [])
         encounter_grades = [grade for task in encounter_tasks for grade in task.grades]
-        encounter_rows.append({
+        encounter_row = {
             "encounter_uuid": encounter.uuid,
             "capture_date": encounter.capture_date_dt or encounter.capture_date,
             "lab_unit_id": encounter.lab_unit_id,
@@ -246,7 +300,13 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
             "grade_submission_count": len(encounter_grades),
             "final_task_count": sum(task.state == "final" for task in encounter_tasks),
             "all_tasks_complete": bool(encounter_tasks) and all(task.state == "final" for task in encounter_tasks),
+        }
+        metadata_values = non_pii_metadata_values(encounter.metadata_json)
+        encounter_row.update({
+            header: _xlsx_value(metadata_values.get(header, ""))
+            for header in metadata_headers
         })
+        encounter_rows.append(encounter_row)
     for image in images:
         image_rows.append({
             "encounter_uuid": next(item.uuid for item in encounters if item.id == image.patient_encounter_id),

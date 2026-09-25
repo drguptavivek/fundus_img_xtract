@@ -144,6 +144,24 @@ def export_encounter_sets_xlsx(
 
 
 _METADATA_SECTIONS = ("patient", "encounter")
+_IDENTIFIER_COLUMN_MARKERS = (
+    "patient_name",
+    "patient_id",
+    "uhid",
+    "custom_identifier",
+    "file_name",
+    "filename",
+    "metadata_json",
+    "remarks",
+    "mrn",
+    "patient_folder",
+    "dob",
+    "date_of_birth",
+    "phone",
+    "mobile",
+    "email",
+    "address",
+)
 
 
 def _metadata_sections(metadata: Any) -> dict[str, dict[str, Any]]:
@@ -189,6 +207,17 @@ def _metadata_values(metadata: Any) -> dict[str, Any]:
             if isinstance(value, (list, tuple)) and all(not isinstance(item, (dict, list, tuple)) for item in value):
                 value = ", ".join("" if item is None else str(item) for item in value)
             values[_metadata_header(section, str(key))] = value
+    return values
+
+
+def non_pii_metadata_values(metadata: Any) -> dict[str, Any]:
+    """Flatten browser-visible EncounterSet metadata and mask identifier fields."""
+
+    values = _metadata_values(metadata)
+    for key in tuple(values):
+        lowered = key.lower()
+        if any(marker in lowered for marker in _IDENTIFIER_COLUMN_MARKERS):
+            values[key] = "Anonymous" if "name" in lowered and "file" not in lowered else "masked"
     return values
 
 
@@ -351,27 +380,7 @@ def _encounter_row(
     if not include_identifiers:
         for key in tuple(row):
             lowered = key.lower()
-            if any(
-                marker in lowered
-                for marker in (
-                    "patient_name",
-                    "patient_id",
-                    "uhid",
-                    "custom_identifier",
-                    "file_name",
-                    "filename",
-                    "metadata_json",
-                    "remarks",
-                    "mrn",
-                    "patient_folder",
-                    "dob",
-                    "date_of_birth",
-                    "phone",
-                    "mobile",
-                    "email",
-                    "address",
-                )
-            ):
+            if any(marker in lowered for marker in _IDENTIFIER_COLUMN_MARKERS):
                 row[key] = "Anonymous" if "name" in lowered and "file" not in lowered else "masked"
     return row
 

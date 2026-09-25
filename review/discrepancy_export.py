@@ -25,6 +25,7 @@ from models import (
     EncounterFile,
     PatientEncounters,
     DirectImageUpload,
+    EncounterSetImage,
     DIRECT_UPLOAD_DIR,
     CuratedDataset,
     CuratedDatasetItem,
@@ -490,10 +491,15 @@ def run_dataset_export_job(
         export_dir.mkdir(parents=True, exist_ok=True)
 
         graded_rows = _build_task_payload(rows)
+        from datasets.annotation_export import write_annotation_export
+
+        annotation_manifest = write_annotation_export(graded_rows, export_dir / "annotations.json")
         export_filters = {"dataset_id": dataset_id, **(metadata or {})}
         excel_path = _write_excel(graded_rows, export_filters, export_dir, drop_ai_columns=True)
         _write_grading_scheme(metadata.get("disease_id"), export_dir)
-        zip_paths, warnings = _write_zips(graded_rows, export_dir)
+        zip_paths, warnings = _write_zips(
+            graded_rows, export_dir, annotation_manifest=annotation_manifest
+        )
 
         if warnings:
             (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
@@ -904,6 +910,25 @@ def _build_task_payload(
     task_ids = [r.task_id for r in rows]
     ai_model_meta = _load_ai_model_meta(task_ids) if task_ids else {}
     grade_dates = _load_grade_dates(task_ids) if task_ids else {}
+    encounter_set_images = {}
+    encounter_set_uuids = [
+        row.image_uuid for row in rows
+        if row.image_uuid and not row.encounter_file_id and not row.direct_image_upload_id
+    ]
+    if encounter_set_uuids:
+        with get_db_session() as db:
+            encounter_set_images = {
+                image.uuid: (
+                    image.folder_rel,
+                    image.edited_filename or image.original_filename,
+                    image.s3_config_id,
+                    image.s3_object_key_edited or image.s3_object_key,
+                    encounter_uuid,
+                )
+                for image, encounter_uuid in db.query(EncounterSetImage, PatientEncounters.uuid)
+                .join(PatientEncounters, EncounterSetImage.patient_encounter_id == PatientEncounters.id)
+                .filter(EncounterSetImage.uuid.in_(encounter_set_uuids)).all()
+            }
 
     data: List[Dict[str, Any]] = []
     for row in rows:
@@ -944,6 +969,13 @@ def _build_task_payload(
                     file_path = (DIRECT_UPLOAD_DIR / row.direct_folder_rel / filename).resolve()
                 ext = Path(filename).suffix.lower() or ".jpg"
                 renamed_filename = f"{image_uuid}{ext}"
+        elif image_uuid in encounter_set_images:
+            folder_rel, filename, _s3_config_id, _s3_key, _encounter_uuid = encounter_set_images[image_uuid]
+            candidate = (BASE_DIR / folder_rel / filename).resolve()
+            if candidate.is_relative_to(BASE_DIR.resolve()):
+                file_path = candidate
+            ext = Path(filename).suffix.lower() or ".jpg"
+            renamed_filename = f"{image_uuid}{ext}"
 
         payload = {
                 "task_id": row.task_id,
@@ -997,6 +1029,18 @@ def _build_task_payload(
                 "image_uuid": image_uuid,
                 "image_filename": renamed_filename,
                 "image_path": file_path,
+                "encounter_uuid": (
+                    encounter_set_images[image_uuid][4]
+                    if image_uuid in encounter_set_images else None
+                ),
+                "image_s3_config_id": (
+                    encounter_set_images[image_uuid][2]
+                    if image_uuid in encounter_set_images else None
+                ),
+                "image_s3_object_key": (
+                    encounter_set_images[image_uuid][3]
+                    if image_uuid in encounter_set_images else None
+                ),
             }
         if include_original_filenames:
             payload["original_upload_filename"] = row.encounter_filename or row.direct_filename
@@ -1297,7 +1341,9 @@ def _write_grading_scheme(disease_id: Optional[int], export_dir: Path) -> None:
         pass
 
 
-def _write_zips(rows: List[Dict[str, Any]], export_dir: Path) -> tuple[List[Path], List[str]]:
+def _write_zips(
+    rows: List[Dict[str, Any]], export_dir: Path, *, annotation_manifest=None
+) -> tuple[List[Path], List[str]]:
     zip_paths: List[Path] = []
     warnings: List[str] = []
 
@@ -1306,6 +1352,26 @@ def _write_zips(rows: List[Dict[str, Any]], export_dir: Path) -> tuple[List[Path
     current_zip = ZipFile(current_zip_path, "w", compression=ZIP_DEFLATED)
     current_zip_bytes = 0
     current_zip_count = 0
+    sidecars = {}
+    if annotation_manifest:
+        for task in annotation_manifest["tasks"]:
+            sidecars.setdefault(task["image_uuid"], []).append(task)
+    written_images = set()
+
+    def add_sidecar(row, archive_name):
+        image_uuid = row.get("image_uuid")
+        if image_uuid not in sidecars:
+            return
+        sidecar_name = str(Path(archive_name).with_suffix(".annotations.json"))
+        current_zip.writestr(
+            sidecar_name,
+            json.dumps({
+                "schema_version": 1,
+                "image_uuid": image_uuid,
+                "image_filename": row.get("image_filename"),
+                "tasks": sidecars[image_uuid],
+            }, ensure_ascii=False, indent=2),
+        )
 
     def rotate_zip():
         nonlocal current_zip_index, current_zip_path, current_zip, current_zip_bytes, current_zip_count
@@ -1320,6 +1386,48 @@ def _write_zips(rows: List[Dict[str, Any]], export_dir: Path) -> tuple[List[Path
     for row in rows:
         image_path: Optional[Path] = row.get("image_path")
         image_filename: Optional[str] = row.get("image_filename")
+        archive_name = (
+            f"EncounterSets/{row['encounter_uuid']}/{image_filename}"
+            if row.get("encounter_uuid") and image_filename else image_filename
+        )
+        if archive_name in written_images:
+            continue
+        s3_config_id = row.get("image_s3_config_id")
+        s3_object_key = row.get("image_s3_object_key")
+        if s3_config_id and s3_object_key and image_filename:
+            from models import S3Config
+            from utils.s3_prefix import apply_global_prefix
+            from utils.s3_storage_backends import get_s3_client
+
+            with get_db_session() as db:
+                config = db.get(S3Config, s3_config_id)
+                if config is None or not config.is_active:
+                    warnings.append(f"Task {row.get('task_id')}: S3 configuration unavailable")
+                    continue
+                client = get_s3_client(config)
+                bucket = config.bucket_name
+            try:
+                response = client.get_object(Bucket=bucket, Key=apply_global_prefix(s3_object_key))
+                file_size = int(response.get("ContentLength", 0))
+                if file_size > MAX_BYTES_PER_ZIP:
+                    warnings.append(f"Task {row.get('task_id')}: image size exceeds 200MB cap, skipped")
+                    response["Body"].close()
+                    continue
+                data = response["Body"].read(MAX_BYTES_PER_ZIP + 1)
+                response["Body"].close()
+                if len(data) > MAX_BYTES_PER_ZIP:
+                    warnings.append(f"Task {row.get('task_id')}: image size exceeds 200MB cap, skipped")
+                    continue
+                if current_zip_count >= MAX_ROWS_PER_ZIP or current_zip_bytes + len(data) > MAX_BYTES_PER_ZIP:
+                    rotate_zip()
+                current_zip.writestr(archive_name, data)
+                add_sidecar(row, archive_name)
+                written_images.add(archive_name)
+                current_zip_bytes += len(data)
+                current_zip_count += 1
+            except Exception:
+                warnings.append(f"Task {row.get('task_id')}: S3 image unavailable")
+            continue
         if not image_path or not image_filename:
             warnings.append(f"Task {row.get('task_id')}: missing image path")
             continue
@@ -1334,7 +1442,9 @@ def _write_zips(rows: List[Dict[str, Any]], export_dir: Path) -> tuple[List[Path
         if current_zip_count >= MAX_ROWS_PER_ZIP or (current_zip_bytes + file_size) > MAX_BYTES_PER_ZIP:
             rotate_zip()
 
-        current_zip.write(image_path, arcname=image_filename)
+        current_zip.write(image_path, arcname=archive_name)
+        add_sidecar(row, archive_name)
+        written_images.add(archive_name)
         current_zip_bytes += file_size
         current_zip_count += 1
 

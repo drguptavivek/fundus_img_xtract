@@ -208,6 +208,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 ### Core Documentation (`docs/`)
 - [App Architecture](docs/app.md) - Updated with current implementation details
 - [Database Models](docs/00-Core/models.md) - Updated with dual grading system models
+- [Dataset Creation and Annotation Export](docs/user-guide/dataset-creation.md) - Curated dataset workflow and native per-task annotation companion
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current admin and upload-governance model for projects, reusable profiles, uploader assignments, Remidio ZIP defaults, and AI workflow bindings

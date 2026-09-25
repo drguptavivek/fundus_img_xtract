@@ -227,6 +227,11 @@ Behavior:
 - Verifies the share, the session, and terms acceptance
 - Confirms the file name is secure
 - Streams the export file if the job token belongs to the dataset
+- Curated exports include `annotations.json` and image ZIPs. Within each ZIP,
+  `EncounterSets/<encounter_uuid>/<image_uuid>.<ext>` is paired with
+  `<image_uuid>.annotations.json`; that sidecar contains separate entries for
+  every exported linked disease task on the image. These artifacts follow the
+  same job token and share authorization as the existing spreadsheet and ZIPs.
 
 Response:
 - `200 OK` file download

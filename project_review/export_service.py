@@ -20,7 +20,7 @@ from datasets.annotation_export import (
 from db_transaction_manager import get_db_session
 from encounter_sets.export_service import (
     _xlsx_value,
-    collect_metadata_headers,
+    collect_non_pii_metadata_headers,
     non_pii_metadata_values,
 )
 from job_store import db_set_item_state, db_set_job_status
@@ -278,7 +278,7 @@ def _export_filename(image: EncounterSetImage) -> str:
 
 
 def _write_workbook(path: Path, encounters, images, tasks) -> None:
-    metadata_headers = collect_metadata_headers(encounters)
+    metadata_headers = collect_non_pii_metadata_headers(encounters)
     images_by_encounter = {}
     for image in images:
         images_by_encounter.setdefault(image.patient_encounter_id, []).append(image)
@@ -292,6 +292,7 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
         encounter_grades = [grade for task in encounter_tasks for grade in task.grades]
         encounter_row = {
             "encounter_uuid": encounter.uuid,
+            "patient_id": encounter.patient_id,
             "capture_date": encounter.capture_date_dt or encounter.capture_date,
             "lab_unit_id": encounter.lab_unit_id,
             "verification_status": encounter.encounter_verified_status,

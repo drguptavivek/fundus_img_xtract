@@ -1,5 +1,7 @@
 from datetime import date
 
+import pandas as pd
+
 from data_authorization.models import ProjectRoleGrant
 from models import (
     DiseaseGrading,
@@ -111,7 +113,8 @@ def test_data_manager_project_export_page_preview_and_queue(
         run_project_export_job(token, queued[0][1])
         workbook = tmp_path / token / "project_encounterset_export.xlsx"
         assert workbook.exists()
-        assert b"SECRET-MRN" not in workbook.read_bytes()
+        encounter_sheet = pd.read_excel(workbook, sheet_name="Encounters")
+        assert encounter_sheet.iloc[0]["patient_id"] == "SECRET-MRN"
 
         status_page = client.get(f"/jobs/{token}/view")
         assert status_page.status_code == 200

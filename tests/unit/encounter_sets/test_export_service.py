@@ -220,6 +220,7 @@ def _iitk_api_encounter(encounter_id: int = 4921):
                 "patient_age_yrs": 63,
                 "sex": "male",
                 "site_recruitment": "delhi",
+                "remidio_patient_raw_metadata": {"name": "Secret Person"},
             },
             "encounter": {
                 "source_session_id": "929555bc-ae92-43d8-8525-5f36127e7528",
@@ -232,6 +233,7 @@ def _iitk_api_encounter(encounter_id: int = 4921):
                 "expected_positions": 9,
                 "capture_status": "complete",
                 "clinician_uid": None,
+                "remidio_encounter_raw_metadata": {"patientId": "107999738"},
             },
             "upload": {"source_kind": "iitk_api", "mapped_lab_unit_id": 7},
         },
@@ -291,10 +293,12 @@ def test_export_includes_patient_and_encounter_metadata_columns(monkeypatch, inc
     assert row["metadata_encounter_capture_datetime"] == "2026-09-18T11:05:10.597253Z"
     assert row["capture_date"] == "2026-09-18"
     assert row["capture_time"] == "16:35:10"
-    expected_uhid = "107999738" if include_identifiers else "masked"
+    expected_uhid = "107999738"
     assert row["metadata_patient_hospital_UHID"] == expected_uhid
     assert row["hospital_UHID"] == expected_uhid
     assert "metadata_upload_source_kind" not in headers
+    raw_headers = [header for header in headers if "raw_metadata" in header]
+    assert bool(raw_headers) is include_identifiers
 
 
 def test_missing_metadata_columns_are_blank_for_rows_without_that_key(monkeypatch):
@@ -405,11 +409,11 @@ def test_masked_export_hides_identifier_bearing_metadata_keys(include_identifier
     identifier_columns = {
         "metadata_source_zip_filename": "batch_2026-09.zip",
         "metadata_source_patient_folder": "MRN_IITK-9_2026-09-15",
-        "metadata_patient_remidio_patient_id": "RP-1",
         "metadata_patient_patient_dob": "1962-01-01",
     }
     for column, raw in identifier_columns.items():
         assert row[column] == (raw if include_identifiers else "masked")
+    assert row["metadata_patient_remidio_patient_id"] == "RP-1"
     assert row["metadata_source_kind"] == "iitk_zip"
     assert row["metadata_patient_sex"] == "M"
     assert row["metadata_encounter_clinician_uid"] == "clin-7"

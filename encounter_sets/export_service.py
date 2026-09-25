@@ -116,7 +116,11 @@ def export_encounter_sets_xlsx(
         for prefix, _model, relationship in _OCR_MODELS
     }
 
-    metadata_headers = collect_metadata_headers(encounters)
+    metadata_headers = (
+        collect_metadata_headers(encounters)
+        if include_identifiers
+        else collect_non_pii_metadata_headers(encounters)
+    )
 
     headers = list(BASE_HEADERS)
     for prefix, model, _relationship in _OCR_MODELS:
@@ -146,14 +150,11 @@ def export_encounter_sets_xlsx(
 _METADATA_SECTIONS = ("patient", "encounter")
 _IDENTIFIER_COLUMN_MARKERS = (
     "patient_name",
-    "patient_id",
-    "uhid",
     "custom_identifier",
     "file_name",
     "filename",
     "metadata_json",
     "remarks",
-    "mrn",
     "patient_folder",
     "dob",
     "date_of_birth",
@@ -200,6 +201,17 @@ def collect_metadata_headers(encounters: Iterable[PatientEncounters]) -> list[st
     return sorted(headers)
 
 
+def collect_non_pii_metadata_headers(
+    encounters: Iterable[PatientEncounters],
+) -> list[str]:
+    """Return safe metadata headers, excluding opaque raw upstream payloads."""
+
+    return [
+        header for header in collect_metadata_headers(encounters)
+        if "raw_metadata" not in header.lower()
+    ]
+
+
 def _metadata_values(metadata: Any) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for section, section_values in _metadata_sections(metadata).items():
@@ -216,6 +228,9 @@ def non_pii_metadata_values(metadata: Any) -> dict[str, Any]:
     values = _metadata_values(metadata)
     for key in tuple(values):
         lowered = key.lower()
+        if "raw_metadata" in lowered:
+            del values[key]
+            continue
         if any(marker in lowered for marker in _IDENTIFIER_COLUMN_MARKERS):
             values[key] = "Anonymous" if "name" in lowered and "file" not in lowered else "masked"
     return values

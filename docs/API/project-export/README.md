@@ -13,11 +13,16 @@ and Lab Unit scope.
   grants cover only their configured Lab Unit.
 - The worker repeats authorization when the job runs. Revoked access stops the
   export.
-- Patient names, MRNs, source upload filenames, grader identity, and free-text
+- Patient names, source upload filenames, grader identity, and free-text
   grade comments are excluded. Images are renamed to `<image_uuid>.<ext>`.
 - The `Encounters` sheet includes the sorted union of browser-visible patient
-  and encounter metadata columns. Identifier-bearing metadata fields are
-  retained as columns with masked values; internal upload metadata is omitted.
+  and encounter metadata columns. Name, contact, address, date-of-birth, and
+  filename-bearing fields are retained as columns with masked values; internal
+  upload metadata is omitted.
+  Opaque upstream fields containing `raw_metadata` are omitted entirely because
+  their nested payloads may contain PII.
+  MRN, patient ID, and `hospital_UHID` are retained as permitted non-PII
+  linkage fields.
 
 ## Filters
 
@@ -60,6 +65,10 @@ and `Final Grades` sheets. Partial grading submissions remain present even if
 the task has not reached `final`. `Final Grades` contains every task and marks
 whether a persisted consensus/final grade exists, so unresolved tasks are not
 silently omitted.
+
+The `Encounters` sheet includes the core `patient_id` plus MRN and hospital
+UHID metadata when available. These stable project identifiers support joins
+to other research datasets.
 
 ## `GET /api/projects/<project_id>/exports/recent`
 

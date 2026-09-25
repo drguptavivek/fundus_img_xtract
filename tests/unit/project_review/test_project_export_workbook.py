@@ -11,17 +11,21 @@ from project_review.export_service import _write_image_bundle, _write_workbook, 
 
 def test_project_workbook_has_join_keys_partial_grades_and_no_source_filename(tmp_path):
     encounter = SimpleNamespace(
-        id=1, uuid="encounter-uuid", capture_date_dt=date(2026, 9, 1),
+        id=1, uuid="encounter-uuid", patient_id="MRN-CORE-100",
+        capture_date_dt=date(2026, 9, 1),
         capture_date="2026-09-01", lab_unit_id=7, encounter_verified_status="verified",
         metadata_json={
             "patient": {
                 "patient_age_yrs": 63,
                 "sex": "female",
-                "hospital_UHID": "SECRET-MRN-100",
+                "hospital_UHID": "HOSPITAL-100",
+                "mrn": "MRN-100",
+                "remidio_patient_raw_metadata": {"name": "SECRET PERSON"},
             },
             "encounter": {
                 "mode_capture": "clinic",
                 "clinical_note": "=FORMULA()",
+                "remidio_encounter_raw_metadata": {"patientId": "SECRET-MRN-100"},
             },
             "upload": {"source_filename": "SECRET-MRN-100.zip"},
         },
@@ -55,12 +59,15 @@ def test_project_workbook_has_join_keys_partial_grades_and_no_source_filename(tm
     assert sheets["Tasks"].iloc[0]["task_uuid"] == "task-uuid"
     assert sheets["Grade Submissions"].iloc[0]["role_slot"] == "resident"
     encounter_row = sheets["Encounters"].iloc[0]
+    assert encounter_row["patient_id"] == "MRN-CORE-100"
     assert encounter_row["metadata_patient_patient_age_yrs"] == 63
     assert encounter_row["metadata_patient_sex"] == "female"
-    assert encounter_row["metadata_patient_hospital_UHID"] == "masked"
+    assert encounter_row["metadata_patient_hospital_UHID"] == "HOSPITAL-100"
+    assert encounter_row["metadata_patient_mrn"] == "MRN-100"
     assert encounter_row["metadata_encounter_mode_capture"] == "clinic"
     assert encounter_row["metadata_encounter_clinical_note"] == "'=FORMULA()"
     assert not any(column.startswith("metadata_upload_") for column in sheets["Encounters"])
+    assert not any("raw_metadata" in column for column in sheets["Encounters"])
     assert not bool(sheets["Final Grades"].iloc[0]["has_persisted_final_grade"])
     assert sheets["Final Grades"].iloc[0]["task_state"] == "resident_done"
     assert "SECRET-MRN" not in path.read_bytes().decode("latin1", errors="ignore")

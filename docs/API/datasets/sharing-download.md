@@ -232,6 +232,16 @@ Behavior:
   `<image_uuid>.annotations.json`; that sidecar contains separate entries for
   every exported linked disease task on the image. These artifacts follow the
   same job token and share authorization as the existing spreadsheet and ZIPs.
+- Curated exports also include `annotations.jsonl` in the IITK
+  `aiims-eom-v1` image-label convention, `annotator_submissions.jsonl` (one
+  saved grade submission per line), `coco.jsonl` (one COCO image and
+  annotation record per line), and standard `coco.json`. Each ZIP image has
+  adjacent `<image_uuid>.coco.jsonl` and `<image_uuid>.annotators.jsonl`
+  sidecars. Coordinates are absolute
+  pixels of the exported image. The native JSON retains all saved grade roles;
+  COCO chooses the highest human grading role with annotations for each task.
+  `task_grades` and annotation source fields distinguish the later task grade
+  from the earlier role when that fallback occurs.
 
 Response:
 - `200 OK` file download

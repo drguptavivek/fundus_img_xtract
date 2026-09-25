@@ -4,6 +4,7 @@ import html
 import json
 import re
 import shutil
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
+from PIL import Image
 from sqlalchemy import and_, exists, or_, select, text
 
 from auth.utils import utcnow
@@ -491,15 +493,21 @@ def run_dataset_export_job(
         export_dir.mkdir(parents=True, exist_ok=True)
 
         graded_rows = _build_task_payload(rows)
-        from datasets.annotation_export import write_annotation_export
+        from datasets.annotation_export import (
+            write_annotation_export, write_annotator_exports, write_coco_exports,
+        )
 
         annotation_manifest = write_annotation_export(graded_rows, export_dir / "annotations.json")
         export_filters = {"dataset_id": dataset_id, **(metadata or {})}
         excel_path = _write_excel(graded_rows, export_filters, export_dir, drop_ai_columns=True)
         _write_grading_scheme(metadata.get("disease_id"), export_dir)
+        exported_images = {}
         zip_paths, warnings = _write_zips(
-            graded_rows, export_dir, annotation_manifest=annotation_manifest
+            graded_rows, export_dir, annotation_manifest=annotation_manifest,
+            exported_images=exported_images,
         )
+        warnings.extend(write_coco_exports(annotation_manifest, exported_images, export_dir))
+        write_annotator_exports(annotation_manifest, exported_images, export_dir)
 
         if warnings:
             (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
@@ -1342,7 +1350,8 @@ def _write_grading_scheme(disease_id: Optional[int], export_dir: Path) -> None:
 
 
 def _write_zips(
-    rows: List[Dict[str, Any]], export_dir: Path, *, annotation_manifest=None
+    rows: List[Dict[str, Any]], export_dir: Path, *, annotation_manifest=None,
+    exported_images=None,
 ) -> tuple[List[Path], List[str]]:
     zip_paths: List[Path] = []
     warnings: List[str] = []
@@ -1423,6 +1432,17 @@ def _write_zips(
                 current_zip.writestr(archive_name, data)
                 add_sidecar(row, archive_name)
                 written_images.add(archive_name)
+                if exported_images is not None:
+                    try:
+                        with Image.open(BytesIO(data)) as decoded:
+                            width, height = decoded.size
+                        exported_images[row["image_uuid"]] = {
+                            "file_name": archive_name, "width": width, "height": height,
+                            "zip_path": current_zip_path,
+                            "encounter_uuid": row.get("encounter_uuid"),
+                        }
+                    except Exception:
+                        warnings.append(f"Task {row.get('task_id')}: COCO image dimensions unavailable")
                 current_zip_bytes += len(data)
                 current_zip_count += 1
             except Exception:
@@ -1445,6 +1465,17 @@ def _write_zips(
         current_zip.write(image_path, arcname=archive_name)
         add_sidecar(row, archive_name)
         written_images.add(archive_name)
+        if exported_images is not None:
+            try:
+                with Image.open(image_path) as decoded:
+                    width, height = decoded.size
+                exported_images[row["image_uuid"]] = {
+                    "file_name": archive_name, "width": width, "height": height,
+                    "zip_path": current_zip_path,
+                    "encounter_uuid": row.get("encounter_uuid"),
+                }
+            except Exception:
+                warnings.append(f"Task {row.get('task_id')}: COCO image dimensions unavailable")
         current_zip_bytes += file_size
         current_zip_count += 1
 

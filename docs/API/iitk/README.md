@@ -132,6 +132,12 @@ image pixels with top-left origin and fields `x`, `y`, `w`, `h`, and `cls`.
 Suggested classes include `eye_region`, `iris`, `pupil`, `limbus`, `sclera`,
 `upper_lid`, `lower_lid`, and `lesion`.
 
+Curated dataset export produces local `annotations.jsonl` records using this
+label convention, plus `coco.jsonl` and standard `coco.json`. These artifacts
+are for download; export does not call `POST /annotations`. The JSONL filename
+refers to the UUID-named image in the exported ZIP, so it must be mapped back
+to the exact `/listImages` filename before any upstream submission.
+
 The supplied documents contain an ambiguity that must be resolved before label
 submission is implemented: they allow splitting more than 200 annotations over
 multiple requests but also state that the newest submission replaces the

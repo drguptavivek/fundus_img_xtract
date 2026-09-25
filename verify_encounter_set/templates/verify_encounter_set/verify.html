@@ -363,6 +363,9 @@
     const encounterKey = 'verify-encounter-set:active';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const panelStage = document.getElementById('verification-panel-stage');
+    if (panelStage && window.bootstrap?.Tooltip) {
+      new window.bootstrap.Tooltip(panelStage, {selector: '[data-bs-toggle="tooltip"]'});
+    }
     const counter = document.getElementById('verify-panel-counter');
     const panelCount = shell.dataset.panelCount || '1';
     const submissionOverlay = shell.querySelector('[data-verification-submit-overlay]');

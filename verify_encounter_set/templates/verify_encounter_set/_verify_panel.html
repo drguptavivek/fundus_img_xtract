@@ -37,7 +37,7 @@
     {% set value = metadata.get(field.key) if metadata else none %}
     <div>
       <label class="form-label" for="{{ prefix }}__{{ field.key }}">
-        {{ field.label }}{% if field.required_for_task_routing %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
+        {{ field.label }}{% if field.required_for_task_routing %}<span class="text-primary ms-1" role="img" aria-label="Required for task routing" data-bs-toggle="tooltip" data-bs-title="Required for task routing"><i class="bi bi-info-circle-fill" aria-hidden="true"></i></span>{% endif %}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
       </label>
       {{ field_control(field, value, prefix ~ '__' ~ field.key) }}
     </div>
@@ -276,10 +276,10 @@
       {% set effective_focus = ((image_descriptor.focus | lower) if image_descriptor and image_descriptor.focus else none) or image_metadata.get('focus') %}
       {% set compact_control_col = 'col-12 col-sm-3 col-lg-2' %}
       {% set gaze_control_col = 'col-12 col-sm-6 col-lg-3' %}
-      {% set referral_control_col = 'col-12 col-sm-6 col-lg-5' if has_gaze_context else 'col-12 col-sm-6 col-lg-8' %}
+      {% set referral_control_col = 'col-12 col-sm-6 col-lg-3' %}
       <div class="row g-2 mb-2">
         <div class="{{ compact_control_col }}">
-          <label class="form-label" for="image_laterality_{{ selected_image.id }}">Laterality{% if 'laterality' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
+          <label class="form-label" for="image_laterality_{{ selected_image.id }}">Laterality{% if 'laterality' in routing_required_keys %}<span class="text-primary ms-1" role="img" aria-label="Required for task routing" data-bs-toggle="tooltip" data-bs-title="Required for task routing"><i class="bi bi-info-circle-fill" aria-hidden="true"></i></span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__laterality" value="1">
           <select class="form-select"
                   id="image_laterality_{{ selected_image.id }}"
@@ -295,7 +295,7 @@
         </div>
         {% if not (image_fields | selectattr('key', 'equalto', 'fundus_field') | list) %}
         <div class="{{ compact_control_col }}">
-          <label class="form-label" for="image_focus_{{ selected_image.id }}">Focus{% if 'focus' in routing_required_keys %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}</label>
+          <label class="form-label" for="image_focus_{{ selected_image.id }}">Focus{% if 'focus' in routing_required_keys %}<span class="text-primary ms-1" role="img" aria-label="Required for task routing" data-bs-toggle="tooltip" data-bs-title="Required for task routing"><i class="bi bi-info-circle-fill" aria-hidden="true"></i></span>{% endif %}</label>
           <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__focus" value="1">
           <select class="form-select"
                   id="image_focus_{{ selected_image.id }}"
@@ -338,16 +338,21 @@
             <option value="no" {% if selected_image.referral_needed_or_positive_image == 'no' %}selected{% endif %}>No</option>
           </select>
         </div>
-      </div>
-      {% if image_fields %}
-      {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
-      {% endif %}
-      {% set image_verification = image_metadata.get('verification', {}) if image_metadata.get('verification') is mapping else {} %}
-      <div class="mt-2">
+        {% for field in image_fields %}
+        {% set field_value = image_metadata.get(field.key) if image_metadata else none %}
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label class="form-label" for="metadata__image__{{ selected_image.id }}__{{ field.key }}">
+            {{ field.label }}{% if field.required_for_task_routing %}<span class="text-primary ms-1" role="img" aria-label="Required for task routing" data-bs-toggle="tooltip" data-bs-title="Required for task routing"><i class="bi bi-info-circle-fill" aria-hidden="true"></i></span>{% endif %}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
+          </label>
+          {{ field_control(field, field_value, 'metadata__image__' ~ selected_image.id ~ '__' ~ field.key) }}
+        </div>
+        {% endfor %}
+        {% set image_verification = image_metadata.get('verification', {}) if image_metadata.get('verification') is mapping else {} %}
+        <div class="col-12 col-lg-4">
         <label class="form-label" for="image_verifier_observation_{{ selected_image.id }}">Verifier observation</label>
         <textarea class="form-control" id="image_verifier_observation_{{ selected_image.id }}"
                   name="metadata__image__{{ selected_image.id }}__verifier_observation"
-                  rows="2" maxlength="2000" placeholder="Observed feature(s) or comment"
+                  rows="1" maxlength="2000" placeholder="Observed feature(s) or comment"
                   {% if verification_read_only %}disabled{% endif %}>{{ image_verification.get('observation') or '' }}</textarea>
         {% if verification_tags and not verification_read_only %}
         <div class="d-flex flex-wrap gap-1 mt-2" aria-label="Project verification tags">
@@ -361,6 +366,7 @@
         {% if image_verification.get('observation_by') %}
         <div class="form-text">Last noted by {{ image_verification.get('observation_by') }}</div>
         {% endif %}
+      </div>
       </div>
     </div>
     {% if not verification_read_only %}

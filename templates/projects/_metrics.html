@@ -4,7 +4,7 @@
     <div class="card h-100 shadow-sm">
       <div class="card-body">
         <div class="text-muted small d-flex align-items-center gap-1">{{ metric.label }}{% if metric.help_text %}<button class="btn btn-sm btn-outline-primary rounded-circle d-inline-flex align-items-center justify-content-center p-0" style="width:1.35rem;height:1.35rem" type="button" aria-label="More information about {{ metric.label }}" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="{{ metric.help_text }}">i</button>{% endif %}</div>
-        <div class="display-6 fw-semibold">{{ metric.value }}</div>
+        <div class="display-6 fw-semibold">{{ metric.value }}{{ metric.value_suffix or '' }}</div>
       </div>
     </div>
   </div>

@@ -27,6 +27,7 @@ class ProjectMetricDTO:
     label: str
     value: int
     help_text: str | None = None
+    value_suffix: str | None = None
 
 
 @dataclass(frozen=True)
@@ -216,6 +217,7 @@ class ProjectGradingDTO:
     target_group: str
     target_type: str
     grading_mode: str
+    scope_type: str
     scope_role: str | None
     scope_name: str | None
     parent_scope_name: str | None
@@ -226,6 +228,7 @@ class ProjectGradingDTO:
     second_grading_count: int
     adjudication_count: int
     final_count: int
+    completion_percent: int
 
 
 @dataclass(frozen=True)

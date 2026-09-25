@@ -96,6 +96,21 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         PatientEncounters.is_set_based.is_(True),
         encounter_scope,
     ))
+    verified_encounter_count, project_encounter_count = db.execute(select(
+        func.count(PatientEncounters.id).filter(
+            PatientEncounters.encounter_verified_status == "verified"
+        ),
+        func.count(PatientEncounters.id),
+    ).where(
+        PatientEncounters.project_id == project.id,
+        encounter_scope,
+    )).one()
+    verified_encounter_count = int(verified_encounter_count or 0)
+    project_encounter_count = int(project_encounter_count or 0)
+    verified_encounter_percent = (
+        round(verified_encounter_count / project_encounter_count * 100)
+        if project_encounter_count else 0
+    )
     set_image_count = _scalar_count(db, select(func.count(EncounterSetImage.id)).join(
         PatientEncounters, PatientEncounters.id == EncounterSetImage.patient_encounter_id
     ).where(PatientEncounters.project_id == project.id, encounter_scope))
@@ -112,14 +127,14 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
     ).where(PatientEncounters.project_id == project.id, encounter_scope))
     package_help = "Each workflow is created for one EncounterSet from a configured grading package and contains one or more grading tasks."
-    grading_rows = _grading_rows(db, project.id, scope)
+    grading_rows = _grading_rows(db, project.id, scope, top_level_only=True)
     task_count = sum(row.task_count for row in grading_rows)
     finalised_count = sum(row.final_count for row in grading_rows)
     grading_stage_metrics = (
-        ProjectMetricDTO("first_grading", "Awaiting first grading", sum(row.first_grading_count for row in grading_rows)),
-        ProjectMetricDTO("second_grading", "Awaiting second grading", sum(row.second_grading_count for row in grading_rows)),
-        ProjectMetricDTO("adjudication", "Awaiting adjudication", sum(row.adjudication_count for row in grading_rows)),
-        ProjectMetricDTO("final", "Finalised", finalised_count),
+        ProjectMetricDTO("first_grading", "Need G-1", sum(row.first_grading_count for row in grading_rows)),
+        ProjectMetricDTO("second_grading", "Need G-2", sum(row.second_grading_count for row in grading_rows)),
+        ProjectMetricDTO("adjudication", "Need Adjudication", sum(row.adjudication_count for row in grading_rows)),
+        ProjectMetricDTO("final", "Complete", finalised_count),
     )
     allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
@@ -132,11 +147,18 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
     )
     metrics = [
         ProjectMetricDTO("encounter_sets", "EncounterSets", encounter_count),
+        ProjectMetricDTO(
+            "encounters_verified_percent",
+            "% Encounters Verified",
+            verified_encounter_percent,
+            f"{verified_encounter_count:,} of {project_encounter_count:,} in-scope project encounters are verified.",
+            "%",
+        ),
         ProjectMetricDTO("single_uploads", "Single-image uploads", direct_count),
         ProjectMetricDTO("total_images", "Total images", set_image_count + direct_count),
         ProjectMetricDTO("pregraded_images", "Pre-graded images", pregraded_count),
         ProjectMetricDTO("grading_packages", "EncounterSet grading workflows", package_count, package_help),
-        ProjectMetricDTO("grading_tasks", "All grading tasks", task_count),
+        ProjectMetricDTO("grading_tasks", "Top-level grading tasks", task_count),
     ]
     if any(source.name == "Remidio API" for source in configuration["sources"]):
         report_counts = {
@@ -524,9 +546,15 @@ def _scope_lab_units(db: Session, scope: _ResolvedScope) -> tuple[ProjectLabUnit
     return tuple(ProjectLabUnitChoiceDTO(id=row[0], name=row[1], hospital_name=row[2]) for row in rows)
 
 
-def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[ProjectGradingDTO, ...]:
+def _grading_rows(
+    db: Session,
+    project_id: int,
+    scope: _ResolvedScope,
+    *,
+    top_level_only: bool = False,
+) -> tuple[ProjectGradingDTO, ...]:
     allowed_labs = _allowed_lab_ids(db, scope)
-    grouped: dict[tuple[str, str, str, str | None, str | None, str | None, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
+    grouped: dict[tuple[str, str, str, str, str | None, str | None, str | None, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
 
     def add_task(bucket: list[int], *, state: str, image_count: int) -> None:
         bucket[0] += 1
@@ -540,15 +568,16 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         elif state == "final":
             bucket[5] += 1
 
-    direct_query = select(GradingTask, Disease).join(
-        DirectImageUpload, DirectImageUpload.id == GradingTask.direct_image_upload_id
-    ).join(Disease, Disease.id == GradingTask.disease_id).where(
-        DirectImageUpload.project_id == project_id,
-    )
-    direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}))
-    for task, disease in db.execute(direct_query):
-        bucket = grouped[("Single images", "Independent image", "disease specific", None, None, None, disease.name)]
-        add_task(bucket, state=task.state, image_count=1)
+    if not top_level_only:
+        direct_query = select(GradingTask, Disease).join(
+            DirectImageUpload, DirectImageUpload.id == GradingTask.direct_image_upload_id
+        ).join(Disease, Disease.id == GradingTask.disease_id).where(
+            DirectImageUpload.project_id == project_id,
+        )
+        direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}))
+        for task, disease in db.execute(direct_query):
+            bucket = grouped[("Single images", "Independent image", "disease specific", "disease", None, None, None, disease.name)]
+            add_task(bucket, state=task.state, image_count=1)
 
     scope_disease = aliased(Disease)
     parent_scope_disease = aliased(Disease)
@@ -588,6 +617,14 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         ),
     ).where(PatientEncounters.project_id == project_id)
     encounter_query = encounter_query.where(PatientEncounters.lab_unit_id.in_(allowed_labs or {-1}))
+    if top_level_only:
+        encounter_query = encounter_query.where(
+            GradingTask.patient_encounter_id.is_not(None),
+            or_(
+                GradingTask.grading_target_level == "encounter",
+                GradingTask.grading_target_level.is_(None),
+            ),
+        )
     encounter_image_counts = dict(db.execute(select(
         EncounterSetImage.patient_encounter_id,
         func.count(EncounterSetImage.id),
@@ -596,7 +633,12 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         _encounter_scope_clause(scope),
     ).group_by(EncounterSetImage.patient_encounter_id)).all())
     for task, disease, grading_mode, scope_role, scope_name, parent_scope_name, encounter_id, is_set_based in db.execute(encounter_query):
-        if task.encounter_set_image_id:
+        if top_level_only and task.patient_encounter_id:
+            if is_set_based:
+                target_group, target = "EncounterSets", "Whole EncounterSet"
+            else:
+                target_group, target = "Classic ZIP encounters", "Whole encounter"
+        elif task.encounter_set_image_id:
             target_group, target = "EncounterSets", "Image within EncounterSet"
         elif task.encounter_file_id and not is_set_based:
             target_group, target = "Classic ZIP encounters", "Individual image"
@@ -605,7 +647,15 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         else:
             target_group, target = "EncounterSets", "Whole EncounterSet"
         mode = (grading_mode or "disease_specific").replace("_", " ")
-        bucket = grouped[(target_group, target, mode, scope_role, scope_name, parent_scope_name, disease.name)]
+        if scope_role in {"root", "linked"}:
+            scope_type = "disease"
+        elif scope_role == "unified" or grading_mode == "unified":
+            scope_type = "encounter"
+        elif grading_mode == "disease_specific":
+            scope_type = "disease"
+        else:
+            scope_type = "legacy"
+        bucket = grouped[(target_group, target, mode, scope_type, scope_role, scope_name, parent_scope_name, disease.name)]
         add_task(
             bucket,
             state=task.state,
@@ -616,25 +666,27 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
         target_group=key[0],
         target_type=key[1],
         grading_mode=key[2],
-        scope_role=key[3],
-        scope_name=key[4],
-        parent_scope_name=key[5],
-        disease_name=key[6],
+        scope_type=key[3],
+        scope_role=key[4],
+        scope_name=key[5],
+        parent_scope_name=key[6],
+        disease_name=key[7],
         task_count=value[0],
         image_count=value[1],
         first_grading_count=value[2],
         second_grading_count=value[3],
         adjudication_count=value[4],
         final_count=value[5],
+        completion_percent=round((value[5] / value[0]) * 100) if value[0] else 0,
     ) for key, value in sorted(
         grouped.items(),
         key=lambda item: (
             {"EncounterSets": 0, "Single images": 1, "Classic ZIP encounters": 2}.get(item[0][0], 9),
-            {"unified": 0, "disease specific": 1}.get(item[0][2], 9),
-            {"unified": 0, "root": 1, "linked": 2, None: 3}.get(item[0][3], 9),
-            item[0][4] or "",
-            {"Whole EncounterSet": 0, "Image within EncounterSet": 1, "Independent image": 0, "Individual image": 0}.get(item[0][1], 9),
-            item[0][6],
+            {"disease": 0, "encounter": 1, "legacy": 2}.get(item[0][3], 9),
+            {"unified": 0, "root": 1, "linked": 2, None: 3}.get(item[0][4], 9),
+            item[0][5] or "",
+            {"Whole EncounterSet": 0, "Whole encounter": 0, "Image within EncounterSet": 1, "Independent image": 0, "Individual image": 0}.get(item[0][1], 9),
+            item[0][7],
         ),
     ))
 

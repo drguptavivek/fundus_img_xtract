@@ -30,7 +30,13 @@ Returns projects in the caller's membership scope.
 `GET /api/projects/{project_id}/review/summary`
 
 Returns project/scope details; EncounterSet, single-image, total-image,
-pre-graded image, EncounterSet grading-workflow, and task counts. The workflow
+pre-graded image, EncounterSet grading-workflow, and top-level grading-task counts. It
+also returns `% Encounters Verified`, calculated from all in-scope project
+`PatientEncounters` (including classic ZIP encounters), where only
+`encounter_verified_status = "verified"` counts as verified. Percent values are
+rounded to the nearest whole number; an empty denominator returns `0%`. The
+metric's `value_suffix` is `%`, and its `help_text` reports the verified and
+total encounter counts. The workflow
 metric includes hover help explaining its relationship to grading tasks and
 listing the underlying configured package names and runtime counts. Remidio
 DR/AMD/glaucoma report and Wadhwani inference counts are included only when
@@ -38,16 +44,20 @@ their respective integrations are currently active in the project's effective
 configuration. The response also includes that enabled configuration:
 
 The summary also returns `grading_completion_percent`, `grading_stage_metrics`
-for the three active workflow stages plus finalised tasks, and `grading_rows`
-grouped by task target type, disease, and grading mode. Each row includes stage
-counts rather than repeating the target once per persisted state, plus `target_group` and
-`target_type`, plus `scope_role`, `scope_name`, and `parent_scope_name` for
-unified, root, and linked EncounterSet disease scopes. These values come from
-persisted lineage: EncounterSets contain whole-set and per-image targets
-separated by unified/disease-specific mode; independent
-direct uploads are Single images; older `EncounterFile` tasks are Classic ZIP
-encounter images. These are calculated from the same project/lab-scoped task
-rows as the Gradings page and contain no patient data.
+for Need G-1, Need G-2, Need Adjudication, and complete tasks, and `grading_rows`
+for top-level encounter tasks only. Explicit `grading_target_level = "encounter"`
+tasks are included; legacy rows with a null target level are included only when
+their source is `patient_encounter_id`. Image-level targets are omitted from the
+summary's task total and progress KPIs. Each row adds `scope_type` (`disease`,
+`encounter`, or `legacy`) and `completion_percent`, alongside its stage counts,
+`target_group`, `target_type`, `scope_role`, `scope_name`, and
+`parent_scope_name`. Root and linked scopes are disease-scoped; unified scopes
+are encounter-scoped. Top-level tasks without scope metadata are shown as
+legacy/unscoped. Need G-1 counts `pending` and `resident2_done`; Need G-2 counts
+`resident_done`; Need Adjudication counts `arbitration`; complete counts `final`.
+All task queries use the caller's project/lab scope and contain no patient data.
+The `/api/projects/{project_id}/review/gradings` endpoint continues to include
+image-level task rows for detailed review.
 
 - upload-profile sources and uploader-selectable modes, diseases, cameras,
   areas, dilation states, EncounterSet types, and authorised assignments;
@@ -135,8 +145,10 @@ disease scope. Each row reports `task_count`, `first_grading_count`,
 `second_grading_count`, `adjudication_count`, and `final_count`. First grading
 includes `pending` plus the edge case where Resident 2 graded first;
 second grading maps `resident_done`, adjudication maps `arbitration`, and
-complete maps `final`. EncounterSet rows without persisted scope lineage are
-reported as legacy/unscoped rather than visually inheriting the preceding scope.
+complete maps `final`. Rows also include `scope_type` and `completion_percent`.
+This detailed endpoint continues to include image-level tasks. EncounterSet
+rows without persisted scope lineage are reported as legacy/unscoped rather
+than visually inheriting the preceding scope.
 
 ## Errors
 

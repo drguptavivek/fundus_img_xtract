@@ -316,6 +316,36 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
             grading_target_level="encounter",
         ),
         GradingTask(
+            patient_encounter_id=allowed_encounter.id,
+            encounter_set_package_id=disease_package.id,
+            encounter_set_scope_id=root_scope.id,
+            disease_id=disease.id,
+            lab_unit_id=allowed_lab.id,
+            state="pending",
+            grading_target_level="encounter",
+        ),
+        GradingTask(
+            patient_encounter_id=allowed_encounter.id,
+            encounter_set_package_id=disease_package.id,
+            encounter_set_scope_id=linked_scope.id,
+            disease_id=linked_disease.id,
+            lab_unit_id=allowed_lab.id,
+            state="resident_done",
+            grading_target_level="encounter",
+        ),
+        GradingTask(
+            patient_encounter_id=allowed_encounter.id,
+            disease_id=encounter_disease.id,
+            lab_unit_id=allowed_lab.id,
+            state="resident2_done",
+        ),
+        GradingTask(
+            patient_encounter_id=legacy_encounter.id,
+            disease_id=disease.id,
+            lab_unit_id=allowed_lab.id,
+            state="final",
+        ),
+        GradingTask(
             encounter_file_id=legacy_file.id, disease_id=disease.id,
             lab_unit_id=allowed_lab.id, state="pending", grading_target_level="image",
         ),
@@ -347,14 +377,40 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert metrics["single_uploads"] == 1
         assert metrics["total_images"] == 2
         assert metrics["grading_tasks"] == 5
+        assert metric_rows["grading_tasks"]["label"] == "Top-level grading tasks"
+        assert metrics["encounters_verified_percent"] == 50
+        assert metric_rows["encounters_verified_percent"]["value_suffix"] == "%"
+        assert "1 of 2" in metric_rows["encounters_verified_percent"]["help_text"]
         assert metrics["grading_packages"] == 2
         assert allowed_encounter.uuid not in metric_rows["grading_packages"]["help_text"]
         assert configuration["grading_completion_percent"] == 20
+        assert sum(row["task_count"] for row in configuration["grading_rows"]) == 5
+        assert {row["scope_type"] for row in configuration["grading_rows"]} == {
+            "disease", "encounter", "legacy"
+        }
+        assert all(
+            row["target_type"] not in {"Image within EncounterSet", "Individual image", "Independent image"}
+            for row in configuration["grading_rows"]
+        )
+        assert next(
+            row for row in configuration["grading_rows"]
+            if row["scope_role"] == "root"
+        )["completion_percent"] == 0
+        assert next(
+            row for row in configuration["grading_rows"]
+            if row["scope_type"] == "legacy" and row["target_group"] == "Classic ZIP encounters"
+        )["completion_percent"] == 100
         assert {row["key"]: row["value"] for row in configuration["grading_stage_metrics"]} == {
-            "first_grading": 3,
-            "second_grading": 0,
+            "first_grading": 2,
+            "second_grading": 1,
             "adjudication": 1,
             "final": 1,
+        }
+        assert {row["key"]: row["label"] for row in configuration["grading_stage_metrics"]} == {
+            "first_grading": "Need G-1",
+            "second_grading": "Need G-2",
+            "adjudication": "Need Adjudication",
+            "final": "Complete",
         }
         assert "remidio_dr_reports" not in metrics
         assert "remidio_amd_reports" not in metrics
@@ -401,18 +457,14 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert b"Effective configuration" in summary_page.data
         assert b"EncounterSet grading workflows" in summary_page.data
         assert b"contains one or more grading tasks" in summary_page.data
-        assert b"Grading workflow progress" in summary_page.data
-        assert b"20% finalised" in summary_page.data
-        assert b"Awaiting adjudication" in summary_page.data
+        assert b"Top-level grading workflow progress" in summary_page.data
+        assert b"20% complete" in summary_page.data
+        assert b"Need Adjudication" in summary_page.data
         assert b"Legacy / unscoped tasks" in summary_page.data
-        assert summary_page.data.index(b"Whole EncounterSet") < summary_page.data.index(b"Image within EncounterSet")
-        assert b"EncounterSets" in summary_page.data
-        assert b"Unified grading" in summary_page.data
+        assert b"Disease-scoped tasks" in summary_page.data
+        assert b"Encounter-scoped tasks" in summary_page.data
+        assert b"% Encounters Verified" in summary_page.data
         assert b"Whole EncounterSet" in summary_page.data
-        assert b"Single images" in summary_page.data
-        assert b"Independent image" in summary_page.data
-        assert b"Classic ZIP encounters" in summary_page.data
-        assert b"Individual image" in summary_page.data
         assert b"Root" in summary_page.data
         assert b"Linked to Glaucoma" in summary_page.data
         assert b"LEGACY SECRET" not in summary_page.data
@@ -474,10 +526,12 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
             ("EncounterSets", "Whole EncounterSet", "unified"),
             ("Classic ZIP encounters", "Individual image", "disease specific"),
             ("EncounterSets", "Image within EncounterSet", "disease specific"),
+            ("EncounterSets", "Whole EncounterSet", "disease specific"),
         }
-        assert sum(row["first_grading_count"] for row in grading_rows) == 3
+        assert sum(row["first_grading_count"] for row in grading_rows) == 5
+        assert sum(row["second_grading_count"] for row in grading_rows) == 1
         assert sum(row["adjudication_count"] for row in grading_rows) == 1
-        assert sum(row["final_count"] for row in grading_rows) == 1
+        assert sum(row["final_count"] for row in grading_rows) == 2
         linked_row = next(row for row in grading_rows if row["scope_role"] == "linked")
         assert linked_row["scope_name"] == "Review Linked Image Disease"
         assert linked_row["parent_scope_name"] == "Glaucoma"
@@ -535,9 +589,19 @@ def test_encounter_set_browser_shows_empty_state_for_authorized_empty_project(
 
     with app.test_client(user=user) as client:
         response = client.get(f"/uploads/encountersets/browse?project_id={project.id}")
+        summary_response = client.get(f"/api/projects/{project.id}/review/summary")
 
     assert response.status_code == 200
     assert b"No EncounterSets configured for the selected project." in response.data
+    assert summary_response.status_code == 200
+    summary_data = summary_response.get_json()["data"]
+    summary_metrics = {row["key"]: row for row in summary_data["metrics"]}
+    assert summary_metrics["encounters_verified_percent"]["value"] == 0
+    assert summary_metrics["encounters_verified_percent"]["help_text"] == (
+        "0 of 0 in-scope project encounters are verified."
+    )
+    assert summary_data["grading_completion_percent"] == 0
+    assert summary_data["grading_rows"] == []
 
     profile = UploadProfile(name="Empty configured EncounterSet profile", active=True)
     db_session.add(profile)

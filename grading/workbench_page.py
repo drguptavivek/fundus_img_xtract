@@ -29,6 +29,9 @@ from grading.workbench.service import (
 
 WEB_WORKBENCH_ENDPOINT = "grading.workbench_page"
 WEB_FALLBACK_ENDPOINT = "grading.index"
+RESTORED_SESSION_NOTICE = (
+    "Restoring previous session. Kindly complete this first or release it."
+)
 
 
 def register_routes(bp):
@@ -63,6 +66,7 @@ def _open_workbench(
                 workbench, token = resume_workbench(
                     db, session_uuid=active_uuid, user_id=current_user.id
                 )
+                flash(RESTORED_SESSION_NOTICE, "warning")
             remember_session_token(
                 workbench.lease.session_uuid,
                 token,

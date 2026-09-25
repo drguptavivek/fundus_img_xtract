@@ -138,6 +138,8 @@
   }
 
   function armCreateMode(type, mode) {
+    const ctx = activeContext();
+    if (ctx) ctx.editingAnnotationId = null;
     state.pendingCreateType = type;
     state.mode = mode;
     clearSelectedBox();
@@ -175,6 +177,9 @@
       .fgx-color-dot { width:.75rem; height:.75rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.2); }
       .fgx-grid-row { display:flex; gap:.35rem; align-items:center; }
       .fgx-feature-row select, .fgx-grid-row select { width:auto; min-width:10rem; }
+      .fgx-annotation-list { width:100%; max-height:12rem; overflow-y:auto; }
+      .fgx-annotation-list .list-group-item { display:flex; align-items:center; gap:.4rem; padding:.35rem .55rem; font-size:.875rem; }
+      .fgx-annotation-list .list-group-item.active { font-weight:600; }
       .fgx-toolbar .btn.active { font-weight:600; }
       .fgx-block-label { font-size:.73rem; color:var(--bs-secondary-color); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
       .fgx-ann-actions { display:flex; flex-wrap:nowrap; gap:.25rem; }
@@ -675,10 +680,16 @@
     ctx.nextAnnotationId += 1;
     ctx.payload.items.push(item);
     ctx.activeAnnotationByFeature[featureId] = item._annId;
+    ctx.selectedExistingAnnotationId = item._annId;
     return item;
   }
 
   function getActiveAnnotationItem(ctx, createIfMissing = false) {
+    if (!createIfMissing && ctx?.editingAnnotationId != null) {
+      const editing = (ctx.payload.items || []).find((item) => item._annId === ctx.editingAnnotationId);
+      if (editing) return editing;
+      ctx.editingAnnotationId = null;
+    }
     const featureId = state.activeFeatureId;
     if (featureId == null) return null;
     const items = getItemsForFeature(ctx, featureId);
@@ -703,6 +714,8 @@
     }
     const featureId = item.feature_id;
     ctx.payload.items = (ctx.payload.items || []).filter((it) => it !== item);
+    if (ctx.selectedExistingAnnotationId === item._annId) ctx.selectedExistingAnnotationId = null;
+    if (ctx.editingAnnotationId === item._annId) ctx.editingAnnotationId = null;
     const remaining = getItemsForFeature(ctx, featureId);
     if (!remaining.length) {
       delete ctx.activeAnnotationByFeature[featureId];
@@ -1083,7 +1096,7 @@
   }
 
   function updatePanelFeatureOptions(ctx) {
-    if (!ctx || !ctx.featureSelectEl || !ctx.annotationSelectEl) return;
+    if (!ctx || !ctx.featureSelectEl || !ctx.annotationListEl) return;
     const selected = getSelectedFeatureIds(ctx);
     const previous = state.activeFeatureId;
     ctx.featureSelectEl.replaceChildren();
@@ -1111,8 +1124,7 @@
       ctx.activeFeatureId = null;
       ctx.featureSelectEl.disabled = true;
       ctx.featureSelectEl.value = "";
-      ctx.annotationSelectEl.replaceChildren();
-      ctx.annotationSelectEl.disabled = true;
+      updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       refreshFeatureDependentButtons(ctx);
       return;
@@ -1127,56 +1139,53 @@
       updateFeatureColorChip(ctx, next);
       updateAnnotationOptions(ctx);
     } else {
-      ctx.annotationSelectEl.replaceChildren();
-      ctx.annotationSelectEl.disabled = true;
+      updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
     }
     refreshFeatureDependentButtons(ctx);
   }
 
   function updateAnnotationOptions(ctx) {
-    if (!ctx || !ctx.annotationSelectEl || state.activeFeatureId == null) return;
-    const featureId = state.activeFeatureId;
-    const items = getItemsForFeature(ctx, featureId);
-    ctx.annotationSelectEl.innerHTML = "";
+    if (!ctx || !ctx.annotationListEl) return;
+    const items = Array.isArray(ctx.payload?.items) ? ctx.payload.items : [];
+    ctx.annotationListEl.innerHTML = "";
 
-    items.forEach((item, idx) => {
-      const option = document.createElement("option");
-      option.value = String(item._annId);
-      option.textContent = `${item._hidden ? "○" : "●"} ${annotationTypeLabel(item)} Ann ${idx + 1}`;
-      ctx.annotationSelectEl.appendChild(option);
+    items.forEach((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "list-group-item list-group-item-action";
+      button.dataset.fgxAnnotationId = String(item._annId);
+      button.setAttribute("role", "option");
+      button.textContent = annotationDisplayText(ctx, item);
+      ctx.annotationListEl.appendChild(button);
     });
 
     if (!items.length) {
-      ctx.annotationSelectEl.disabled = true;
       if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
       clearSelectedBox();
       return;
     }
 
-    ctx.annotationSelectEl.disabled = false;
     if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = false;
-    const currentAnnId = ctx.activeAnnotationByFeature[featureId];
-    const current = items.find((it) => it._annId === currentAnnId) || items[0];
-    ctx.activeAnnotationByFeature[featureId] = current._annId;
-    ctx.annotationSelectEl.value = String(current._annId);
+    const current = items.find((it) => it._annId === ctx.selectedExistingAnnotationId) || null;
+    ctx.annotationListEl.querySelectorAll("[data-fgx-annotation-id]").forEach((button) => {
+      const selected = current != null && Number(button.dataset.fgxAnnotationId) === current._annId;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-selected", selected ? "true" : "false");
+    });
     refreshAnnotationButtons(ctx);
   }
 
-  function annotationTypeLabel(item) {
-    const t = (item?._geometryType || "box").toLowerCase();
-    if (t === "box") return "□";
-    if (t === "rect") return "▣";
-    if (t === "none") return "✓";
-    if (t === "ellipse") return "◯";
-    if (t === "pyramid") return "△";
-    if (t === "polygon") return "⬠";
-    if (t === "region") return "✎";
-    return "•";
+  function annotationDisplayText(ctx, item) {
+    const annotations = getItemsForFeature(ctx, item.feature_id);
+    const index = annotations.findIndex((candidate) => candidate._annId === item._annId);
+    const number = index >= 0 ? index + 1 : item._annId;
+    const featureName = item.feature_label || getFeatureLabel(ctx, item.feature_id) || `Feature ${item.feature_id}`;
+    return `${featureName} • Ann ${number}`;
   }
 
   function refreshAnnotationButtons(ctx) {
-    const item = getActiveAnnotationItem(ctx, false);
+    const item = getSelectedExistingAnnotation(ctx);
     const policyEnabled = ctx?.annotationContext?.enabled === true && !ctx?.historicalProjectClass;
     if (!item) {
       if (ctx.viewAnnotationBtn) ctx.viewAnnotationBtn.disabled = true;
@@ -1207,6 +1216,11 @@
     if (ctx.clearAllAnnotationsBtn) ctx.clearAllAnnotationsBtn.disabled = !policyEnabled;
   }
 
+  function getSelectedExistingAnnotation(ctx) {
+    if (!ctx || ctx.selectedExistingAnnotationId == null) return null;
+    return (ctx.payload?.items || []).find((item) => item._annId === ctx.selectedExistingAnnotationId) || null;
+  }
+
   function refreshFeatureDependentButtons(ctx) {
     if (!ctx || !ctx.panelTopEl) return;
     const hasFeature = state.activeFeatureId != null;
@@ -1222,13 +1236,30 @@
     ];
     toolSelectors.forEach(([selector, tool]) => {
       const button = ctx.panelTopEl.querySelector(selector);
-      if (button) button.disabled = !allowed.has(tool);
+      if (!button) return;
+      const permitted = allowed.has(tool);
+      button.disabled = !permitted;
+      button.classList.toggle("d-none", !permitted);
     });
+    ctx.panelTopEl.querySelectorAll("[data-fgx-tool-category]").forEach((category) => {
+      const hasVisibleTool = Array.from(category.querySelectorAll("button")).some(
+        (button) => !button.classList.contains("d-none")
+      );
+      category.classList.toggle("d-none", !hasVisibleTool);
+    });
+    const brushPermitted = allowed.has("brush_mask");
+    const segmentationPermitted = ["rect", "ellipse", "pyramid", "polygon", "brush_mask"].some((tool) => allowed.has(tool));
+    ctx.panelTopEl.querySelector("[data-fgx-brush-settings]")?.classList.toggle("d-none", !brushPermitted);
+    ctx.panelTopEl.querySelector("[data-fgx-opacity-settings]")?.classList.toggle("d-none", !segmentationPermitted);
     if (ctx.brushDiameterEl) ctx.brushDiameterEl.disabled = !allowed.has("brush_mask");
-    if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !allowed.has("brush_mask");
+    if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !segmentationPermitted;
     const assertButton = ctx.panelTopEl.querySelector("[data-fgx-assert-class]");
     const projectClass = hasFeature ? projectClassForFeature(ctx, state.activeFeatureId) : null;
-    if (assertButton) assertButton.disabled = projectClass?.localization !== "none" || !ctx.annotationContext?.enabled;
+    if (assertButton) {
+      const assertionPermitted = projectClass?.localization === "none" && ctx.annotationContext?.enabled;
+      assertButton.disabled = !assertionPermitted;
+      assertButton.classList.toggle("d-none", !assertionPermitted);
+    }
     const moveButton = ctx.panelTopEl.querySelector('[data-fgx-mode="move"]');
     if (moveButton) moveButton.disabled = !hasFeature;
     const undoBtn = ctx.panelTopEl.querySelector("[data-fgx-undo]");
@@ -1296,10 +1327,6 @@
         <select class="form-select form-select-sm" data-fgx-feature></select>
       </div>
 
-      <div class="fgx-group fgx-feature-row">
-        <span class="fgx-block-label mb-0">Annotation</span>
-        <select class="form-select form-select-sm" data-fgx-annotation></select>
-      </div>
       <div class="fgx-group fgx-ann-actions" aria-label="Annotation actions">
         <button type="button" class="btn btn-primary btn-sm" data-fgx-ann-view title="Hide annotation" aria-label="Hide annotation">
           <i class="fa-solid fa-eye"></i>
@@ -1356,7 +1383,7 @@
         </button>
       </div>
 
-      <div class="fgx-group fgx-slider-row">
+      <div class="fgx-group fgx-slider-row" data-fgx-brush-settings>
         <label class="fgx-block-label mb-0 ms-1 d-inline-flex align-items-center gap-1" for="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">
           <i class="fa-solid fa-ruler-horizontal"></i>
         </label>
@@ -1374,7 +1401,7 @@
         <span class="fgx-block-label mb-0" data-fgx-brush-diameter-value>${state.brushDiameterPx}px</span>
       </div>
 
-      <div class="fgx-group fgx-slider-row">
+      <div class="fgx-group fgx-slider-row" data-fgx-opacity-settings>
         <label class="fgx-block-label mb-0 d-inline-flex align-items-center gap-1" for="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">
           <i class="fa-solid fa-droplet"></i>
         </label>
@@ -1391,10 +1418,9 @@
         />
         <span class="fgx-block-label mb-0" data-fgx-fill-opacity-value>${Math.round(state.fillOpacity * 100)}%</span>
       </div>
-      <div class="fgx-group w-100">
-        <small class="text-muted">
-          Bounding box records an outline ROI. Rectangle, ellipse, pyramid, freeform polygon, and brush are segmentation tools.
-        </small>
+      <div class="fgx-group w-100 d-block">
+        <span class="fgx-block-label d-block mb-1">Annotations and segmentations</span>
+        <div class="list-group fgx-annotation-list" data-fgx-annotation-list role="listbox" aria-label="Annotations and segmentations"></div>
       </div>
     `;
     sidebarHost.appendChild(panel);
@@ -1412,7 +1438,7 @@
       ctx.policyStatusEl.classList.remove("d-none");
     }
     ctx.featureSelectEl = panel.querySelector("[data-fgx-feature]");
-    ctx.annotationSelectEl = panel.querySelector("[data-fgx-annotation]");
+    ctx.annotationListEl = panel.querySelector("[data-fgx-annotation-list]");
     ctx.addAnnotationBtn = null;
     ctx.viewAnnotationBtn = panel.querySelector("[data-fgx-ann-view]");
     ctx.editAnnotationBtn = panel.querySelector("[data-fgx-ann-edit]");
@@ -1465,8 +1491,7 @@
         updateFeatureColorChip(ctx, id);
         updateAnnotationOptions(ctx);
       } else {
-        ctx.annotationSelectEl.replaceChildren();
-        ctx.annotationSelectEl.disabled = true;
+        updateAnnotationOptions(ctx);
         refreshAnnotationButtons(ctx);
       }
       refreshFeatureDependentButtons(ctx);
@@ -1475,18 +1500,23 @@
       redraw();
     });
 
-    ctx.annotationSelectEl.addEventListener("change", () => {
-      if (state.activeFeatureId == null) return;
-      const annId = Number(ctx.annotationSelectEl.value);
+    ctx.annotationListEl.addEventListener("click", (event) => {
+      const row = event.target.closest("[data-fgx-annotation-id]");
+      if (!row) return;
+      const annId = Number(row.dataset.fgxAnnotationId);
       if (Number.isNaN(annId)) return;
-      ctx.activeAnnotationByFeature[state.activeFeatureId] = annId;
+      const item = (ctx.payload?.items || []).find((candidate) => candidate._annId === annId);
+      if (!item) return;
+      ctx.selectedExistingAnnotationId = annId;
+      ctx.activeAnnotationByFeature[item.feature_id] = annId;
       setSelectedBox(ctx, annId);
+      updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       redraw();
     });
 
     ctx.viewAnnotationBtn.addEventListener("click", () => {
-      const item = getActiveAnnotationItem(ctx, false);
+      const item = getSelectedExistingAnnotation(ctx);
       if (!item) return;
       item._hidden = !item._hidden;
       updateAnnotationOptions(ctx);
@@ -1495,9 +1525,10 @@
     });
 
     ctx.editAnnotationBtn.addEventListener("click", () => {
-      const item = getActiveAnnotationItem(ctx, false);
+      const item = getSelectedExistingAnnotation(ctx);
       if (!item) return;
       ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
+      ctx.editingAnnotationId = item._annId;
       setSelectedBox(ctx, item);
       state.mode = MODES.MOVE;
       setCanvasPointerMode();
@@ -1507,7 +1538,7 @@
     });
 
     ctx.removeAnnotationBtn.addEventListener("click", () => {
-      const item = getActiveAnnotationItem(ctx, false);
+      const item = getSelectedExistingAnnotation(ctx);
       if (!item) return;
       if (!window.confirm("Delete selected annotation?")) return;
       removeAnnotationItem(ctx, item);
@@ -1521,7 +1552,14 @@
     ctx.clearAllAnnotationsBtn?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
       if (!window.confirm("Delete all annotations for this feature?")) return;
+      const removedIds = new Set(
+        (ctx.payload.items || [])
+          .filter((item) => item.feature_id === state.activeFeatureId)
+          .map((item) => item._annId)
+      );
       ctx.payload.items = (ctx.payload.items || []).filter((it) => it.feature_id !== state.activeFeatureId);
+      if (removedIds.has(ctx.selectedExistingAnnotationId)) ctx.selectedExistingAnnotationId = null;
+      if (removedIds.has(ctx.editingAnnotationId)) ctx.editingAnnotationId = null;
       delete ctx.activeAnnotationByFeature[state.activeFeatureId];
       clearSelectedBox();
       updateAnnotationOptions(ctx);
@@ -2002,14 +2040,10 @@
 
   function buildHoverInfo(ctx, item) {
     if (!ctx || !item) return null;
-    const anns = getItemsForFeature(ctx, item.feature_id);
-    const idx = anns.findIndex((it) => it._annId === item._annId);
-    const annSr = idx >= 0 ? idx + 1 : item._annId;
-    const featureName = item.feature_label || getFeatureLabel(ctx, item.feature_id) || `Feature ${item.feature_id}`;
     return {
       ctxKey: ctx.key,
       annId: item._annId,
-      text: `${featureName} • Ann ${annSr}`,
+      text: annotationDisplayText(ctx, item),
       roi: item.roi,
     };
   }
@@ -4083,7 +4117,9 @@
       panelTopEl: null,
       panelBottomEl: null,
       featureSelectEl: null,
-      annotationSelectEl: null,
+      annotationListEl: null,
+      selectedExistingAnnotationId: initial.items[0]?._annId ?? null,
+      editingAnnotationId: null,
       addAnnotationBtn: null,
       removeAnnotationBtn: null,
       colorChipEl: null,

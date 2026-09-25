@@ -262,8 +262,19 @@ def test_geometry_editor_uses_annotations_heading():
     assert '>Annotation class</span>' in editor
     assert 'data-fgx-tool-category="bounding-box"' in editor
     assert 'data-fgx-tool-category="segmentation"' in editor
+    assert 'button.classList.toggle("d-none", !permitted);' in editor
+    assert 'category.classList.toggle("d-none", !hasVisibleTool);' in editor
+    assert 'data-fgx-brush-settings' in editor
+    assert 'data-fgx-opacity-settings' in editor
     assert '>Rectangle</span>' in editor
     assert 'not a bounding box' in editor
+    assert 'Bounding box records an outline ROI.' not in editor
+    assert '>Annotations and segmentations</span>' in editor
+    assert 'data-fgx-annotation-list role="listbox"' in editor
+    assert 'const items = Array.isArray(ctx.payload?.items) ? ctx.payload.items : [];' in editor
+    assert 'button.textContent = annotationDisplayText(ctx, item);' in editor
+    assert 'text: annotationDisplayText(ctx, item),' in editor
+    assert 'ctx.selectedExistingAnnotationId = annId;' in editor
     assert 'data-fgx-add-freeform' in editor
     assert '>Freeform</span>' in editor
     assert '["[data-fgx-add-freeform]", "polygon"]' in editor

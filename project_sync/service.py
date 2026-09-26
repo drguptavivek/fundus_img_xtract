@@ -440,10 +440,10 @@ def list_admin_grants(db, *, admin, status: str | None = None) -> list[ProjectSy
             selectinload(ProjectSyncGrant.decided_by),
         )
         .order_by(ProjectSyncGrant.created_at.desc())
-        .limit(500)
     )
     if status:
         query = query.where(ProjectSyncGrant.status == status)
+    query = query.limit(500)
     return [to_dto(row) for row in db.execute(query).scalars().all()]
 
 

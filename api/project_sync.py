@@ -50,7 +50,7 @@ def _reauth_response():
     last_sudo = session.get("last_sudo_time")
     if last_sudo and int(time.time()) - int(last_sudo) <= REAUTH_SECONDS:
         return None
-    next_url = request.headers.get("HX-Current-URL") or url_for("project_sync_pages.index")
+    next_url = url_for("project_sync_pages.admin" if request.path.startswith("/api/project-sync/admin") else "project_sync_pages.index")
     return jsonify(
         {
             "error": "reauth_required",

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Project data sync approvals{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Project data sync approvals</h1>
+<p class="text-body-secondary">Requests appear here after the requester confirms by email. Approval re-checks the requester's current project role; identifier-bearing requests need the PI or PII exporter role.</p>
+{% include "project_sync/_admin_workspace.html" %}
+{% endblock %}
+{% block page_scripts %}
+{% include "project_sync/_sync_js.html" %}
+<script>
+(function () {
+  var workspaceUrl = "{{ url_for('project_sync_pages.admin_workspace') }}";
+  function refresh() { return ProjectSync.refresh('project-sync-admin-workspace', workspaceUrl); }
+  document.addEventListener('click', async function (event) {
+    var approve = event.target.closest('[data-ps-approve]');
+    var reject = event.target.closest('[data-ps-reject]');
+    var revoke = event.target.closest('[data-ps-revoke]');
+    try {
+      if (approve) {
+        var warn = approve.dataset.pii === '1' ? 'This grant INCLUDES patient identifiers. ' : '';
+        var days = prompt(warn + 'Approve for how many days? (max {{ config.get("PROJECT_SYNC_GRANT_DAYS", 90) }})', '{{ config.get("PROJECT_SYNC_GRANT_DAYS", 90) }}');
+        if (days === null) return;
+        var note = prompt('Approval note (optional):') || '';
+        await ProjectSync.post('/api/project-sync/admin/grants/' + approve.dataset.psApprove + '/approve', { valid_days: days, note: note });
+        ProjectSync.toast('Approved', 'success'); refresh();
+      } else if (reject) {
+        var rnote = prompt('Reason for rejection:'); if (rnote === null) return;
+        await ProjectSync.post('/api/project-sync/admin/grants/' + reject.dataset.psReject + '/reject', { note: rnote });
+        ProjectSync.toast('Rejected', 'success'); refresh();
+      } else if (revoke) {
+        var reason = prompt('Reason for revocation:'); if (reason === null) return;
+        await ProjectSync.post('/api/project-sync/grants/' + revoke.dataset.psRevoke + '/revoke', { reason: reason });
+        ProjectSync.toast('Revoked', 'success'); refresh();
+      }
+    } catch (e) {}
+  });
+})();
+</script>
+{% endblock %}

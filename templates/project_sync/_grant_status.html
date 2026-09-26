@@ -1,0 +1,7 @@
+{% set badge = {
+  'pending_email': 'warning', 'pending_approval': 'info', 'approved': 'success',
+  'rejected': 'danger', 'revoked': 'secondary', 'cancelled': 'secondary'
+}.get(grant.status, 'secondary') %}
+<span class="badge text-bg-{{ badge }}">{{ grant.status.replace('_', ' ') }}</span>
+{% if grant.status == 'approved' and not grant.is_usable %}<span class="badge text-bg-dark">{{ 'no credential yet' if not grant.credential_prefix else 'expired' }}</span>{% endif %}
+{% if grant.include_pii %}<span class="badge text-bg-danger">identifiers</span>{% endif %}

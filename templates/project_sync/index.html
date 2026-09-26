@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Project data sync{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h3 mb-0">Project data sync</h1>
+</div>
+<p class="text-body-secondary">
+  Keep a local copy of your project's encounters, images, gradings and annotations on your desktop with the
+  <code>scripts/project_sync_client.py</code> client. Access needs email confirmation and system administrator approval,
+  expires automatically, and stops as soon as your project role is removed.
+</p>
+<div class="modal fade" id="ps-credential-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h2 class="modal-title h5">Your sync credential</h2>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body">
+      <p class="text-danger fw-semibold">Shown once. Store it in the client config file (permissions 600); it cannot be retrieved again.</p>
+      <div class="input-group"><input class="form-control font-monospace" id="ps-credential-value" readonly>
+        <button class="btn btn-outline-secondary" type="button" id="ps-copy">Copy</button></div>
+      <pre class="small bg-body-tertiary p-2 mt-3 mb-0" id="ps-command"></pre>
+    </div>
+  </div></div>
+</div>
+{% include "project_sync/_workspace.html" %}
+{% endblock %}
+{% block page_scripts %}
+{% include "project_sync/_sync_js.html" %}
+<script>
+(function () {
+  var workspaceUrl = "{{ url_for('project_sync_pages.workspace') }}";
+  var serverUrl = "{{ request.host_url.rstrip('/') }}";
+  function refresh() { return ProjectSync.refresh('project-sync-workspace', workspaceUrl); }
+  document.addEventListener('submit', async function (event) {
+    if (event.target.id !== 'project-sync-request-form') return;
+    event.preventDefault();
+    var form = event.target;
+    try {
+      var data = await ProjectSync.post("{{ url_for('fundus_api.project_sync_request_grant') }}", {
+        project_id: form.project_id.value, purpose: form.purpose.value, include_pii: form.include_pii.checked
+      });
+      ProjectSync.toast('Confirmation email sent to ' + data.email_sent_to, 'success');
+      refresh();
+    } catch (e) {}
+  });
+  document.addEventListener('click', async function (event) {
+    var issue = event.target.closest('[data-ps-credential]');
+    var revoke = event.target.closest('[data-ps-revoke]');
+    if (issue) {
+      if (!confirm('Issue a new credential? Any previous credential for this grant stops working.')) return;
+      try {
+        var data = await ProjectSync.post('/api/project-sync/grants/' + issue.dataset.psCredential + '/credential');
+        document.getElementById('ps-credential-value').value = data.credential;
+        document.getElementById('ps-command').textContent =
+          'uv run scripts/project_sync_client.py init --server ' + serverUrl + ' --dest ./' + data.grant.project.code + '_mirror\n' +
+          '# paste the credential when prompted, then:\n' +
+          'uv run scripts/project_sync_client.py sync --dest ./' + data.grant.project.code + '_mirror';
+        new bootstrap.Modal(document.getElementById('ps-credential-modal')).show();
+        refresh();
+      } catch (e) {}
+    }
+    if (revoke) {
+      var reason = prompt('Reason (optional):') ;
+      if (reason === null) return;
+      try { await ProjectSync.post('/api/project-sync/grants/' + revoke.dataset.psRevoke + '/revoke', { reason: reason }); ProjectSync.toast('Grant closed', 'success'); refresh(); } catch (e) {}
+    }
+    if (event.target.id === 'ps-copy') {
+      navigator.clipboard.writeText(document.getElementById('ps-credential-value').value);
+      ProjectSync.toast('Copied', 'success');
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -10,6 +10,8 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
 
 - Use `uv run`; never run bare `python`.
 - Port is `5001`.
+- The `web` container runs Gunicorn (`gunicorn -c gunicorn_config.py wsgi:application`) with no auto-reload; watchfiles is not used. Python/template edits take effect only after a manual restart (`docker compose restart web` / `make restart`). Do not restart `web` without the user's go-ahead, so live users are not disrupted.
+- Restarting/recreating `web` runs `alembic upgrade head` on the live DB (entrypoint `RUN_MIGRATIONS` defaults to true). Validate new migrations on `test-db` via pytest first.
 - Prefer `make` targets for routine work: `make up`, `make test`, `make logs-web`, `make logs-celery`, `make alembic-current`, `make alembic-upgrade`.
 - For Docker commands that create files, especially Alembic revisions and pytest-generated files, run with host UID/GID:
   `docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run ...`

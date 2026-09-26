@@ -220,6 +220,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Patient Media API](docs/API/media/README.md) - Central object authorization for images, thumbnails, PDFs, metadata, OCR, and signed delivery
 - [Encounter Evidence Viewer API](docs/API/encounter-viewer/README.md) - Shared JSON DTO and HTMX partial for authorized non-PII legacy, EncounterSet, and direct-image evidence
 - [Project Review API](docs/API/project-review/README.md) - Scoped non-PII project summary, upload inventory, and grading aggregates
+- [Project Data Sync API](docs/API/project_sync/README.md) - Email- and admin-approved desktop mirror of a project's encounters, images, gradings, annotations (COCO) and workbook, with the `scripts/project_sync_client.py` client
 - [Project EncounterSet Export API](docs/API/project-export/README.md) - Data-manager non-PII workbook and image/annotation exports with date and grading-completeness filters
 - [Remidio EncounterSet Attachment OCR API](docs/API/remidio-attachment-ocr/README.md) - Queue, rerun, and poll PDF OCR from verification and browser workspaces
 - [Remidio API Encounter Migration](docs/API/remidio-api-encounter-migration/README.md) - Admin preview/apply workflow for correcting wrongly routed Remidio EncounterSets and resetting incomplete source grading work

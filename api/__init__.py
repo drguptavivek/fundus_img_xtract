@@ -17,3 +17,4 @@ from . import admin_impersonation
 from . import my_discrepancy_reviews
 from . import encounter_viewer
 from . import field_encounter_refresh
+from . import project_sync

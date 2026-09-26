@@ -137,6 +137,21 @@ def _configure_base_settings(app: Flask) -> None:
         "MOBILE_WEB_DEVICES_AUTO_APPROVE",
         os.environ.get("MOBILE_WEB_DEVICES_AUTO_APPROVE", "1").strip().lower() not in {"0", "false", "no"},
     )
+    # Project data sync (desktop mirror for PIs/data managers) is off unless a
+    # deployment opts in; every grant still needs email + admin confirmation.
+    app.config.setdefault(
+        "PROJECT_SYNC_ENABLED",
+        os.environ.get("PROJECT_SYNC_ENABLED", "0").strip().lower() in {"1", "true", "yes"},
+    )
+    app.config.setdefault("PROJECT_SYNC_GRANT_DAYS", int(os.environ.get("PROJECT_SYNC_GRANT_DAYS", "90")))
+    app.config.setdefault(
+        "PROJECT_SYNC_EMAIL_TOKEN_HOURS", int(os.environ.get("PROJECT_SYNC_EMAIL_TOKEN_HOURS", "24"))
+    )
+    # Server-wide in-flight sync requests (all gunicorn workers). Keep this well
+    # below GUNICORN_WORKERS so graders always have free workers.
+    app.config.setdefault("PROJECT_SYNC_MAX_CONCURRENT", int(os.environ.get("PROJECT_SYNC_MAX_CONCURRENT", "1")))
+    # Pause the desktop client must leave between requests (advertised via /whoami).
+    app.config.setdefault("PROJECT_SYNC_MIN_INTERVAL_MS", int(os.environ.get("PROJECT_SYNC_MIN_INTERVAL_MS", "250")))
     for key in ("WEBAUTHN_RP_ID", "WEBAUTHN_ORIGIN", "WEBAUTHN_RP_NAME"):
         if os.environ.get(key):
             app.config[key] = os.environ[key]
@@ -556,6 +571,8 @@ def _register_blueprints(app: Flask) -> None:
     from dashboard import dashboard_bp
     from api import api_bp
     from api.mobile import mobile_api_bp
+    from api.sync import project_sync_api_bp
+    from project_sync.routes import bp as project_sync_pages_bp
     from grader_pwa import bp as grader_pwa_bp
     from docs import docs_bp
     from datasets import bp as datasets_bp
@@ -596,6 +613,9 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(api_bp)
     csrf.exempt(mobile_api_bp)
     app.register_blueprint(mobile_api_bp)
+    csrf.exempt(project_sync_api_bp)
+    app.register_blueprint(project_sync_api_bp)
+    app.register_blueprint(project_sync_pages_bp)
     app.register_blueprint(grader_pwa_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(datasets_bp)

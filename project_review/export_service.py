@@ -98,10 +98,22 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
         )
         with get_db_session() as db:
             actor = db.get(User, request.actor_user_id)
-            allowed_labs = (
-                authorized_project_export_labs(db, actor=actor, project_id=request.project_id)
-                if actor else frozenset()
-            )
+            if request_data.get("sync_grant_uuid"):
+                # Desktop mirror export: authority is the approved sync grant,
+                # re-derived now in case it was revoked while queued.
+                from project_sync.service import grant_export_lab_unit_ids
+
+                allowed_labs = grant_export_lab_unit_ids(
+                    db,
+                    grant_uuid=str(request_data["sync_grant_uuid"]),
+                    user_id=request.actor_user_id,
+                    project_id=request.project_id,
+                )
+            else:
+                allowed_labs = (
+                    authorized_project_export_labs(db, actor=actor, project_id=request.project_id)
+                    if actor else frozenset()
+                )
             if not allowed_labs:
                 raise PermissionError("Project export authority is no longer available")
             encounters = _encounters(db, request, allowed_labs)

@@ -52,7 +52,7 @@ def write_annotation_export(rows, destination: Path) -> Path:
                     "selected_features": json.loads(grade.selected_features_json)
                     if grade.selected_features_json else None,
                     "feature_geometry": grade.feature_geometry_json,
-                    "annotation_set": _serialize_set(annotation_set) if annotation_set else None,
+                    "annotation_set": serialize_annotation_set(annotation_set) if annotation_set else None,
                 })
 
     manifest = {
@@ -73,7 +73,7 @@ def write_annotation_export(rows, destination: Path) -> Path:
     return manifest
 
 
-def _serialize_set(annotation_set):
+def serialize_annotation_set(annotation_set):
     return {
         "uuid": annotation_set.uuid,
         "schema_version": annotation_set.schema_version,
@@ -187,7 +187,7 @@ def write_coco_exports(manifest: dict, exported_images: dict, export_dir: Path) 
                     continue
                 if instance["geometry_type"] == "none":
                     continue
-                cls = _class_name(instance)
+                cls = coco_class_name(instance)
                 class_names.add(cls)
                 collected.append((task, grade, instance, cls))
         source_instances[image_uuid] = collected
@@ -221,7 +221,7 @@ def write_coco_exports(manifest: dict, exported_images: dict, export_dir: Path) 
             })
         for task, grade, instance, cls in source_instances[image_uuid]:
             try:
-                converted = _coco_annotation(instance, width, height)
+                converted = coco_annotation(instance, width, height)
             except (TypeError, ValueError, OSError):
                 converted = None
             if converted is None:
@@ -301,7 +301,7 @@ def _highest_human_grade(grades: list[dict]) -> dict | None:
     return max(eligible, key=lambda grade: (_ROLE_PRIORITY[grade["role_slot"]], grade["grade_id"])) if eligible else None
 
 
-def _class_name(instance: dict) -> str:
+def coco_class_name(instance: dict) -> str:
     key = instance.get("class_key") or ""
     if instance.get("class_source") == "project_class" and re.fullmatch(r"[a-z][a-z0-9_]*", key):
         return key
@@ -310,7 +310,7 @@ def _class_name(instance: dict) -> str:
     return name or "unlabeled"
 
 
-def _coco_annotation(instance: dict, width: int, height: int) -> dict | None:
+def coco_annotation(instance: dict, width: int, height: int) -> dict | None:
     bbox = instance.get("bbox")
     if not isinstance(bbox, list) or len(bbox) != 4:
         return None

@@ -946,6 +946,20 @@ def encounterSetImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource |
             abort(404)
         return _serve_encounter_set_final_image(img, uuid)
 
+def encounterSetImageOriginalByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    """Serve the unedited EncounterSet capture (never the edited variant)."""
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
+        abort(401)
+    with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.ENCOUNTER_SET_IMAGE}), preauthorized,
+        )
+        img = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid).first()
+        if not img:
+            abort(404)
+        return _serve_encounter_set_image(img, uuid)
+
 def encounterSetImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)

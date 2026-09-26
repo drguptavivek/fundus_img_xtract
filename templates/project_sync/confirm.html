@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Confirm project data sync{% endblock %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-6">
+  <div class="card mt-4">
+    <div class="card-header">Confirm project data sync request</div>
+    <div class="card-body">
+      <p>Confirm that you, <strong>{{ current_user.username }}</strong>, requested a local desktop copy of project data.
+        After confirmation a system administrator must approve the request.</p>
+      <form id="ps-confirm-form">
+        {% from "_forms.html" import csrf_field %}{{ csrf_field() }}
+        <input type="hidden" name="token" value="{{ token }}">
+        <button class="btn btn-primary" type="submit">Confirm my request</button>
+        <a class="btn btn-link" href="{{ url_for('project_sync_pages.index') }}">Not me / cancel</a>
+      </form>
+    </div>
+  </div>
+</div></div>
+{% endblock %}
+{% block page_scripts %}
+{% include "project_sync/_sync_js.html" %}
+<script>
+document.getElementById('ps-confirm-form').addEventListener('submit', async function (event) {
+  event.preventDefault();
+  try {
+    await ProjectSync.post("{{ url_for('fundus_api.project_sync_confirm_email') }}", { token: event.target.token.value });
+    ProjectSync.toast('Confirmed. An administrator will review your request.', 'success');
+    setTimeout(function () { window.location.href = "{{ url_for('project_sync_pages.index') }}"; }, 1200);
+  } catch (e) {}
+});
+</script>
+{% endblock %}

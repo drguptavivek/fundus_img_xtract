@@ -3185,3 +3185,5 @@ from grading.workbench.models import (  # noqa: E402,F401
 )
 from data_authorization.models import ProjectRoleGrant  # noqa: E402,F401
 from project_configuration.models import ProjectLabUnit  # noqa: E402,F401
+
+from project_sync.models import ProjectSyncGrant  # noqa: E402,F401

@@ -24,18 +24,20 @@ services:
       - deploy.config.env
       - deploy.secrets.env
       - develop.config.env
+    # Gunicorn without auto-reload: code edits no longer restart the app under
+    # users. Restart manually (make restart / docker compose restart web).
     command:
-      - sh
+      - uv
+      - run
+      - gunicorn
       - -c
-      - >
-        uv run python -m watchfiles
-        --filter utils.watchfiles_filter.py_html_filter
-        --target-type command
-        "flask --app app.py run --host 0.0.0.0 --port 5001 --no-reload"
-        /app
+      - gunicorn_config.py
+      - wsgi:application
     environment:
-      FLASK_ENV: development
-      FLASK_DEBUG: "1"
+      GUNICORN_BIND: 0.0.0.0:5001
+      GUNICORN_ACCESS_LOG: "-"
+      GUNICORN_ERROR_LOG: "-"
+      GUNICORN_PID_FILE: /tmp/gunicorn.pid
     volumes:
       - .:/app
       - ./files:/app/files

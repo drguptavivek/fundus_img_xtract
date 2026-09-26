@@ -1,0 +1,70 @@
+<div id="project-sync-workspace">
+  {% if not sync_enabled %}
+  <div class="alert alert-secondary">Project data sync is disabled on this server. Ask a system administrator to enable it.</div>
+  {% else %}
+  <div class="card mb-4">
+    <div class="card-header">Request a local copy</div>
+    <div class="card-body">
+      {% if projects %}
+      <form id="project-sync-request-form" class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label" for="ps-project">Project</label>
+          <select class="form-select" id="ps-project" name="project_id" required>
+            {% for project in projects %}
+            <option value="{{ project.id }}" data-pii="{{ '1' if project.pii_eligible else '0' }}">{{ project.code }} - {{ project.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-7">
+          <label class="form-label" for="ps-purpose">Purpose</label>
+          <input class="form-control" id="ps-purpose" name="purpose" minlength="10" maxlength="2000" required
+            placeholder="e.g. Local analysis archive for the study team">
+        </div>
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="ps-pii" name="include_pii" value="1">
+            <label class="form-check-label" for="ps-pii">Include patient identifiers (PI or PII exporter role required; admin must approve)</label>
+          </div>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" type="submit">Request sync access</button>
+          <span class="form-text ms-2">A confirmation link is emailed to you; an administrator then approves.</span>
+        </div>
+      </form>
+      {% else %}
+      <p class="text-body-secondary mb-0">You need a project PI or project data manager role to request a local copy.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">My sync grants</div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Project</th><th>Status</th><th>Expires</th><th>Credential</th><th>Last used</th><th></th></tr></thead>
+        <tbody>
+          {% for grant in grants %}
+          <tr>
+            <td>{{ grant.project_code }}<div class="small text-body-secondary">{{ grant.purpose }}</div></td>
+            <td>{% include "project_sync/_grant_status.html" %}</td>
+            <td>{{ grant.expires_at | user_datetime if grant.expires_at else '-' }}</td>
+            <td><code>{{ (grant.credential_prefix ~ '…') if grant.credential_prefix else '-' }}</code></td>
+            <td>{{ grant.last_used_at | user_datetime if grant.last_used_at else '-' }}{% if grant.last_used_ip %}<div class="small text-body-secondary">{{ grant.last_used_ip }}</div>{% endif %}</td>
+            <td class="text-end text-nowrap">
+              {% if grant.status == 'approved' and sync_enabled %}
+              <button class="btn btn-sm btn-outline-primary" data-ps-credential="{{ grant.id }}">{{ 'Rotate credential' if grant.credential_prefix else 'Issue credential' }}</button>
+              {% endif %}
+              {% if grant.status in ['pending_email', 'pending_approval', 'approved'] %}
+              <button class="btn btn-sm btn-outline-danger" data-ps-revoke="{{ grant.id }}">{{ 'Revoke' if grant.status == 'approved' else 'Cancel' }}</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-body-secondary">No sync grants yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

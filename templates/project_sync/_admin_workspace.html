@@ -1,0 +1,37 @@
+<div id="project-sync-admin-workspace">
+  {% if not sync_enabled %}
+  <div class="alert alert-warning">Server switch <code>PROJECT_SYNC_ENABLED</code> is off: no requests, approvals or sync traffic are accepted.</div>
+  {% endif %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr><th>Requested</th><th>User</th><th>Project</th><th>Purpose</th><th>Status</th><th>Email confirmed</th><th>Decision</th><th>Last used</th><th></th></tr></thead>
+      <tbody>
+        {% for grant in grants %}
+        <tr>
+          <td>{{ grant.created_at | user_datetime }}</td>
+          <td>{{ grant.username }}</td>
+          <td>{{ grant.project_code }}</td>
+          <td class="small">{{ grant.purpose }}</td>
+          <td>{% include "project_sync/_grant_status.html" %}</td>
+          <td>{{ grant.email_confirmed_at | user_datetime if grant.email_confirmed_at else '-' }}</td>
+          <td class="small">{% if grant.decided_by_username %}{{ grant.decided_by_username }}<br>{{ grant.decided_at | user_datetime }}{% if grant.expires_at %}<br>until {{ grant.expires_at | user_datetime }}{% endif %}{% else %}-{% endif %}</td>
+          <td class="small">{{ grant.last_used_at | user_datetime if grant.last_used_at else '-' }}{% if grant.last_used_ip %}<br>{{ grant.last_used_ip }}{% endif %}</td>
+          <td class="text-end text-nowrap">
+            {% if grant.status == 'pending_approval' %}
+            <button class="btn btn-sm btn-success" data-ps-approve="{{ grant.id }}" data-pii="{{ '1' if grant.include_pii else '0' }}">Approve</button>
+            {% endif %}
+            {% if grant.status in ['pending_email', 'pending_approval'] %}
+            <button class="btn btn-sm btn-outline-danger" data-ps-reject="{{ grant.id }}">Reject</button>
+            {% endif %}
+            {% if grant.status == 'approved' %}
+            <button class="btn btn-sm btn-outline-danger" data-ps-revoke="{{ grant.id }}">Revoke</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-body-secondary">No sync grants.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

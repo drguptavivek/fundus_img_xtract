@@ -12,10 +12,11 @@ Supports both local file serving and S3 storage with:
 import logging
 from typing import NoReturn
 
-from flask import abort, redirect, request
+from flask import abort, request
 from flask_login import current_user, login_required
 
 from db_transaction_manager import transaction_scope
+from media.delivery import deliver_media
 from media.authorization import (
     IMAGE_SOURCE_TYPES,
     MediaAccessDenied,
@@ -28,9 +29,6 @@ from media.authorization import (
 from models import (
     DirectImageUpload,
     EncounterFile,
-    EncounterFilePDF,
-    EncounterSetImage,
-    S3Config,
 )
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit, rate_limit_with_feedback
@@ -103,7 +101,6 @@ def serve_media_thumbnail_with_hmac(uuid_str: str):
 
 def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
     """Validate a signed credential, apply session auth when present, then deliver."""
-    from utils.s3_storage_backends import generate_presigned_url, get_s3_client
     from utils.s3_url_signing import validate_media_token
 
     token = request.args.get("token")
@@ -135,60 +132,7 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
         except (MediaAccessDenied, MediaResolutionError):
             abort(404)
 
-        model_by_source = {
-            MediaSourceType.DIRECT_IMAGE_UPLOAD: DirectImageUpload,
-            MediaSourceType.ENCOUNTER_FILE: EncounterFile,
-            MediaSourceType.ENCOUNTER_FILE_PDF: EncounterFilePDF,
-            MediaSourceType.ENCOUNTER_SET_IMAGE: EncounterSetImage,
-        }
-        row = db.get(model_by_source[resource.source_type], resource.source_id)
-        if row is None:
-            abort(404)
-        if variant == "edited":
-            object_key = getattr(row, "s3_object_key_edited", None)
-        elif variant == "thumbnail":
-            object_key = (
-                getattr(row, "s3_object_key_edited_thumbnail", None)
-                or getattr(row, "s3_object_key_thumbnail", None)
-            )
-        else:
-            object_key = getattr(row, "s3_object_key", None)
-        s3_config_id = getattr(row, "s3_config_id", None)
-        if s3_config_id and object_key:
-            s3_config = db.get(S3Config, s3_config_id)
-            if s3_config and s3_config.is_active:
-                try:
-                    kwargs = {"expires_in": 120} if variant == "thumbnail" else {}
-                    url = generate_presigned_url(
-                        get_s3_client(s3_config), s3_config, object_key, **kwargs
-                    )
-                    return redirect(url, code=307)
-                except Exception as exc:  # noqa: BLE001 - storage fallback is intentional
-                    logger.warning(
-                        "S3 media redirect failed uuid=%s error=%s",
-                        sanitize_log_value(uuid_str),
-                        sanitize_log_value(exc),
-                    )
-
-        if resource.source_type == MediaSourceType.DIRECT_IMAGE_UPLOAD:
-            if variant == "edited":
-                return directImgEdByUUID(uuid_str, preauthorized=resource)
-            if variant == "thumbnail":
-                return directImgFinalThumbnailByUUID(uuid_str, preauthorized=resource)
-            return directImgOrigByUUID(uuid_str, preauthorized=resource)
-        if resource.source_type == MediaSourceType.ENCOUNTER_FILE:
-            if variant == "thumbnail":
-                return encounterImageThumbnailByUUID(uuid_str, preauthorized=resource)
-            return encounterImageByUUID(uuid_str, preauthorized=resource)
-        if resource.source_type == MediaSourceType.ENCOUNTER_SET_IMAGE:
-            if variant == "edited":
-                return encounterSetImageEditedByUUID(uuid_str, preauthorized=resource)
-            if variant == "thumbnail":
-                return encounterSetImageThumbnailByUUID(
-                    uuid_str, preauthorized=resource
-                )
-            return encounterSetImageByUUID(uuid_str, preauthorized=resource)
-        return encounterPDFByUUID(uuid_str, preauthorized=resource)
+        return deliver_media(db, resource, variant=variant)
 
 
 def _reject_signed_media(status_code: int, description: str) -> NoReturn:

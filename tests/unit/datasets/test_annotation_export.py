@@ -248,7 +248,7 @@ def test_coco_mask_tiles_become_column_major_rle():
         "mask_tiles": [{"tile_x": 0, "tile_y": 0, "width": 2, "height": 2,
                         "png_base64": base64.b64encode(output.getvalue()).decode()}],
     }
-    annotation = annotation_export._coco_annotation(instance, 2, 2)
+    annotation = annotation_export.coco_annotation(instance, 2, 2)
     assert annotation["segmentation"] == {"size": [2, 2], "counts": [2, 1, 1]}
     assert annotation["area"] == 1
 
@@ -258,6 +258,6 @@ def test_coco_polygon_uses_pixel_points_and_area():
         "bbox": [1, 1, 4, 3], "geometry_type": "polygon", "mask_tiles": [],
         "geometry": {"polygon": {"pixel": [[1, 1], [5, 1], [5, 4], [1, 4]]}},
     }
-    annotation = annotation_export._coco_annotation(instance, 10, 10)
+    annotation = annotation_export.coco_annotation(instance, 10, 10)
     assert annotation["segmentation"] == [[1, 1, 5, 1, 5, 4, 1, 4]]
     assert annotation["area"] == 12

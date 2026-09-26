@@ -378,6 +378,7 @@ The project-scoped controls are under **Admin -> Upload Projects -> select the
 project -> IITK API Intake**. **Sync recent records** runs the normal one-day
 overlap. **Reconcile full history** passes `full=true` and revisits every
 available session so corrected historical metadata and inventories are applied.
+The scheduled incremental sync runs hourly at 08:05 through 17:05 IST.
 
 Existing IITK rows imported before task eligibility was enabled can be repaired
 per project with a preview-first command. The apply mode accepts only the exact

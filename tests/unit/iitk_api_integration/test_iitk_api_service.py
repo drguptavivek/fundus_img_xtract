@@ -403,8 +403,8 @@ def test_disabled_non_iitk_project_does_not_show_iitk_target_warning(db_session)
 def test_iitk_business_hours_schedule_is_seeded(db_session):
     row = db_session.query(CeleryBeatSchedule).filter_by(name="IITK API EncounterSet Sync Hourly IST Business Hours").one()
     assert row.queue == "maintenance"
-    assert row.crontab_minute == "30"
-    assert row.crontab_hour == "1-12"
+    assert row.crontab_minute == "35"
+    assert row.crontab_hour == "2-11"
     assert row.task_name == "celery_tasks.tasks.iitk_tasks.queue_active_iitk_syncs_task"
 
 

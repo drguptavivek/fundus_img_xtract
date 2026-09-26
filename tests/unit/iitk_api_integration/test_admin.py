@@ -23,7 +23,7 @@ def test_legacy_iitk_pages_redirect_to_project_admin(app, db_session, core_test_
     assert {row["site"] for row in mappings.get_json()["data"]} == {"delhi", "kalyani", "bilaspur", "nagpur"}
 
 
-def test_project_admin_owns_iitk_flag_and_token(app, db_session, core_test_data):
+def test_project_admin_owns_iitk_flag_and_token(app, db_session, core_test_data, monkeypatch):
     hospital = db_session.query(Hospital).filter_by(name="RPC AIIMS").one_or_none()
     if hospital is None:
         hospital = Hospital(name="RPC AIIMS")
@@ -63,8 +63,26 @@ def test_project_admin_owns_iitk_flag_and_token(app, db_session, core_test_data)
     assert workspace.status_code == 200
     assert b"IITK API populated project" in workspace.data
     assert b"IITK API token" in workspace.data
+    assert b"Reconcile full history" not in workspace.data
     assert b"Project upload profile" not in workspace.data
     assert saved.status_code == 200
     assert saved.get_json()["data"]["iitk_project_config"]["token_configured"] is True
     assert refreshed.status_code == 200
-    assert refreshed.get_json()["data"]["iitk_project_config"]["active"] is True
+    config_payload = refreshed.get_json()["data"]["iitk_project_config"]
+    assert config_payload["active"] is True
+
+    enabled_workspace = client.get(f"/admin/upload-projects/{project.id}/workspace")
+    assert b"Sync recent records" in enabled_workspace.data
+    assert b"Reconcile full history" in enabled_workspace.data
+    assert b'name="full" value="true"' in enabled_workspace.data
+
+    queued = []
+    monkeypatch.setattr(
+        "celery_tasks.tasks.iitk_tasks.run_iitk_config_sync_task.delay",
+        lambda config_id, full: queued.append((config_id, full)) or type("Task", (), {"id": "task-1"})(),
+    )
+    config_id = config_payload["id"]
+    response = client.post(f"/api/iitk/configurations/{config_id}/sync", data={"full": "true"})
+    assert response.status_code == 202
+    assert response.get_json()["data"]["full"] is True
+    assert queued == [(config_id, True)]

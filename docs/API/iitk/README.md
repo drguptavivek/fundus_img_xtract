@@ -342,7 +342,8 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
   `listSessions`, the complete per-session response from `listImages`, and each
   complete image inventory object. Unknown upstream fields are preserved
   verbatim alongside the normalized fields used by the application.
-- Images use random local filenames. The exact IITK inventory filename is
+- Images use stable local gaze filenames such as `primary.jpg`; historical
+  UUID-named IITK files are renamed when reconciled. The exact IITK inventory filename is
   retained as `source_filename` in image metadata, alongside its SHA-256
   fingerprint, because annotation submissions must reference the exact
   filename returned by `GET /listImages`. An inventory-only sync backfills the
@@ -350,22 +351,29 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
 - JPEGs are size-checked, decoded, stripped of EXIF, stored locally, and
   thumbnailed. Unchanged inventory entries are not downloaded again; a missing
   local file is recovered on the next sync.
-- Images absent from a later inventory remain stored for history and receive
-  `source_present: false`.
-- Imported clinical images have `creates_task=true`, including legacy IITK
-  image rows reconciled by a later synchronization. Synchronization itself
-  does not run verification or create grading tasks; verification applies the
-  selected upload profile's package policy and creates the eligible tasks.
+- Images absent from a later inventory remain stored for history, receive
+  `source_present: false`, and are retired from active image totals, verifier
+  display, and future task creation.
+- Imported source-present clinical images have `creates_task=true`, including
+  legacy IITK image rows reconciled by a later synchronization. Synchronization
+  itself does not run verification or create grading tasks; verification
+  applies the selected upload profile's package policy and creates eligible
+  tasks.
 - A failed image does not prevent the session metadata or other images from
   being saved. Each individual network request or HTTP `429`/`5xx` response is
-  retried once after 5 seconds. Configuration, contract, authentication,
+  retried once after 2 seconds. Configuration, contract, authentication,
   authorization, invalid-parameter, and not-found failures are not retried;
   they remain visible for correction and the next scheduled/manual sync.
-- Requests are sequentially paced at no more than approximately 60 per minute,
-  matching the supplied provider guidance. Incremental runs use a one-day
+- Requests are sequentially paced at no more than approximately 240 per minute.
+  Incremental runs use a one-day
   overlap and do not repeat a second unbounded scan of every historical partial
   session. A manual `full=true` sync remains available when older sessions need
   reconciliation.
+
+The project-scoped controls are under **Admin -> Upload Projects -> select the
+project -> IITK API Intake**. **Sync recent records** runs the normal one-day
+overlap. **Reconcile full history** passes `full=true` and revisits every
+available session so corrected historical metadata and inventories are applied.
 
 Existing IITK rows imported before task eligibility was enabled can be repaired
 per project with a preview-first command. The apply mode accepts only the exact

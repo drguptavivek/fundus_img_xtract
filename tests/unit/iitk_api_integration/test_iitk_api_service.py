@@ -145,6 +145,61 @@ def test_inventory_sync_repairs_legacy_image_task_eligibility(
     assert image.creates_task is True
 
 
+def test_nine_position_reconciliation_retires_composite_and_normalizes_names(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    positions = ("primary", "up_left", "up", "up_right", "right", "down_right", "down", "down_left", "left")
+    current_inventory = inventory(*positions)
+    _persist_session(
+        runtime,
+        source("complete", 9, positions),
+        current_inventory,
+        {position: jpeg() for position in positions},
+    )
+    encounter = db_session.query(PatientEncounters).filter_by(project_id=runtime.project_id).one()
+    composite_path = tmp_path / "files" / "encounter_sets" / "legacy" / str(encounter.id)
+    composite_path.mkdir(parents=True)
+    (composite_path / "legacy-composite.jpg").write_bytes(jpeg())
+    composite = EncounterSetImage(
+        uuid=str(uuid4()), patient_encounter_id=encounter.id, spatial_position=10,
+        original_filename="legacy-composite.jpg",
+        folder_rel=str(composite_path.relative_to(tmp_path)), asset_kind="clinical_image",
+        creates_task=True, visible_to_grader=True, is_pii=False,
+        project_id=runtime.project_id, hospital_id=runtime.hospital_id,
+        metadata_json={"source_kind": "iitk_api", "gaze_position": "composite", "source_present": True},
+    )
+    db_session.add(composite)
+    db_session.flush()
+
+    corrected_inventory = IITKImageInventory(
+        current_inventory.session_id,
+        current_inventory.mode,
+        tuple(
+            replace(item, filename=f"corrected-{item.position}.jpg")
+            for item in current_inventory.images
+        ),
+    )
+    _persist_session(runtime, source("complete", 9, positions), corrected_inventory, {})
+    db_session.refresh(encounter)
+    db_session.refresh(composite)
+    active_images = db_session.query(EncounterSetImage).filter_by(
+        patient_encounter_id=encounter.id, visible_to_grader=True, creates_task=True,
+    ).order_by(EncounterSetImage.spatial_position).all()
+
+    assert encounter.metadata_json["encounter"]["captured_positions"] == list(positions)
+    assert [image.spatial_position for image in active_images] == list(range(1, 10))
+    assert [image.original_filename for image in active_images] == [f"{position}.jpg" for position in positions]
+    assert [image.metadata_json["source_filename"] for image in active_images] == [
+        f"corrected-{position}.jpg" for position in positions
+    ]
+    assert composite.metadata_json["source_present"] is False
+    assert composite.creates_task is False
+    assert composite.visible_to_grader is False
+
+
 def test_complete_upstream_session_and_inventory_payloads_are_preserved_for_audit(
     db_session, core_test_data, app, monkeypatch, tmp_path
 ):

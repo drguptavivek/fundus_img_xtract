@@ -32,7 +32,7 @@ from .models import IITKApiProjectConfig, IITKApiSessionLink
 
 
 LOGGER = logging.getLogger("iitk_api_integration.service")
-POSITION_ORDER = {"primary": 1, "up_left": 2, "up": 3, "up_right": 4, "right": 5, "down_right": 6, "down": 7, "down_left": 8, "left": 9, "composite": 10}
+POSITION_ORDER = {"primary": 1, "up_left": 2, "up": 3, "up_right": 4, "right": 5, "down_right": 6, "down": 7, "down_left": 8, "left": 9}
 SYNC_STALE_AFTER = timedelta(minutes=15)
 # Sessions the source marks partial never complete, so a retry must not keep
 # rescanning them back to the beginning of time.
@@ -572,13 +572,15 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         present_positions = {POSITION_ORDER[item.position] for item in inventory.images}
         for existing in images_by_position.values():
             image_meta = dict(existing.metadata_json or {})
-            image_meta["source_present"] = existing.spatial_position in present_positions
+            source_present = existing.spatial_position in present_positions
+            image_meta["source_present"] = source_present
             existing.metadata_json = image_meta
             existing.hospital_id = destination.hospital_id
-            # IITK inventory images are clinical grading inputs. Older imports
-            # explicitly disabled task creation, so repair that stale routing
-            # flag whenever their source session is synchronized again.
-            existing.creates_task = True
+            # A later provider inventory is authoritative. Retain removed rows
+            # for audit/task history, but retire them from active image counts,
+            # verification, and future grading task creation.
+            existing.creates_task = source_present
+            existing.visible_to_grader = source_present
         folder_rel = f"files/encounter_sets/{now.strftime('%Y_%m_%d')}/{encounter.id}"
         image_dir = BASE_DIR / folder_rel
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -589,7 +591,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             if image is None:
                 if content is None:
                     continue
-                stored_filename = f"{uuid4()}.jpg"
+                stored_filename = f"{item.position}.jpg"
                 image = EncounterSetImage(uuid=str(uuid4()), patient_encounter_id=encounter.id, spatial_position=position,
                     original_filename=stored_filename, folder_rel=folder_rel, asset_kind="clinical_image", creates_task=True,
                     is_pii=False, visible_to_grader=True, project_id=runtime.project_id, hospital_id=destination.hospital_id,
@@ -601,6 +603,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
                 counts["images_updated"] += 1
             else:
                 counts["images_unchanged"] += 1
+            _normalize_iitk_local_filename(image, item.position)
             if content is not None:
                 stored_images.append(image)
                 safe_content = strip_exif_data(content)
@@ -645,6 +648,31 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
     # Remidio path has always done both.
     counts["images_post_processing_queued"] = queue_image_post_processing(stored_image_ids)
     return counts
+
+
+def _normalize_iitk_local_filename(image: EncounterSetImage, position: str) -> None:
+    """Give IITK files stable gaze names while preserving stored bytes."""
+    target_name = f"{position}.jpg"
+    if image.original_filename == target_name:
+        return
+    source = BASE_DIR / image.folder_rel / image.original_filename
+    target = BASE_DIR / image.folder_rel / target_name
+    if source.is_file() and not target.exists():
+        source.rename(target)
+    elif source.is_file() and target.exists():
+        return
+
+    old_thumbnail = image.thumbnail_filename
+    new_thumbnail = get_thumbnail_filename(target_name)
+    if old_thumbnail:
+        old_thumbnail_path = BASE_DIR / image.folder_rel / "thumbnails" / old_thumbnail
+        new_thumbnail_path = BASE_DIR / image.folder_rel / "thumbnails" / new_thumbnail
+        if old_thumbnail_path.is_file() and not new_thumbnail_path.exists():
+            old_thumbnail_path.rename(new_thumbnail_path)
+            image.thumbnail_filename = new_thumbnail
+        elif new_thumbnail_path.exists():
+            image.thumbnail_filename = new_thumbnail
+    image.original_filename = target_name
 
 
 def _source_audit_metadata(source: IITKSessionDTO, inventory: IITKImageInventory) -> dict[str, Any]:

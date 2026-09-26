@@ -21,7 +21,7 @@ MAX_PAGE_SIZE = 200
 
 class IITKClient:
     def __init__(self, token: str, *, base_url: str = DEFAULT_BASE_URL, timeout_seconds: int = 30,
-                 min_request_interval_seconds: float = 1.0, retry_delay_seconds: float = 5.0, session=None) -> None:
+                 min_request_interval_seconds: float = 0.25, retry_delay_seconds: float = 2.0, session=None) -> None:
         parsed = urlsplit(base_url.rstrip("/"))
         local_http = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
         if not parsed.netloc or (parsed.scheme != "https" and not local_http):

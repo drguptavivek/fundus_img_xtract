@@ -113,7 +113,14 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
     )
     set_image_count = _scalar_count(db, select(func.count(EncounterSetImage.id)).join(
         PatientEncounters, PatientEncounters.id == EncounterSetImage.patient_encounter_id
-    ).where(PatientEncounters.project_id == project.id, encounter_scope))
+    ).where(
+        PatientEncounters.project_id == project.id,
+        encounter_scope,
+        or_(
+            EncounterSetImage.metadata_json["source_present"].as_boolean().is_(None),
+            EncounterSetImage.metadata_json["source_present"].as_boolean().is_(True),
+        ),
+    ))
     direct_count = _scalar_count(db, select(func.count(DirectImageUpload.id)).where(
         DirectImageUpload.project_id == project.id, direct_scope
     ))

@@ -78,7 +78,7 @@ def test_client_protects_token_transport_and_remote_body():
     assert "private MRN" not in str(exc_info.value)
 
 
-def test_client_retries_one_transient_request_after_five_seconds(monkeypatch):
+def test_client_retries_one_transient_request_after_two_seconds(monkeypatch):
     transient = Response(status_code=503, body={"error": "unavailable"})
     transport = Session(
         transient,
@@ -89,7 +89,7 @@ def test_client_retries_one_transient_request_after_five_seconds(monkeypatch):
     client = IITKClient("secret", base_url="https://iitk.test", min_request_interval_seconds=0, session=transport)
 
     assert client.list_sessions().sessions == ()
-    assert sleeps == [5.0]
+    assert sleeps == [2.0]
     assert len(transport.calls) == 2
     assert transient.closed is True
 

@@ -347,6 +347,27 @@
           <div class="small mt-2">Last sync: {{ iitk_project_config.last_success_at or 'Never' }}{% if iitk_project_config.last_error %}<span class="text-danger ms-2">{{ iitk_project_config.last_error }}</span>{% endif %}</div>
           {% endif %}
         </form>
+        {% if iitk_project_config.id and iitk_project_config.active %}
+        <div class="border border-top-0 rounded-bottom p-3">
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <form method="post" action="{{ url_for('fundus_api.queue_iitk_sync', config_id=iitk_project_config.id) }}"
+                  hx-post="{{ url_for('fundus_api.queue_iitk_sync', config_id=iitk_project_config.id) }}"
+                  hx-swap="none" data-json-api-htmx>
+              {{ csrf_field() }}
+              <button class="btn btn-sm btn-outline-primary" type="submit" {% if iitk_project_config.sync_running %}disabled{% endif %}>Sync recent records</button>
+            </form>
+            <form method="post" action="{{ url_for('fundus_api.queue_iitk_sync', config_id=iitk_project_config.id) }}"
+                  hx-post="{{ url_for('fundus_api.queue_iitk_sync', config_id=iitk_project_config.id) }}"
+                  hx-vals='{"full":"true"}' hx-swap="none" data-json-api-htmx
+                  onsubmit="return confirm('Reconcile every historical IITK session for this project? This can take a while.');">
+              {{ csrf_field() }}
+              <input type="hidden" name="full" value="true">
+              <button class="btn btn-sm btn-outline-warning" type="submit" {% if iitk_project_config.sync_running %}disabled{% endif %}>Reconcile full history</button>
+            </form>
+            <span class="small text-muted">Full history refreshes corrected positions, filenames, and retired source images.</span>
+          </div>
+        </div>
+        {% endif %}
       </div>
       {% endif %}
 

@@ -14,6 +14,7 @@ from authz import (
     self_scope,
     upload_scope,
 )
+from authz.project_access import can_sync_remidio
 from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
 from grading_allocation.models import ProjectGraderAllocation
 from models import Project, Role, User, UserDiseaseUnitRole
@@ -141,6 +142,27 @@ def test_project_lab_and_project_wide_grants_do_not_cross(db_session, core_test_
         {"verifier"},
         RecordScope.project(project_id=project.id, lab_unit_id=lab_b.id),
     ).allowed
+
+
+def test_remidio_sync_uses_data_manager_project_grants_not_uploader_assignments(
+    db_session, core_test_data
+):
+    lab_a = db_session.merge(core_test_data["lab_a1"])
+    lab_b = db_session.merge(core_test_data["lab_b1"])
+    project = _project(db_session, "REMIDIO_SYNC")
+    _configure(db_session, project, lab_a.id, lab_b.id)
+    ungranted = _user(db_session, "remidio_ungranted", "data_manager")
+    lab_manager = _user(db_session, "remidio_lab_manager", "data_manager")
+    project_manager = _user(db_session, "remidio_project_manager", "data_manager")
+    _project_grant(db_session, lab_manager, project, "data_manager", lab_id=lab_a.id)
+    _project_grant(db_session, project_manager, project, "data_manager")
+
+    assert not can_sync_remidio(db_session, ungranted, project_id=project.id)
+    assert can_sync_remidio(db_session, lab_manager, project_id=project.id, lab_unit_id=lab_a.id)
+    assert not can_sync_remidio(db_session, lab_manager, project_id=project.id, lab_unit_id=lab_b.id)
+    assert not can_sync_remidio(db_session, lab_manager, project_id=project.id)
+    assert can_sync_remidio(db_session, project_manager, project_id=project.id)
+    assert can_sync_remidio(db_session, project_manager, project_id=project.id, lab_unit_id=lab_b.id)
 
 
 def test_project_upload_requires_role_and_exact_active_assignment(db_session, core_test_data):

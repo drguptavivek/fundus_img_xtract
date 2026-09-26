@@ -338,6 +338,10 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
 - Patient, encounter, and upload metadata are stored in the canonical nested
   EncounterSet `metadata_json` scopes. Existing locally managed keys in those
   scopes are preserved when source-owned keys are refreshed.
+- Gaze labels are canonicalized before persistence: an eight-digit date prefix
+  and trailing numeric suffixes are ignored, so values such as
+  `20260915_primary` and `primary_2` both become `primary`. Composite, consent,
+  and other auxiliary labels are excluded from clinical positions.
 - Audit metadata retains the complete per-session object returned by
   `listSessions`, the complete per-session response from `listImages`, and each
   complete image inventory object. Unknown upstream fields are preserved

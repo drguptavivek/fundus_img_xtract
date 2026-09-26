@@ -43,8 +43,8 @@ def jpeg() -> bytes:
 
 
 def test_client_parses_partial_session_and_image_inventory():
-    session_payload = {"sessionId": "s-1", "startedAt": "2026-08-01T01:30:00Z", "status": "partial", "imageCount": 1, "mrn": "M-1", "capturedPositions": ["primary", "consent"], "futureSessionField": {"value": 7}}
-    image_payload = {"filename": "private.jpg", "position": "primary", "sizeBytes": 100, "contentType": "image/jpeg", "capturedAt": "2026-08-01T01:31:00Z", "futureImageField": ["kept"]}
+    session_payload = {"sessionId": "s-1", "startedAt": "2026-08-01T01:30:00Z", "status": "partial", "imageCount": 1, "mrn": "M-1", "capturedPositions": ["20260915_primary", "up_left_2", "composite", "consent"], "futureSessionField": {"value": 7}}
+    image_payload = {"filename": "private.jpg", "position": "primary_2", "sizeBytes": 100, "contentType": "image/jpeg", "capturedAt": "2026-08-01T01:31:00Z", "futureImageField": ["kept"]}
     inventory_payload = {"sessionId": "s-1", "mode": "closeup", "images": [image_payload], "futureInventoryField": True}
     transport = Session(
         Response(body={"sessions": [session_payload], "nextPageToken": "next"}),
@@ -58,7 +58,7 @@ def test_client_parses_partial_session_and_image_inventory():
     content = client.get_image("s-1", "private.jpg")
 
     assert page.sessions[0].status == "partial"
-    assert page.sessions[0].captured_positions == ("primary", "consent")
+    assert page.sessions[0].captured_positions == ("primary", "up_left")
     assert page.next_page_token == "next"
     assert inventory.images[0].position == "primary"
     assert page.sessions[0].raw_payload == session_payload

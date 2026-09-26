@@ -16,8 +16,8 @@ from authz.project_roles import (
     PROJECT_PI,
     SITE_PI,
 )
-from authz.scopes import RecordScope, admin_scope, project_scope
-from upload_profiles.access import has_remidio_sync_assignment, has_upload_assignment
+from authz.scopes import RecordScope, admin_scope, project_scope, project_wide_scope
+from upload_profiles.access import has_upload_assignment
 
 
 def _allowed(
@@ -122,12 +122,22 @@ def can_view_wai_results(db, user, *, project_id: int, lab_unit_id: int | None =
 
 
 def can_sync_remidio(db, user, *, project_id: int, lab_unit_id: int | None = None) -> bool:
-    return has_remidio_sync_assignment(
-        db,
-        user_id=user.id,
-        project_id=project_id,
-        lab_unit_id=lab_unit_id,
-    )
+    """Authorize automated Remidio syncs through project data-manager grants.
+
+    Automated profiles intentionally have no uploader assignments. Whole-project
+    historical runs therefore require a project-wide data-manager grant; callers
+    checking one routed lab may also use an exact lab-scoped grant.
+    """
+    if not getattr(user, "is_authenticated", True):
+        return False
+    context = access_context(db, user)
+    if lab_unit_id is None:
+        return project_wide_scope(context, {"data_manager"}, project_id).allowed
+    return project_scope(
+        context,
+        {"data_manager"},
+        RecordScope.project(project_id=project_id, lab_unit_id=lab_unit_id),
+    ).allowed
 
 
 def allowed_project_lab_unit_ids(

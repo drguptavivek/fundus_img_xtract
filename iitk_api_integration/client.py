@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from io import BytesIO
+import re
 import time
 from typing import Any
 from urllib.parse import urlsplit
@@ -17,6 +18,8 @@ from .errors import IITKConfigError, IITKContractError, IITKRemoteError
 DEFAULT_BASE_URL = "https://asia-south1-imagecapture-6b306.cloudfunctions.net"
 MAX_IMAGE_BYTES = 50 * 1024 * 1024
 MAX_PAGE_SIZE = 200
+GAZE_POSITIONS = frozenset({"primary", "up_left", "up", "up_right", "right", "down_right", "down", "down_left", "left"})
+AUXILIARY_POSITIONS = frozenset({"composite", "consent"})
 
 
 class IITKClient:
@@ -144,16 +147,21 @@ class IITKClient:
 def _session(value: Any) -> IITKSessionDTO:
     if not isinstance(value, dict):
         raise IITKContractError("IITK session entry must be an object.")
-    positions = value.get("capturedPositions") or []
-    if not isinstance(positions, list) or not all(isinstance(item, str) for item in positions):
+    raw_positions = value.get("capturedPositions") or []
+    if not isinstance(raw_positions, list) or not all(isinstance(item, str) for item in raw_positions):
         raise IITKContractError("IITK capturedPositions must be a string array.")
+    positions = tuple(dict.fromkeys(
+        position
+        for item in raw_positions
+        if (position := _normalized_position(item)) in GAZE_POSITIONS
+    ))
     status = _required(value.get("status"), "status")
     if status not in {"complete", "partial"}:
         raise IITKContractError("IITK session status must be complete or partial.")
     return IITKSessionDTO(
         session_id=_required(value.get("sessionId"), "sessionId"), site=_optional_string(value.get("site")),
         mode=_optional_string(value.get("mode")), started_at=_required(value.get("startedAt"), "startedAt"),
-        captured_positions=tuple(positions), expected_positions=_optional_int(value.get("expectedPositions")),
+        captured_positions=positions, expected_positions=_optional_int(value.get("expectedPositions")),
         status=status, image_count=_optional_int(value.get("imageCount")) or 0,
         mrn=_required(value.get("mrn"), "mrn"), age=_optional_int(value.get("age")),
         eye=_optional_string(value.get("eye")), gender=_optional_string(value.get("gender")),
@@ -171,7 +179,7 @@ def _image(value: Any) -> IITKImageDTO:
         raise IITKContractError("IITK image inventory contains a non-JPEG asset.")
     return IITKImageDTO(
         _required(value.get("filename"), "filename"),
-        _required(value.get("position"), "position"),
+        _normalized_position(_required(value.get("position"), "position")),
         _optional_int(value.get("sizeBytes")),
         content_type,
         _optional_string(value.get("capturedAt")),
@@ -198,3 +206,10 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalized_position(value: str) -> str:
+    position = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    position = re.sub(r"^\d{8}_", "", position)
+    position = re.sub(r"_\d+$", "", position)
+    return position

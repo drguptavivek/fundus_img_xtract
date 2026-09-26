@@ -489,6 +489,43 @@ def test_image_failure_still_imports_partial_session_metadata(db_session, core_t
     assert "private remote failure" in link.last_error
 
 
+def test_sync_ignores_auxiliary_inventory_images_but_preserves_raw_audit_payload(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    gaze = inventory("primary")
+    composite = replace(gaze.images[0], filename="composite.jpg", position="composite")
+    raw_payload = {
+        "sessionId": "session-1",
+        "images": [
+            {"filename": "private-primary.jpg", "position": "primary", "contentType": "image/jpeg"},
+            {"filename": "composite.jpg", "position": "composite", "contentType": "image/jpeg"},
+        ],
+    }
+    mixed_inventory = IITKImageInventory(
+        gaze.session_id, gaze.mode, (gaze.images[0], composite), raw_payload=raw_payload,
+    )
+
+    class MixedClient:
+        def list_images(self, session_id):
+            assert session_id == "session-1"
+            return mixed_inventory
+
+        def get_image(self, session_id, filename):
+            assert filename == "private-primary.jpg"
+            return jpeg()
+
+    result = _sync_session(MixedClient(), runtime, source("complete", 9, ("primary",)))
+
+    link = db_session.query(IITKApiSessionLink).one()
+    images = db_session.query(EncounterSetImage).all()
+    assert result["images_created"] == 1
+    assert [image.metadata_json["gaze_position"] for image in images] == ["primary"]
+    assert link.source_metadata_json["upstream_image_inventory_payload"] == raw_payload
+
+
 def test_downloaded_images_are_queued_for_metadata_and_pii_processing(
     db_session, core_test_data, app, monkeypatch, tmp_path
 ):

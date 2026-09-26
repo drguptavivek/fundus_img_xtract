@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -500,9 +500,17 @@ def _sync_session(client: IITKClient, runtime: RuntimeConfig, session_dto: IITKS
     _touch_sync_heartbeat(runtime.id)
     inventory = client.list_images(session_dto.session_id)
     _touch_sync_heartbeat(runtime.id)
-    for image in inventory.images:
-        if image.position not in POSITION_ORDER:
-            raise IITKIntegrationError("IITK inventory contains an unsupported image position.")
+    clinical_images = tuple(image for image in inventory.images if image.position in POSITION_ORDER)
+    if len(clinical_images) != len(inventory.images):
+        LOGGER.info(
+            "IITK inventory auxiliary assets ignored config_id=%s session_ref=%s count=%s",
+            runtime.id,
+            _opaque(session_dto.session_id),
+            len(inventory.images) - len(clinical_images),
+        )
+    # Preserve the complete raw payload for audit while reconciling only the
+    # nine supported gaze positions as clinical EncounterSet images.
+    inventory = replace(inventory, images=clinical_images)
     current = _current_images(runtime.id, session_dto.session_id)
     downloaded: dict[str, bytes] = {}
     download_errors: list[str] = []

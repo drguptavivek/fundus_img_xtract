@@ -413,13 +413,6 @@
   carouselElement.addEventListener('slide.bs.carousel', event => {
     window.requestAnimationFrame(() => scrollImageIntoView(panels[event.to], 'auto'));
   });
-  if (window.matchMedia('(max-width: 767.98px), (max-height: 500px)').matches) {
-    root.querySelectorAll('.imggr-annot-sidebar').forEach(sidebar => sidebar.classList.add('is-collapsed'));
-    root.querySelectorAll('[data-annot-toggle]').forEach(button => {
-      button.setAttribute('aria-pressed', 'false');
-      button.classList.remove('active');
-    });
-  }
   root.querySelectorAll('[data-annot-toggle]').forEach(button => {
     button.addEventListener('click', () => {
       const viewer = button.closest('.linked-grading-panel')?.querySelector('.imggr-viewer-root');

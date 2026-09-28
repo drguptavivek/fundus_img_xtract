@@ -258,7 +258,10 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   body.gpwa-workbench .gwb-viewer-toolbar .gpwa-adjust-toggle { order: 3; }
   body.gpwa-workbench .gwb-viewer-toolbar .gpwa-toolbar-toggle { order: 4; }
   body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control { display: none; margin-top: 0; }
-  body.gpwa-workbench .gwb-viewer-toolbar.is-adjusting .gwb-adjustment-control { display: flex; margin-top: .15rem; }
+  /* The sliders unfold above the filter row (order -1, bottom-aligned strip) so
+     opening them never moves the buttons under the grader's thumb. */
+  body.gpwa-workbench .gwb-viewer-toolbar { align-items: flex-end; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-adjusting .gwb-adjustment-control { display: flex; order: -1; margin-top: 0; margin-bottom: .15rem; }
   body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control .form-range { min-height: 2rem; }
   body.gpwa-workbench .gwb-viewer-toolbar.is-hidden {
     left: auto;
@@ -303,6 +306,9 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   }
   body.gpwa-workbench .gwb-grade-card .card-header > .d-flex { flex: 0 0 auto; gap: .25rem !important; }
   body.gpwa-workbench .gwb-grade-card .card-header h2 { display: none; }
+  /* The pager row below already carries previous / next; a second pair in the
+     sheet bar just above it is redundant on a phone. */
+  body.gpwa-workbench .gwb-grade-card .gwb-image-nav { display: none; }
   body.gpwa-workbench .gwb-grade-card .card-header .btn-group .btn { min-width: 2.5rem; min-height: 2.25rem; }
   .gpwa-sheet-handle {
     flex: 1 1 auto;
@@ -349,7 +355,7 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   body.gpwa-workbench .gwb-grade-card [data-grade-options] { margin-bottom: .5rem !important; }
   body.gpwa-workbench .gwb-grade-card [data-grade-options] > .row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(6.9rem, 1fr));
     gap: .35rem;
     margin: 0;
   }
@@ -361,13 +367,29 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   }
   body.gpwa-workbench .gwb-grade-card [data-grade-options] label.btn {
     min-height: 40px;
-    padding: .3rem .4rem;
-    font-size: .85rem;
+    padding: .25rem .3rem;
+    font-size: .8rem;
     line-height: 1.15;
   }
   body.gpwa-workbench .gwb-grade-card [data-grade-guidelines] { font-size: .85rem; margin-bottom: .6rem !important; }
   body.gpwa-workbench .gwb-grade-card [data-grade-guidelines]:empty { display: none; }
-  body.gpwa-workbench .gwb-grade-card .gwb-comment { height: 5rem; min-height: 5rem; }
+  body.gpwa-workbench .gwb-grade-card [data-feature-fieldset] legend { font-size: .85rem; margin-bottom: .25rem; }
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: 0 .5rem !important;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 36px;
+    margin: 0;
+    padding-left: 0;
+    font-size: .85rem;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check-input { float: none; margin: 0; flex: 0 0 auto; width: 1.25rem; height: 1.25rem; }
+  body.gpwa-workbench .gwb-grade-card .gwb-comment { height: 2.6rem; min-height: 2.6rem; padding-top: .35rem; padding-bottom: .35rem; }
   body.gpwa-workbench .gwb-grade-card [data-workbench-submit-actions] { margin-top: .75rem !important; }
   body.gpwa-workbench .gwb-grade-card [data-workbench-submit-actions] .btn {
     min-height: 44px;
@@ -391,13 +413,14 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
      Only placement changes; every control is the editor's, untouched. */
   body.gpwa-workbench .gpwa-annotating .gwb-grade-card,
   body.gpwa-workbench .gpwa-annotating .gwb-footer { display: none !important; }
+  body.gpwa-workbench .gpwa-annotating { --gpwa-annot-top: calc(2.9rem + env(safe-area-inset-top)); }
   body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar {
     position: absolute;
     inset: 0;
     z-index: 5;
     width: auto !important;
     max-height: none;
-    padding: .35rem 3.9rem 3.3rem .35rem !important;
+    padding: var(--gpwa-annot-top) 3.9rem 3.3rem .35rem !important;
     border: 0 !important;
     background: transparent !important;
     overflow: hidden;
@@ -444,11 +467,11 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
     border-radius: .75rem;
     background: rgba(33,37,41,.85);
   }
-  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row { top: .35rem; }
-  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-tool-category="bounding-box"] { top: calc(.7rem + 145px); }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tools-row { top: var(--gpwa-annot-top); }
+  body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-tool-category="bounding-box"] { top: calc(var(--gpwa-annot-top) + .35rem + 145px); }
   body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar [data-fgx-tool-category="segmentation"] {
-    top: calc(1.05rem + 197px);
-    max-height: calc(100% - 1.4rem - 197px);
+    top: calc(var(--gpwa-annot-top) + .7rem + 197px);
+    max-height: calc(100% - var(--gpwa-annot-top) - 1.05rem - 197px);
     overflow-y: auto;
   }
   body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .fgx-block-label { display: none; }
@@ -474,6 +497,38 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   body.gpwa-workbench .gpwa-annotating .imggr-annot-sidebar .fgx-tool-category .btn .ms-1 { display: none; }
   body.gpwa-workbench .imggr-annot-sidebar .btn { min-width: 44px; min-height: 44px; }
   body.gpwa-workbench .imggr-annot-sidebar .form-select { min-height: 44px; }
+}
+
+/* Immersive mode (sideways swipe on the image, grader-pwa.js): every overlay
+   steps aside so the image has the whole screen until the next swipe. */
+@media (max-width: 767.98px), (max-height: 500px) {
+  body.gpwa-workbench.gpwa-immersive .gwb-header,
+  body.gpwa-workbench.gpwa-immersive .gwb-viewer-toolbar,
+  body.gpwa-workbench.gpwa-immersive .gwb-panel-row > .col-lg-4,
+  body.gpwa-workbench.gpwa-immersive .gwb-footer { display: none !important; }
+}
+
+/* Portrait phones: the grade sheet floats over the image instead of taking
+   height from it, so opening it never shrinks or re-fits the image. The filter
+   strip sits just above the rail; the open sheet covers the lower image, which
+   can still be panned into view above it. */
+@media (max-width: 767.98px) and (orientation: portrait) {
+  body.gpwa-workbench .gwb-panel-row { position: relative; }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-8 { flex: 1 1 100%; }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-4 {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 8;
+  }
+  body.gpwa-workbench .gwb-viewer-toolbar { bottom: 2.75rem; }
+  /* Overlaid, the sheet no longer costs the image anything, so it may use most
+     of the screen: every feature checkbox fits without scrolling. */
+  body.gpwa-workbench .gwb-grade-card {
+    max-height: calc(100dvh - 3rem - env(safe-area-inset-top));
+    background: rgba(var(--bs-body-bg-rgb), .94);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
 }
 
 /* Landscape phones: the sheet becomes a side column so the image keeps the

@@ -204,8 +204,8 @@
                                type="range" min="10" max="400" step="5" value="100">
                         <button type="button" class="btn btn-sm btn-outline-secondary imggr-zoom-fit">Fit</button>
                       </div>
-                      <button type="button" class="btn btn-outline-secondary btn-sm gwb-annot-toggle active"
-                              data-annot-toggle aria-pressed="true" aria-label="Show or hide annotation tools">Tools</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm gwb-annot-toggle"
+                              data-annot-toggle aria-pressed="false" aria-label="Show or hide annotation tools">Tools</button>
                       <div class="btn-group btn-group-sm gwb-hide-phone" role="group" aria-label="CDR and RDR measurement tools">
                         <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle"
                                 aria-pressed="false" title="Measure cup-to-disc and rim-to-disc ratios">
@@ -253,7 +253,7 @@
                     <div class="imggr-stage position-relative h-100">
                       <div class="imggr-annot-layout d-flex h-100 gap-2">
                         {% if panel.media %}
-                        <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host>
+                        <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2 is-collapsed" data-geometry-sidebar-host>
                           <div class="small text-muted" data-annotation-placeholder>Select a grading feature to annotate.</div>
                         </aside>
                         {% endif %}
@@ -333,7 +333,7 @@
                       {{ panel.disease_name }}
                     </h2>
                     {% if panel.target_level == 'image' and set_context.enabled %}
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Image navigation">
+                    <div class="btn-group btn-group-sm gwb-image-nav" role="group" aria-label="Image navigation">
                       <button class="btn btn-outline-secondary" type="button" data-image-navigate="prev" title="Previous grading target"{% if loop.first %} disabled{% endif %}>
                         <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="visually-hidden">Previous image</span>
                       </button>
@@ -445,10 +445,10 @@ window.linkedGradingData = {
 window.currentUserId = {{ (current_user.id if current_user.is_authenticated else none)|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v7')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v8-zoom-anchor-v1')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v3-viewport-canvas-v3' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>
-<script src="{{ url_for('static', filename='js/grading-workbench-session.js', v=(config.get('ASSETS_VERSION','') ~ '-workbench-session-v4')) }}"></script>
+<script src="{{ url_for('static', filename='js/grading-workbench-session.js', v=(config.get('ASSETS_VERSION','') ~ '-workbench-session-v5')) }}"></script>

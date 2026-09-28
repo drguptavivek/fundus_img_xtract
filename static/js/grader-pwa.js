@@ -311,7 +311,28 @@
     });
   }
 
+  // Immersive mode: a sideways swipe on the image hides the header, filter
+  // strip, grade sheet and pager so the image has the whole screen; another
+  // sideways swipe brings them back.
+  const IMMERSIVE_CLASS = 'gpwa-immersive';
+  function setImmersive(on) {
+    body.classList.toggle(IMMERSIVE_CLASS, on);
+    const panel = workbench.querySelector('.carousel-item.active [data-task-uuid]')
+      || workbench.querySelector('.carousel-item.active');
+    if (panel) refreshViewer(panel);
+  }
+  function setupImmersiveSwipe() {
+    if (workbench.dataset.gpwaImmersiveReady === 'true') return;
+    workbench.dataset.gpwaImmersiveReady = 'true';
+    workbench.addEventListener('imggr:swipe', () => {
+      if (!phone.matches) return;
+      setImmersive(!body.classList.contains(IMMERSIVE_CLASS));
+    });
+    phone.addEventListener('change', event => { if (!event.matches) setImmersive(false); });
+  }
+
   function setupPhoneLayout() {
+    setupImmersiveSwipe();
     setupHeaderFullscreen();
     panels.forEach(panel => { setupSheet(panel); setupToolbar(panel); setupAnnotateMode(panel); });
   }

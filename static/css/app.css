@@ -798,8 +798,10 @@ body {
   min-width: 0;
   min-height: 0;
   aspect-ratio: auto;
-  align-items: center;
-  justify-content: center;
+  /* The pan model centres the image itself (see getPanRangePx); flex centring
+     here as well would offset it twice and push it off to the right. */
+  align-items: flex-start;
+  justify-content: flex-start;
   padding: 0;
 }
 
@@ -807,7 +809,23 @@ body {
 .imggr-viewer-root .imggr-main:-webkit-full-screen .imggr-main-img {
   max-width: 100vw;
   max-height: 100vh;
-  object-position: center;
+}
+
+/* Fullscreen control: pinned to the box's top-right corner (the black margin of
+   a round fundus) rather than left at its flex static position over the image. */
+.imggr-viewer-root .imggr-main .imggr-full {
+  top: .5rem;
+  right: .5rem;
+  left: auto;
+  z-index: 3;
+  opacity: .75;
+}
+.imggr-viewer-root .imggr-main .imggr-full:hover,
+.imggr-viewer-root .imggr-main .imggr-full:focus-visible { opacity: 1; }
+.imggr-viewer-root .imggr-main:fullscreen .imggr-full,
+.imggr-viewer-root .imggr-main:-webkit-full-screen .imggr-full {
+  top: calc(.75rem + env(safe-area-inset-top));
+  right: calc(.75rem + env(safe-area-inset-right));
 }
 
 /* Pseudo fullscreen (browsers without element fullscreen, e.g. iPhone Safari):

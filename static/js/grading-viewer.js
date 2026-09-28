@@ -2289,10 +2289,12 @@
         touchStartPanX = imgPanX;
         touchStartPanY = imgPanY;
         tapCandidate = true;
+        swipeCandidate = true;
       } else if (e.touches.length === 2) {
         // Two touches - prepare for pinch zoom about the fingers' midpoint
         isDragging = false;
         tapCandidate = false;
+        swipeCandidate = false;
         touchStartDistance = getTouchDistance(e.touches);
         touchStartZoom = currentZoom;
         const rect = main.getBoundingClientRect();
@@ -2308,6 +2310,26 @@
       e.preventDefault();
     }
     let pinchAnchor = null;
+    // A one-finger horizontal swipe while the image cannot pan sideways is not
+    // a pan; the viewer reports it as "imggr:swipe" for the host page (the
+    // grader PWA uses it to hide or restore its chrome).
+    let swipeCandidate = false;
+    const SWIPE_MIN_PX = 60;
+    function handleSwipeEnd(e) {
+      if (!swipeCandidate) return;
+      swipeCandidate = false;
+      const touch = e.changedTouches && e.changedTouches[0];
+      if (!touch || (e.touches && e.touches.length)) return;
+      const dx = touch.clientX - dragStartX;
+      const dy = touch.clientY - dragStartY;
+      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      const { minX, maxX } = getPanRangePx(currentZoom);
+      if (maxX - minX > 1) return;
+      root.dispatchEvent(new CustomEvent('imggr:swipe', {
+        bubbles: true,
+        detail: { direction: dx < 0 ? 'left' : 'right' },
+      }));
+    }
     function getTouchCentre(touches){
       return {
         x: (touches[0].clientX + touches[1].clientX) / 2,
@@ -2406,7 +2428,7 @@
     }
     
     function handleTouchEnd(e) {
-      if (e.type === 'touchend') handleTapEnd(e); else tapCandidate = false;
+      if (e.type === 'touchend') { handleTapEnd(e); handleSwipeEnd(e); } else { tapCandidate = false; swipeCandidate = false; }
       isDragging = false;
       touchStartDistance = 0;
       pinchAnchor = null;
@@ -2423,6 +2445,7 @@
         touchStartPanX = imgPanX;
         touchStartPanY = imgPanY;
         tapCandidate = false;
+        swipeCandidate = false;
       }
       e.preventDefault();
     }
@@ -2444,7 +2467,8 @@
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-        setZoomLevel(currentZoom + delta);
+        const rect = main.getBoundingClientRect();
+        setZoomLevel(currentZoom + delta, { x: e.clientX - rect.left, y: e.clientY - rect.top });
       }
     }, { passive: false });
     
@@ -2580,12 +2604,20 @@
     const zoomSlider = card ? card.querySelector('.imggr-zoom-slider') : null;
     const zoomFitBtn = card ? card.querySelector('.imggr-zoom-fit') : null;
     
-    function setZoomLevel(zoomPercent) {
+    // Zoom about an anchor (box-relative px) so the image point under it stays
+    // put: the wheel passes the pointer, other callers default to the box centre.
+    function setZoomLevel(zoomPercent, anchor) {
       if (isPanLocked()) {
         updateZoomControlLocks();
         return;
       }
+      const previousZoom = currentZoom;
       currentZoom = clamp(zoomPercent, ZOOM_MIN, ZOOM_MAX);
+      const ax = anchor ? anchor.x : (main.clientWidth || 0) / 2;
+      const ay = anchor ? anchor.y : (main.clientHeight || 0) / 2;
+      const ratio = previousZoom > 0 ? currentZoom / previousZoom : 1;
+      imgPanX = ax - (ax - imgPanX) * ratio;
+      imgPanY = ay - (ay - imgPanY) * ratio;
       clampPanToBounds();
       setCdrOverlayVisible(false);
       scheduleCdrRedrawAfterIdle();

@@ -142,7 +142,25 @@ def test_phone_workbench_gives_the_image_the_screen():
     assert f"@media {phone_query} {{" in pwa_styles
     assert f"@media {phone_query} {{" in workbench_styles
     assert f"'{phone_query}'" in pwa_script
-    assert f"'{phone_query}'" in session_script
+    # Annotation tools start collapsed at every width; the Tools toggle opens them.
+    assert f"'{phone_query}'" not in session_script
+    assert ".gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }" in workbench_styles
+    body_template = (ROOT / "templates/grading/_workbench_body.html").read_text()
+    assert "imggr-annot-sidebar border rounded bg-body-tertiary p-2 is-collapsed" in body_template
+    assert 'data-annot-toggle aria-pressed="false"' in body_template
+
+    # Portrait phones: the grade sheet overlays the image instead of shrinking it.
+    assert "@media (max-width: 767.98px) and (orientation: portrait) {" in pwa_styles
+
+    # Zoom keeps the anchored image point fixed; native fullscreen is not flex-centred twice.
+    assert "function setZoomLevel(zoomPercent, anchor)" in viewer
+
+    # A sideways swipe toggles immersive mode by class only, so viewer and
+    # toolbar state (filters, zoom, folded strip, sheet state) survive it.
+    assert "new CustomEvent('imggr:swipe'" in viewer
+    assert "workbench.addEventListener('imggr:swipe'" in pwa_script
+    assert "body.gpwa-workbench.gpwa-immersive .gwb-viewer-toolbar" in pwa_styles
+    assert "setZoomLevel(currentZoom + delta, { x: e.clientX - rect.left, y: e.clientY - rect.top })" in viewer
 
 
 def test_offline_page_is_public(client):

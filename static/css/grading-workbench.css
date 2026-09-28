@@ -93,14 +93,14 @@ body.gwb-expanded-lock { overflow: hidden; }
   .gwb-viewer-toolbar .gwb-annot-toggle { order: 4; margin-left: auto; }
   .gwb-viewer-toolbar .gwb-adjustment-control { order: 5; flex: 1 1 40%; width: auto; min-width: 0; margin-top: .5rem; }
 }
-.gwb-annot-toggle { display: none; }
+/* Annotation tools start collapsed so the image has the space; the Tools
+   toggle opens them at every width. */
+.gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }
 @media (max-width: 991.98px) {
   .gwb-toolbar-right { flex-basis: 100%; width: 100%; overflow-x: auto; padding-bottom: .125rem; }
   .gwb-viewer-body .imggr-annot-layout { flex-direction: column; }
   .gwb-viewer-body .imggr-main-wrap { order: 1; flex: 1 1 auto; min-height: 0; }
   .gwb-viewer-body .imggr-annot-sidebar { order: 2; flex: 0 0 auto; width: 100%; min-width: 0; max-height: min(32dvh, 16rem); overflow-y: auto; }
-  .gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }
   .gwb-viewer-body .imggr-annot-sidebar .fgx-panel { gap: .25rem; }
   .gwb-viewer-body .imggr-annot-sidebar .fgx-tool-category { padding: .2rem; }
-  .gwb-annot-toggle { display: inline-flex; }
 }

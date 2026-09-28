@@ -105,7 +105,16 @@ def pre_fork(server, worker):
 def post_fork(server, worker):
     """
     Called just after a worker has been forked.
+
+    With ``preload_app`` the master imports the app and opens pooled DB
+    connections at startup; forked workers would inherit and share those
+    sockets, corrupting the protocol (psycopg2 "PGRES_TUPLES_OK and no
+    message from the libpq"). Each worker starts a fresh pool; close=False
+    leaves the master's connections untouched.
     """
+    from models import engine
+
+    engine.dispose(close=False)
     server.log.info("Worker spawned (pid: %s)", worker.pid)
 
 def post_worker_init(worker):

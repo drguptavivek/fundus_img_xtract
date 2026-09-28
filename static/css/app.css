@@ -860,6 +860,8 @@ body {
 body.imggr-fullscreen-active { overflow: hidden; }
 /* Touch gestures track the fingers directly; the transform easing is for keys and wheel. */
 .imggr-viewer-root .imggr-main.imggr-gesturing .imggr-main-img { transition: none; }
+/* A newly loaded image is placed without easing (grading-viewer.js). */
+.imggr-viewer-root .imggr-main.imggr-no-anim .imggr-main-img { transition: none; }
 
 /* Grading filters: button active state */
 .imggr-filters .btn-check:checked + .btn {

@@ -124,7 +124,7 @@ def test_phone_workbench_gives_the_image_the_screen():
     # Rail / open grade drawer with an explicit minimise control, and a foldable filter strip.
     assert "const SHEET_STATES = ['rail', 'open']" in pwa_script
     assert "gpwa-sheet-minimise" in pwa_script
-    assert "setState(landscapePhone.matches ? 'open' : 'rail');" in pwa_script  # the drawer starts minimised
+    assert "setState(sheetPreference || (landscapePhone.matches ? 'open' : 'rail'));" in pwa_script  # the drawer starts minimised
     assert "body.gpwa-workbench .gwb-grade-card.is-rail .card-body { display: none; }" in pwa_styles
     assert "gpwa-toolbar-toggle" in pwa_script
     assert "body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: none !important; }" in pwa_styles

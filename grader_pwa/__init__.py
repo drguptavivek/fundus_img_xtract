@@ -53,7 +53,7 @@ HISTORY_PER_PAGE = 20
 # Mirrors ``--bs-body-bg`` of the dark Bootstrap build (static/css/bootstrap.min.css)
 # so the splash and title bar match the page; the viewer stage itself stays black.
 THEME_COLOR = "#151c20"
-PWA_RELEASE = "v23"
+PWA_RELEASE = "v25"
 
 
 def pwa_version() -> str:
@@ -90,7 +90,7 @@ def shell_assets() -> dict[str, str]:
     return {
         "bootstrap_css": static("css/bootstrap.min.css"),
         "fontawesome_css": static("css/fa_7.0.1.all.min.css"),
-        "app_css": static("css/app.css", f"{version}-app-css-v3"),
+        "app_css": static("css/app.css", f"{version}-app-css-v4"),
         "workbench_css": static("css/grading-workbench.css", f"{version}-workbench-css-v5"),
         "pwa_css": static("css/grader-pwa.css", release_version),
         "bootstrap_js": static("js/bootstrap.bundle.min.js"),
@@ -214,7 +214,7 @@ def demo_page():
             workbench=workbench,
             session_token="demo",
             submission_idempotency_key=str(uuid4()),
-            workbench_dashboard_url=url_for("grader_pwa.demo_page"),
+            workbench_dashboard_url=url_for("grader_pwa.home"),
             workbench_url_template=None,
             demo=True,
         )

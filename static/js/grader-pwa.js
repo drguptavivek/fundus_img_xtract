@@ -188,7 +188,7 @@
     const fullscreen = document.fullscreenElement || document.webkitFullscreenElement
       || body.classList.contains('imggr-fullscreen-active');
     if (!phone.matches || body.classList.contains(IMMERSIVE_CLASS) || fullscreen) {
-      setFitInsets(main, 0, 0);
+      applyFitInsetsEverywhere(0, 0);
       return;
     }
     const card = panel.querySelector('.gwb-grade-card');
@@ -219,7 +219,13 @@
         bottom = Math.max(bottom, box.bottom - rect.top);
       }
     });
-    setFitInsets(main, top, bottom);
+    applyFitInsetsEverywhere(top, bottom);
+  }
+  // Every panel shares the same chrome, so the bands measured on the visible
+  // panel apply to all of them: the next image is already fitted when it
+  // slides in instead of settling (and visibly shifting) afterwards.
+  function applyFitInsetsEverywhere(top, bottom) {
+    workbench.querySelectorAll('.imggr-main').forEach(main => setFitInsets(main, top, bottom));
   }
 
   function iconButton(className, icon, label) {
@@ -231,6 +237,19 @@
     button.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
     return button;
   }
+
+  // Open / closed is one choice for the whole package: closing the sheet on one
+  // image keeps it closed as the grader moves forward and back. Rotation resets
+  // it to the orientation's default.
+  const sheetSetters = new Set();
+  let sheetPreference = null;
+  function chooseSheet(state) {
+    sheetPreference = state;
+    sheetSetters.forEach(set => set(state));
+  }
+  workbench.querySelector('#workbench-panels')?.addEventListener('slide.bs.carousel', () => {
+    if (sheetPreference) sheetSetters.forEach(set => set(sheetPreference));
+  });
 
   function setupSheet(panel) {
     const card = panel.querySelector('.gwb-grade-card');
@@ -365,12 +384,12 @@
     };
     const step = delta => {
       const index = SHEET_STATES.indexOf(current());
-      setState(SHEET_STATES[Math.min(SHEET_STATES.length - 1, Math.max(0, index + delta))]);
+      chooseSheet(SHEET_STATES[Math.min(SHEET_STATES.length - 1, Math.max(0, index + delta))]);
     };
 
     // Tap the handle or the chevron: rail <-> open. Swipe the header up / down likewise.
     let swiped = false;
-    const toggle = () => setState(current() === 'rail' ? 'open' : 'rail');
+    const toggle = () => chooseSheet(current() === 'rail' ? 'open' : 'rail');
     handle.addEventListener('click', () => {
       if (swiped) { swiped = false; return; }
       toggle();
@@ -402,8 +421,12 @@
     // Portrait: starts as the rail so the image has the screen; pull up for the
     // grades. Landscape phones: the image is height-limited and leaves spare
     // width, so the sheet starts open as a side column at no cost to the image.
-    setState(landscapePhone.matches ? 'open' : 'rail');
-    landscapePhone.addEventListener('change', event => setState(event.matches ? 'open' : 'rail'));
+    sheetSetters.add(setState);
+    setState(sheetPreference || (landscapePhone.matches ? 'open' : 'rail'));
+    landscapePhone.addEventListener('change', event => {
+      sheetPreference = null;
+      setState(event.matches ? 'open' : 'rail');
+    });
   }
 
   function setupToolbar(panel) {
@@ -478,6 +501,9 @@
         const sidebar = panel.querySelector('.imggr-annot-sidebar');
         const open = sidebar && !sidebar.classList.contains('is-collapsed');
         panel.classList.toggle('gpwa-annotating', Boolean(open) && phone.matches);
+        // The viewer re-measured before the sidebar became an overlay (it was
+        // still taking height in the stacked layout); fit again now.
+        refreshViewer(panel);
       });
     });
   }

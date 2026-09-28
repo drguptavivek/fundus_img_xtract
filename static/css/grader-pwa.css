@@ -275,6 +275,11 @@ body.gpwa-workbench.gpwa-actions-in-footer .gwb-header { display: none !importan
 body.gpwa-workbench .gwb-footer > .gwb-header-actions,
 body.gpwa-workbench .gwb-footer > div.d-flex { flex: 0 0 auto; flex-wrap: nowrap !important; }
 
+/* The annotation editor's canvas (z 15) and box actions (z 30) are positioned
+   inside the image box; isolating the box keeps them there, so annotations never
+   paint over - or take taps from - the header, filter strip or grade sheet. */
+body.gpwa-workbench .imggr-main { isolation: isolate; }
+
 /* Pager: the target buttons take all the room up to previous / next instead
    of stopping at the workbench's 48-60vw cap. */
 body.gpwa-workbench .gwb-footer { flex-wrap: nowrap; }

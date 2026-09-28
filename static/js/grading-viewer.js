@@ -1200,6 +1200,10 @@
     
     // Apply saved filter and brightness/contrast after image is loaded
     mainImg.addEventListener('load', () => {
+      // A freshly loaded image is placed, not animated: the transform easing
+      // would otherwise glide it in from the box's top-left corner.
+      main.classList.add('imggr-no-anim');
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => main.classList.remove('imggr-no-anim')));
       updateViewportSize();
       clampPanToBounds();
       applyImagePan();

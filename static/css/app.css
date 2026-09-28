@@ -775,7 +775,7 @@ body {
 
 .imggr-viewer-root .imggr-main-img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: calc(100% - var(--imggr-inset-top, 0px) - var(--imggr-inset-bottom, 0px));
   width: auto;
   height: auto;
   object-fit: contain;

@@ -124,14 +124,14 @@ def test_phone_workbench_gives_the_image_the_screen():
     # Rail / open grade drawer with an explicit minimise control, and a foldable filter strip.
     assert "const SHEET_STATES = ['rail', 'open']" in pwa_script
     assert "gpwa-sheet-minimise" in pwa_script
-    assert "setState('rail');" in pwa_script  # the drawer starts minimised
+    assert "setState(landscapePhone.matches ? 'open' : 'rail');" in pwa_script  # the drawer starts minimised
     assert "body.gpwa-workbench .gwb-grade-card.is-rail .card-body { display: none; }" in pwa_styles
     assert "gpwa-toolbar-toggle" in pwa_script
     assert "body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: none !important; }" in pwa_styles
 
     # Photo-viewer gestures: the box fills the stage, the pan model centres a
     # smaller image, pinch zooms about the fingers and double-tap fills.
-    assert "const centred = -overflow / 2;" in viewer
+    assert "-overflow / 2" in viewer
     assert "pinchAnchor = {" in viewer
     assert "function toggleCoverZoom" in viewer
     assert "main.classList.add('imggr-gesturing')" in viewer
@@ -139,9 +139,12 @@ def test_phone_workbench_gives_the_image_the_screen():
 
     # Landscape phones are phones: the same query in every layer.
     phone_query = "(max-width: 767.98px), (max-height: 500px)"
-    assert f"@media {phone_query} {{" in pwa_styles
     assert f"@media {phone_query} {{" in workbench_styles
-    assert f"'{phone_query}'" in pwa_script
+    # The PWA extends the phone layout to portrait tablets below lg (iPad
+    # portrait), where the stacked workbench would collapse the fill-mode image.
+    pwa_query = "(max-width: 991.98px), (max-height: 500px), (max-width: 1919.98px) and (orientation: portrait)"
+    assert f"@media {pwa_query} {{" in pwa_styles
+    assert f"'{pwa_query}'" in pwa_script
     # Annotation tools start collapsed at every width; the Tools toggle opens them.
     assert f"'{phone_query}'" not in session_script
     assert ".gwb-viewer-body .imggr-annot-sidebar.is-collapsed { display: none; }" in workbench_styles
@@ -150,7 +153,7 @@ def test_phone_workbench_gives_the_image_the_screen():
     assert 'data-annot-toggle aria-pressed="false"' in body_template
 
     # Portrait phones: the grade sheet overlays the image instead of shrinking it.
-    assert "@media (max-width: 767.98px) and (orientation: portrait) {" in pwa_styles
+    assert "@media (max-width: 1919.98px) and (orientation: portrait) {" in pwa_styles
 
     # Zoom keeps the anchored image point fixed; native fullscreen is not flex-centred twice.
     assert "function setZoomLevel(zoomPercent, anchor)" in viewer
@@ -160,6 +163,14 @@ def test_phone_workbench_gives_the_image_the_screen():
     assert "new CustomEvent('imggr:swipe'" in viewer
     assert "workbench.addEventListener('imggr:swipe'" in pwa_script
     assert "body.gpwa-workbench.gpwa-immersive .gwb-viewer-toolbar" in pwa_styles
+
+    # Opening the sheet never moves the image.
+    assert "alignTop" not in viewer and "alignTop" not in pwa_script
+    # The fitted image sits in the band clear of the overlaid header and strips.
+    assert "main.dataset.fitInsetTop" in viewer and "main.dataset.fitInsetBottom" in viewer
+    assert "function updateFitInsets(panel" in pwa_script
+    # Side by side, the panel row must not wrap (it stretched the viewer card).
+    assert ".gwb-panel-row { flex-wrap: nowrap; }" in workbench_styles
     assert "setZoomLevel(currentZoom + delta, { x: e.clientX - rect.left, y: e.clientY - rect.top })" in viewer
 
 

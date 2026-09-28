@@ -124,10 +124,169 @@ body.gpwa-workbench .gwb-viewer-body .imggr-main-wrap { align-items: center; jus
 body.gpwa-workbench .gwb-viewer-body .imggr-main { width: auto; height: auto; }
 body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color: #fff; }
 
-/* Phones, either orientation: the image owns the screen. The header and the
+/* Three modes. Phone: under 992px, under 500px tall, or any portrait window
+   below Full HD (iPad portrait) - full-screen image, overlay sheet / floating
+   grade button. iPad: landscape 992-1919px (iPad landscape, laptops) - side by
+   side, compact header, one-row toolbar. Full: 1920px and wider - side by side
+   with every desktop tool. Below Full HD the zoom slider, Fit, presets, preset
+   save, shortcuts info and size read-out give way (pinch / double-tap zoom). */
+@media (max-width: 1919.98px) {
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-zoom-control,
+  body.gpwa-workbench .gwb-viewer-toolbar [aria-label="Viewer presets"],
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-save-preset,
+  body.gpwa-workbench .gwb-viewer-toolbar .imggr-shortcuts-trigger,
+  body.gpwa-workbench .gwb-viewer-info { display: none !important; }
+}
+
+/* iPad mode: one-line compact header and a one-row toolbar (sliders narrowed,
+   "Filters" label dropped) so short laptop windows keep the image large. */
+@media (min-width: 992px) and (max-width: 1919.98px) and (min-height: 500.01px) and (orientation: landscape) {
+  body.gpwa-workbench .gwb-header { flex-wrap: nowrap; }
+  body.gpwa-workbench .gwb-header .gwb-full,
+  body.gpwa-workbench .gwb-header .gwb-nav-label,
+  body.gpwa-workbench .gwb-header .gwb-hide-phone,
+  body.gpwa-workbench .gwb-footer > div.d-flex .gwb-full,
+  body.gpwa-workbench .gwb-footer > div.d-flex .gwb-nav-label { display: none !important; }
+  body.gpwa-workbench .gwb-header .gwb-short,
+  body.gpwa-workbench .gwb-footer > div.d-flex .gwb-short { display: inline; }
+  body.gpwa-workbench .gwb-viewer-toolbar { flex-wrap: nowrap; gap: .35rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-left,
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-right { display: contents; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-left > .small.text-muted { display: none; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control { flex: 0 1 6.5rem; width: auto; min-width: 4.5rem; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-annot-toggle { margin-left: auto; }
+}
+
+/* Dark theme: give the comment box and feature checkboxes a visible edge and
+   a fill distinct from the card so the entry areas read as controls. */
+body.gpwa-workbench .gwb-grade-card .gwb-comment {
+  background-color: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .38);
+}
+body.gpwa-workbench .gwb-grade-card .gwb-comment:focus {
+  background-color: rgba(255, 255, 255, .09);
+  border-color: var(--bs-primary);
+}
+body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check-input {
+  background-color: rgba(255, 255, 255, .08);
+  border: 1.5px solid rgba(255, 255, 255, .6);
+}
+body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check-input:checked {
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+/* "Relevant features" is a section of its own: accent colour, weight and a
+   rule above it so it stands apart from the grade guidelines. */
+body.gpwa-workbench .gwb-grade-card [data-feature-fieldset] legend {
+  float: none;
+  width: 100%;
+  margin-bottom: .35rem;
+  padding-top: .45rem;
+  border-top: 1px solid rgba(255, 255, 255, .14);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-warning);
+}
+
+/* The feature block keeps its reserved room even for a grade without
+   features (grader-pwa.js reserves it), so the sheet does not jump. */
+body.gpwa-workbench .gpwa-reserve-features [data-feature-fieldset].d-none { display: block !important; visibility: hidden; }
+body.gpwa-workbench .gpwa-reserve-features [data-grade-guidelines]:empty { display: block; }
+body.gpwa-workbench .gpwa-reserve-features [data-workbench-submit-actions].d-none { display: flex !important; visibility: hidden; }
+
+.gpwa-sheet-open-arrow { display: none; }
+
+/* Phone-layout controls (sheet handle / minimise, adjust and fold toggles) are
+   added by grader-pwa.js and stay once a window has been narrow; outside the
+   phone layout they are hidden and the desktop grade card shows its title. */
+@media (min-width: 992px) and (min-height: 500.01px) and (orientation: landscape) {
+  body.gpwa-workbench .gpwa-sheet-handle,
+  body.gpwa-workbench .gpwa-sheet-minimise,
+  body.gpwa-workbench .gpwa-adjust-toggle,
+  body.gpwa-workbench .gpwa-toolbar-toggle { display: none !important; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-hidden > * { display: revert; }
+}
+
+/* The app itself is the grader: no "Grading Workbench" title or role line,
+   just the progress / lease badges and actions, pushed to the right. */
+body.gpwa-workbench .gwb-header > div:first-child { display: none !important; }
+body.gpwa-workbench .gwb-header { justify-content: flex-end !important; }
+/* Nor the viewer's "Image 1 of 8 · DR · Pending" line: the pager and the grade
+   card already say which image and disease this is. */
+body.gpwa-workbench .gwb-viewer-card > .card-header { display: none !important; }
+
+/* Choosing a grade reveals its features and can make the card scroll; keep
+   the scrollbar's room reserved so the grade buttons never change width. */
+body.gpwa-workbench .gwb-grade-card .card-body { scrollbar-gutter: stable; }
+/* Save buttons wrap as whole buttons, never word by word. */
+body.gpwa-workbench [data-workbench-submit-actions] { flex-wrap: wrap; }
+body.gpwa-workbench [data-workbench-submit-actions] .btn { flex: 1 1 auto; white-space: nowrap; }
+
+/* Encounter view: each image tile stacks thumbnail, "Image n" and the grade
+   badge inside its own border (the badge truncates), without the disease name
+   (the grade card says it) or the chevron; eye columns with no images go. */
+body.gpwa-workbench .gwb-encounter-bucket.is-empty { display: none !important; }
+body.gpwa-workbench .gwb-encounter-bucket {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  align-content: start;
+  gap: .4rem !important;
+}
+body.gpwa-workbench .gwb-encounter-bucket > h3 { grid-column: 1 / -1; }
+body.gpwa-workbench .gwb-encounter-result + .gwb-encounter-result { margin-top: 0; }
+body.gpwa-workbench .gwb-encounter-result { max-width: none !important; }
+@media (min-width: 992px) and (min-height: 500.01px) and (orientation: landscape) {
+  /* Remaining eye columns share the width (an empty "Other" leaves no gap). */
+  body.gpwa-workbench .gwb-encounter-summary {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
+body.gpwa-workbench .gwb-encounter-result {
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .35rem;
+  text-align: center;
+  min-width: 0;
+  overflow: hidden;
+}
+body.gpwa-workbench .gwb-encounter-result > .flex-grow-1 { width: 100%; min-width: 0; }
+body.gpwa-workbench .gwb-encounter-result > .flex-grow-1 > .d-flex { justify-content: center !important; }
+body.gpwa-workbench .gwb-encounter-result .small.text-muted.text-end,
+body.gpwa-workbench .gwb-encounter-result > .fa-chevron-right { display: none; }
+body.gpwa-workbench .gwb-encounter-thumbnail { width: 100%; max-width: 8rem; height: auto; aspect-ratio: 1 / 1; object-fit: cover; }
+body.gpwa-workbench .gwb-encounter-grade {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: .15rem !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* iPad / Full modes: header actions live in the footer (grader-pwa.js), so the
+   emptied header row goes. */
+body.gpwa-workbench.gpwa-actions-in-footer .gwb-header { display: none !important; }
+body.gpwa-workbench .gwb-footer > .gwb-header-actions,
+body.gpwa-workbench .gwb-footer > div.d-flex { flex: 0 0 auto; flex-wrap: nowrap !important; }
+
+/* Pager: the target buttons take all the room up to previous / next instead
+   of stopping at the workbench's 48-60vw cap. */
+body.gpwa-workbench .gwb-footer { flex-wrap: nowrap; }
+body.gpwa-workbench .gwb-footer .gwb-pager { flex: 1 1 auto; min-width: 0; max-width: none; }
+body.gpwa-workbench .gwb-footer > .btn-group { flex: 0 0 auto; }
+
+/* Phones (either orientation) and portrait tablets up to the lg breakpoint -
+   where the workbench would otherwise stack the image above the grade card:
+   the image owns the screen. The header and the
    filter strip are translucent overlays on the stage's black letterbox; the
    grade drawer is a bottom sheet: a rail by default, most of the screen when open. */
-@media (max-width: 767.98px), (max-height: 500px) {
+@media (max-width: 991.98px), (max-height: 500px), (max-width: 1919.98px) and (orientation: portrait) {
   body.gpwa-workbench .gwb-shell.is-expanded { padding: 0; }
 
   /* Header: one thin strip over the top edge. */
@@ -173,6 +332,8 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
     padding: 0;
     margin-top: 0;
     min-height: 0;
+    width: 100%;
+    max-width: 100%;
   }
   body.gpwa-workbench .gwb-panel-row > .col-lg-8 {
     flex: 1 1 auto;
@@ -258,6 +419,24 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   body.gpwa-workbench .gwb-viewer-toolbar .gpwa-adjust-toggle { order: 3; }
   body.gpwa-workbench .gwb-viewer-toolbar .gpwa-toolbar-toggle { order: 4; }
   body.gpwa-workbench .gwb-viewer-toolbar .gwb-adjustment-control { display: none; margin-top: 0; }
+  /* Portrait tablets keep the desktop-only viewer tools (zoom slider, CDR/RDR,
+     presets), but tucked into the adjust panel; the header subtitle and the
+     size read-out stay hidden as on phones. The toolbar is flattened to one row
+     of filters, loupe, reset, Tools, adjust and fold. */
+  /* Compact header labels (icons, "0/8", "31m") across the whole phone-layout
+     range, not just below 768px, so the strip stays one line on small windows. */
+  body.gpwa-workbench .gwb-header .gwb-full,
+  body.gpwa-workbench .gwb-header .gwb-nav-label { display: none; }
+  body.gpwa-workbench .gwb-header .gwb-short { display: inline; }
+  body.gpwa-workbench .gwb-header .gwb-hide-phone,
+  body.gpwa-workbench .gwb-viewer-info { display: none !important; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-left,
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-right { display: contents; }
+  body.gpwa-workbench .gwb-viewer-toolbar .gwb-toolbar-left > .small.text-muted { display: none; }
+  body.gpwa-workbench .gwb-viewer-toolbar { flex-wrap: wrap; }
+  body.gpwa-workbench .gwb-viewer-toolbar:not(.is-adjusting) .gwb-hide-phone { display: none !important; }
+  body.gpwa-workbench .gwb-viewer-toolbar.is-adjusting .gwb-hide-phone { order: -1; margin-bottom: .15rem; }
+
   /* The sliders unfold above the filter row (order -1, bottom-aligned strip) so
      opening them never moves the buttons under the grader's thumb. */
   body.gpwa-workbench .gwb-viewer-toolbar { align-items: flex-end; }
@@ -373,10 +552,10 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   }
   body.gpwa-workbench .gwb-grade-card [data-grade-guidelines] { font-size: .85rem; margin-bottom: .6rem !important; }
   body.gpwa-workbench .gwb-grade-card [data-grade-guidelines]:empty { display: none; }
-  body.gpwa-workbench .gwb-grade-card [data-feature-fieldset] legend { font-size: .85rem; margin-bottom: .25rem; }
   body.gpwa-workbench .gwb-grade-card [data-feature-options] {
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    align-content: start;
     gap: 0 .5rem !important;
   }
   body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check {
@@ -501,7 +680,7 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
 
 /* Immersive mode (sideways swipe on the image, grader-pwa.js): every overlay
    steps aside so the image has the whole screen until the next swipe. */
-@media (max-width: 767.98px), (max-height: 500px) {
+@media (max-width: 991.98px), (max-height: 500px), (max-width: 1919.98px) and (orientation: portrait) {
   body.gpwa-workbench.gpwa-immersive .gwb-header,
   body.gpwa-workbench.gpwa-immersive .gwb-viewer-toolbar,
   body.gpwa-workbench.gpwa-immersive .gwb-panel-row > .col-lg-4,
@@ -512,7 +691,7 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
    height from it, so opening it never shrinks or re-fits the image. The filter
    strip sits just above the rail; the open sheet covers the lower image, which
    can still be panned into view above it. */
-@media (max-width: 767.98px) and (orientation: portrait) {
+@media (max-width: 1919.98px) and (orientation: portrait) {
   body.gpwa-workbench .gwb-panel-row { position: relative; }
   body.gpwa-workbench .gwb-panel-row > .col-lg-8 { flex: 1 1 100%; }
   body.gpwa-workbench .gwb-panel-row > .col-lg-4 {
@@ -533,7 +712,10 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
 
 /* Landscape phones: the sheet becomes a side column so the image keeps the
    full height; minimised, the column shrinks to a sliver with the handle. */
-@media (max-height: 500px) and (orientation: landscape) {
+/* Landscape in the phone-layout range - phones, and small or short windows
+   under 992px wide - the image is height-limited, so the sheet is a side column
+   (a floating button when tucked away). grader-pwa.js uses the same query. */
+@media (max-height: 500px) and (orientation: landscape), (max-width: 991.98px) and (orientation: landscape) {
   body.gpwa-workbench .gwb-header {
     position: relative;
     padding-top: calc(.15rem + env(safe-area-inset-top)) !important;
@@ -556,15 +738,76 @@ body.gpwa-workbench .imggr-full.is-active { background: var(--bs-primary); color
   body.gpwa-workbench .gwb-grade-card.is-rail .card-header { flex-direction: column; justify-content: flex-start; padding: .25rem 0 !important; }
   body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-handle { flex: 0 0 auto; width: 100%; justify-content: center; }
   body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grip { width: 26px; height: 5px; }
-  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-label,
   body.gpwa-workbench .gwb-grade-card.is-rail .card-header > .d-flex { display: none; }
+  /* The tucked-away column still says what it is: the disease (first 15
+     characters) over "< Grade" / "< Mild DR"; the whole strip opens the sheet. */
+  /* Tucked away, the sheet is a floating button over the image's right edge
+     (the black margin beside a height-limited fundus), not a strip. */
+  body.gpwa-workbench .gwb-panel-row { position: relative; }
+  body.gpwa-workbench .gwb-panel-row > .col-lg-4:has(.gwb-grade-card.is-rail) {
+    position: absolute;
+    top: 50%;
+    right: calc(.5rem + env(safe-area-inset-right));
+    transform: translateY(-50%);
+    z-index: 8;
+    flex: none;
+    width: auto;
+    max-width: 9rem;
+    height: auto;
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail {
+    height: auto !important;
+    border: 1px solid rgba(255, 255, 255, .22);
+    border-radius: .75rem;
+    background: rgba(21, 28, 32, .85);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .45);
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail .card-header { height: auto; min-height: 0; padding: 0 !important; background: transparent; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-minimise,
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grip,
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-sep { display: none; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-handle {
+    flex: 1 1 auto;
+    min-height: 44px;
+    justify-content: center;
+    padding: .45rem .7rem;
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-label {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    white-space: normal;
+    font-size: .8rem;
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-disease,
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grade > * { font-size: 0; }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-disease::after,
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grade > [data-short]::after {
+    content: attr(data-short);
+    font-size: .8rem;
+  }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-disease::after { font-weight: 600; color: var(--bs-secondary-color); }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-grade { display: flex; align-items: center; gap: .35rem; color: var(--bs-primary-text-emphasis); }
+  body.gpwa-workbench .gwb-grade-card.is-rail .gpwa-sheet-open-arrow { display: inline-block; font-size: .8rem; }
   body.gpwa-workbench .gwb-grade-card .card-body { padding-bottom: .5rem; }
   body.gpwa-workbench .gwb-footer { padding-top: .15rem !important; padding-bottom: calc(.15rem + env(safe-area-inset-bottom)) !important; }
   body.gpwa-workbench .gwb-footer .btn { min-height: 2rem; }
 }
 
 /* Tablets and up: the desktop workbench with touch-sized controls. */
-@media (min-width: 768px) and (min-height: 500.01px) {
+@media (min-width: 992px) and (min-height: 500.01px) and (orientation: landscape) {
+  /* Two feature columns so the whole list fits beside the image. */
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    align-content: start;
+    gap: 0 .5rem !important;
+  }
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check { display: flex; align-items: center; gap: .4rem; min-height: 36px; margin: 0; padding-left: 0; }
+  body.gpwa-workbench .gwb-grade-card [data-feature-options] .form-check-input { float: none; margin: 0; flex: 0 0 auto; }
+  body.gpwa-workbench .gwb-grade-card .gwb-comment { height: 2.6rem; min-height: 2.6rem; }
   body.gpwa-workbench .btn-sm { min-height: 2.25rem; }
   body.gpwa-workbench [data-grade-options] label.btn { min-height: 44px; }
   body.gpwa-workbench .gwb-footer .btn { min-height: 44px; }

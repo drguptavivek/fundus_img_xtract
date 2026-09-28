@@ -274,7 +274,7 @@
                       <div class="imggr-loupe" aria-hidden="true"></div>
                     </div>
                   </div>
-                  <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2 gwb-hide-phone">
+                  <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2 gwb-hide-phone gwb-viewer-info">
                     <span class="imggr-zoom-info"><span class="imggr-zoom-level">100%</span> zoom</span>
                     <span class="imggr-dim-info">Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span></span>
                   </div>
@@ -445,7 +445,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ (current_user.id if current_user.is_authenticated else none)|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v8-zoom-anchor-v1')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2-viewport-fit-v4-touch-v5-fill-fullscreen-v8-zoom-anchor-v1-align-top-v1-preset-no-zoom-v1-fit-insets-v1')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v3-viewport-canvas-v3' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>

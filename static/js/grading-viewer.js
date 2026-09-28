@@ -833,16 +833,10 @@
         contr.value = clamp(preset.contrast, 0.5, 5);
       }
       
-      // Apply loupe state
-      if (preset.zoom !== undefined) {
-        currentZoom = clamp(Number(preset.zoom) || 100, ZOOM_MIN, ZOOM_MAX);
-      }
-      if (preset.pan_x !== undefined) {
-        imgPanX = Number(preset.pan_x) || 0;
-      }
-      if (preset.pan_y !== undefined) {
-        imgPanY = Number(preset.pan_y) || 0;
-      }
+      // Presets are image-appearance settings only: the grader's current zoom
+      // and pan are left alone. A stored zoom/pan (pixels of whatever screen it
+      // was saved on) shrank the image below fit or pushed it off-centre.
+
       if (preset.loupe_size !== undefined) {
         loupeSize = clamp(Number(preset.loupe_size) || DEFAULT_LOUPE_SIZE, LOUPE_SIZE_MIN, LOUPE_SIZE_MAX);
         applyLoupeDimensions();
@@ -906,8 +900,6 @@
               <span><strong>Filter:</strong> ${preset.filter || 'none'}</span>
               <span><strong>Brightness:</strong> ${Number(preset.brightness || 1).toFixed(2)}</span>
               <span><strong>Contrast:</strong> ${Number(preset.contrast || 1).toFixed(2)}</span>
-              <span><strong>Zoom:</strong> ${Number(preset.zoom || 100)}%</span>
-              <span><strong>Pan:</strong> ${Number(preset.pan_x || 0)}, ${Number(preset.pan_y || 0)} px</span>
               <span><strong>Loupe:</strong> ${preset.loupe_enabled ? `On · ${Number(preset.loupe_size || 200)}px · ${Number(preset.loupe_zoom || 2).toFixed(1)}x` : 'Off'}</span>
             `;
           }
@@ -1363,16 +1355,24 @@
         return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
       }
 
+      // A host can reserve bands the image should fit clear of (the grader
+      // PWA's overlaid header and filter strip): data-fit-inset-top/-bottom in
+      // px. The fitted image is sized and centred in the band between them;
+      // zoomed in, it may still pan under them. The img's CSS max-height uses
+      // the same insets (--imggr-inset-*), so the two stay in step.
+      const insetTop = Math.max(0, parseFloat(main.dataset.fitInsetTop) || 0);
+      const insetBottom = Math.max(0, parseFloat(main.dataset.fitInsetBottom) || 0);
+      const fitH = Math.max(1, containerH - insetTop - insetBottom);
       const imgAspect = natW / natH;
-      const containerAspect = containerW / containerH;
+      const containerAspect = containerW / fitH;
       let baseW = containerW;
-      let baseH = containerH;
+      let baseH = fitH;
       if (imgAspect > containerAspect) {
         baseW = containerW;
         baseH = containerW / imgAspect;
       } else {
-        baseH = containerH;
-        baseW = containerH * imgAspect;
+        baseH = fitH;
+        baseW = fitH * imgAspect;
       }
 
       const scale = Math.max(0.01, zoomPercent / 100);
@@ -1384,11 +1384,19 @@
       const range = (scaled, container) => {
         const overflow = scaled - container;
         if (overflow > 0) return [-overflow, 0];
-        const centred = -overflow / 2;
+        return [-overflow / 2, -overflow / 2];
+      };
+      const rangeY = () => {
+        if (scaledH > fitH) {
+          // Larger than the clear band: pan between its edges, and on out to
+          // the box edges so nothing is ever unreachable under the overlays.
+          return [Math.min(containerH - scaledH, containerH - insetBottom - scaledH), Math.max(0, insetTop)];
+        }
+        const centred = Math.max(0, Math.min(insetTop + (fitH - scaledH) / 2, containerH - scaledH));
         return [centred, centred];
       };
       const [minX, maxX] = range(scaledW, containerW);
-      const [minY, maxY] = range(scaledH, containerH);
+      const [minY, maxY] = rangeY();
       return { minX, maxX, minY, maxY };
     }
 

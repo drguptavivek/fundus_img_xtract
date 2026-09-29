@@ -128,8 +128,29 @@ breakpoint but under 400px tall, and used to get the desktop workbench.
   strip carries the phone's fullscreen button (`.gpwa-fullscreen`), relaying
   to the active panel's viewer button. Browsers with the Fullscreen API keep
   using it.
-- **Annotate mode**: the existing Tools toggle shows the editor sidebar as the
-  tool panel and hides the grade sheet; "Done annotating" returns.
+- **Grade | Annotate tabs** (below 1600px wide, phones and tablets in either
+  orientation): the grade panel carries two tabs. The editor's sidebar
+  (`[data-geometry-sidebar-host]`) is moved into the Annotate tab, so no
+  controls sit over the image. The tabs head the panel, with the disease /
+  chosen grade line under them in both. Tools opens the Annotate tab; the Grade tab
+  returns. Annotating changes only that panel - the image, filter strip and
+  pager stay as they are. The mode is shared across the package's images,
+  like the sheet. At 1600px and up the sidebar returns beside the image and
+  Tools folds it as before. The CSS for the tabs and lock is mobile-first
+  (base rules, switched off by `@media (min-width: 1600px)`).
+- The Annotate tab shows the image's annotation count ("Annotate · 3"); the
+  panel header shows disease · chosen grade in both tabs. In portrait the
+  Annotate sheet keeps one height (its list scrolls) and the image is fitted
+  above it, so all of it is reachable with pan/zoom locked.
+- **Relevant features**: one column of full-width rows; the whole row is the
+  tap target and a checked row is tinted.
+- **Pan/zoom lock** (below 1600px): a round hand button on the image area's
+  bottom-right corner, above the filter strip, in both tabs. Locked (amber, hand
+  crossed out) no gesture pans or zooms the image, so strokes land where they
+  are drawn (`data-imggr-gesture-locked` on the viewer root, honoured by
+  `grading-viewer.js`). The first Annotate on an image locks it; after that
+  only the button changes it, through Grade and back. Moving to another image
+  releases it.
 - Tablets and desktops get the standard workbench with 44px targets (and the
   aspect-ratio fit).
 

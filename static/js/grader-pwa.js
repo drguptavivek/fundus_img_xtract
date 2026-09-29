@@ -139,6 +139,9 @@
   // uses the same query.
   const PHONE_QUERY = '(max-width: 991.98px), (max-height: 500px), (max-width: 1919.98px) and (orientation: portrait)';
   const phone = window.matchMedia(PHONE_QUERY);
+  // Phones and tablets (portrait or landscape) annotate in a tab of the grade
+  // panel; grader-pwa.css uses the same query.
+  const TABS_QUERY = '(max-width: 1599.98px)';
   const panels = Array.from(workbench.querySelectorAll('[data-task-uuid]'));
   const TOOLBAR_HIDDEN_KEY = 'grader.toolbar_hidden';
   const SHEET_STATES = ['rail', 'open'];
@@ -148,7 +151,25 @@
     window.requestAnimationFrame(() => {
       updateFitInsets(panel);
       viewer?.__imggrState?.refreshViewportSize?.();
+      placePanLock(panel);
     });
+  }
+  // The pan/zoom lock sits just above whatever covers the foot of the image
+  // area right now - the filter strip, or the open grade sheet in portrait.
+  function placePanLock(panel) {
+    const wrap = panel.querySelector('.imggr-main-wrap');
+    if (!wrap?.querySelector(':scope > .gpwa-pan-lock')) return;
+    const box = wrap.getBoundingClientRect();
+    if (!box.height) return;
+    const toolbar = panel.querySelector('.gwb-viewer-toolbar');
+    let bottom = 0;
+    [toolbar && !toolbar.classList.contains('is-hidden') ? toolbar : null, panel.querySelector('.gwb-grade-card')]
+      .forEach(element => {
+        const rect = element?.getBoundingClientRect();
+        if (!rect?.width || rect.left >= box.right - 1 || rect.right <= box.left + 1) return;
+        if (rect.top > box.top && rect.top < box.bottom) bottom = Math.max(bottom, box.bottom - rect.top);
+      });
+    wrap.style.setProperty('--gpwa-lock-bottom', `${Math.round(bottom)}px`);
   }
 
   // The header strip (top) and the filter strip + sheet rail (bottom) overlay
@@ -193,7 +214,13 @@
     }
     const card = panel.querySelector('.gwb-grade-card');
     const toolbar = panel.querySelector('.gwb-viewer-toolbar');
-    const measuring = card?.dataset.sheetState !== 'open' && !toolbar?.classList.contains('is-adjusting');
+    // Annotating, the whole image must be reachable with pan/zoom locked, so it
+    // fits above the open sheet too; leaving Annotate re-measures once.
+    const annotating = Boolean(card?.classList.contains('is-annotate'));
+    const wasAnnotating = main.dataset.fitForAnnotate === 'true';
+    main.dataset.fitForAnnotate = String(annotating);
+    const sheetOpen = card?.dataset.sheetState === 'open';
+    const measuring = annotating || wasAnnotating || (!sheetOpen && !toolbar?.classList.contains('is-adjusting'));
     if (!measuring && Number(main.dataset.fitInsetBottom) > 0) return;
     const box = main.getBoundingClientRect();
     if (!box.height) {
@@ -212,10 +239,14 @@
       if (overlaps(rect)) top = Math.max(0, rect.bottom - box.top);
     }
     let bottom = 0;
-    [toolbar && !toolbar.classList.contains('is-hidden') ? toolbar : null, card].forEach(element => {
+    // Outside Annotate the open sheet is not a band (it floats over the image,
+    // which pans into view above it), so only the rail counts.
+    const sheet = annotating || !sheetOpen ? card : null;
+    const floor = annotating ? box.top : box.top + box.height / 2;
+    [toolbar && !toolbar.classList.contains('is-hidden') ? toolbar : null, sheet].forEach(element => {
       if (!element) return;
       const rect = element.getBoundingClientRect();
-      if (overlaps(rect) && rect.top < box.bottom && rect.top > box.top + box.height / 2) {
+      if (overlaps(rect) && rect.top < box.bottom && rect.top > floor) {
         bottom = Math.max(bottom, box.bottom - rect.top);
       }
     });
@@ -297,12 +328,11 @@
 
     // Steady height: grades carry different feature lists and guidelines, so
     // the open sheet would jump as the grader moves between grades. Reserve
-    // room for the longest feature list up front (at the current column count)
+    // room for the longest feature list up front (one row per feature, CSS)
     // and let the guidelines block only ever grow.
     const featureHost = panel.querySelector('[data-feature-options]');
     const guidelines = panel.querySelector('[data-grade-guidelines]');
-    const FEATURE_ROW_PX = 40;
-    const FEATURE_COL_PX = 9.5 * 16 + 8;
+    const FEATURE_ROW_PX = 45;
     // Guidelines are measured off-screen, rebuilt from an inert parse with only
     // text-formatting tags (no attributes), never injected as raw HTML.
     const SAFE_TAGS = new Set(['P', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'BR', 'SPAN', 'DIV']);
@@ -339,8 +369,7 @@
       if (!width) return;
       const maxFeatures = Math.max(0, ...(data?.features || []).map(grade => (grade.features || []).length));
       if (featureHost && maxFeatures) {
-        const columns = Math.max(1, Math.floor((width + 8) / FEATURE_COL_PX));
-        featureHost.style.minHeight = `${Math.ceil(maxFeatures / columns) * FEATURE_ROW_PX}px`;
+        featureHost.style.minHeight = `${maxFeatures * FEATURE_ROW_PX}px`;
         panel.classList.add('gpwa-reserve-features');
       }
       const tallest = tallestGuidelines(data, width);
@@ -489,24 +518,162 @@
     });
   }
 
-  function setupAnnotateMode(panel) {
-    const toggle = panel.querySelector('[data-annot-toggle]');
-    const host = panel.querySelector('[data-geometry-sidebar-host]');
-    if (!toggle || !host || panel.dataset.gpwaAnnotateReady === 'true') return;
-    panel.dataset.gpwaAnnotateReady = 'true';
-    // The Tools toggle already shows/hides the editor sidebar; annotate mode
-    // additionally hides the grade sheet so the image keeps the screen.
-    toggle.addEventListener('click', () => {
-      window.requestAnimationFrame(() => {
-        const sidebar = panel.querySelector('.imggr-annot-sidebar');
-        const open = sidebar && !sidebar.classList.contains('is-collapsed');
-        panel.classList.toggle('gpwa-annotating', Boolean(open) && phone.matches);
-        // The viewer re-measured before the sidebar became an overlay (it was
-        // still taking height in the stacked layout); fit again now.
-        refreshViewer(panel);
-      });
-    });
+  // ---- Grade | Annotate tabs (below 1600px) ----
+  // The editor's sidebar moves out of the viewer into an Annotate tab of the
+  // grade panel, so the image never shares its box with controls. Annotating
+  // changes only that panel; the image, filter strip and pager stay put. The
+  // mode is one choice for the package, like the sheet. At 1600px and up the
+  // sidebar goes back beside the image.
+  const tabsQuery = window.matchMedia(TABS_QUERY);
+  const tabSetters = new Set();
+  let annotating = false;
+  let sheetBeforeAnnotate = null;
+  // Pan/zoom lock: no gesture moves or zooms the image, so strokes land where
+  // they are drawn. The first Annotate on an image locks it; after that only
+  // its button (shown in both tabs) changes it, and the choice holds through
+  // Grade and back while many annotations are drawn. Moving to another image
+  // releases it.
+  let panLocked = false;
+  let panLockChosen = false;
+  function choosePanLock(locked) {
+    panLocked = locked;
+    panLockChosen = true;
+    tabSetters.forEach(set => set(annotating));
   }
+  function chooseMode(mode) {
+    const annotate = mode === 'annotate' && tabsQuery.matches;
+    const active = workbench.querySelector('.carousel-item.active [data-task-uuid]')
+      || workbench.querySelector('.carousel-item.active');
+    // A target without an image (encounter level) has nothing to annotate.
+    if (annotate && !active?.querySelector('.gpwa-annotate-pane')) return;
+    if (annotate && !annotating) {
+      sheetBeforeAnnotate = active.querySelector('.gwb-grade-card')?.dataset.sheetState || sheetPreference;
+    }
+    if (annotate && !panLockChosen) { panLocked = true; panLockChosen = true; }
+    annotating = annotate;
+    tabSetters.forEach(set => set(annotate));
+    // The pane lives in the sheet, so annotating opens it; leaving restores it.
+    if (phone.matches && sheetSetters.size) {
+      if (annotate) sheetSetters.forEach(set => set('open'));
+      else if (sheetBeforeAnnotate) chooseSheet(sheetBeforeAnnotate);
+    }
+    refitActivePanels();
+  }
+  // Moving to another image releases the pan/zoom lock (it is per-image work).
+  workbench.querySelector('#workbench-panels')?.addEventListener('slid.bs.carousel', () => {
+    panLocked = false;
+    panLockChosen = false;
+    if (annotating) chooseMode('annotate');
+    else tabSetters.forEach(set => set(false));
+  });
+
+  function setupAnnotateTabs(panel) {
+    const card = panel.querySelector('.gwb-grade-card');
+    const cardBody = card?.querySelector(':scope > .card-body');
+    const sidebar = panel.querySelector('[data-geometry-sidebar-host]');
+    const toggle = panel.querySelector('[data-annot-toggle]');
+    const viewer = panel.querySelector('.imggr-viewer-root');
+    if (!card || !cardBody || !sidebar || card.querySelector('.gpwa-mode-tabs')) return;
+    const home = {parent: sidebar.parentElement, next: sidebar.nextSibling};
+
+    const tabs = document.createElement('div');
+    tabs.className = 'gpwa-mode-tabs';
+    tabs.setAttribute('role', 'tablist');
+    const tab = (mode, label) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'nav-link';
+      button.setAttribute('role', 'tab');
+      button.dataset.gpwaMode = mode;
+      button.textContent = label;
+      button.addEventListener('click', () => chooseMode(mode));
+      return button;
+    };
+    const gradeTab = tab('grade', 'Grade');
+    const annotateTab = tab('annotate', 'Annotate');
+    // "Annotate · 3": the editor rebuilds its annotation list on every change,
+    // so the tab counts the list's rows.
+    const countAnnotations = () => {
+      const count = sidebar.querySelectorAll('[data-fgx-annotation-list] [data-fgx-annotation-id]').length;
+      annotateTab.textContent = count ? `Annotate · ${count}` : 'Annotate';
+    };
+    new MutationObserver(countAnnotations).observe(sidebar, {childList: true, subtree: true});
+    countAnnotations();
+    // The lock sits on the image area's bottom-right corner, clear of the filter
+    // strip (outside .imggr-main, so the viewer's touch handlers never swallow
+    // its tap).
+    const lock = document.createElement('button');
+    lock.type = 'button';
+    lock.className = 'gpwa-pan-lock';
+    lock.addEventListener('click', () => choosePanLock(!panLocked));
+    panel.querySelector('.imggr-main-wrap')?.append(lock);
+    tabs.append(gradeTab, annotateTab);
+    const pane = document.createElement('div');
+    pane.className = 'gpwa-annotate-pane';
+    pane.setAttribute('role', 'tabpanel');
+    card.prepend(tabs);
+    // Disease and chosen grade stay in view in both tabs. Phones already show
+    // them in the sheet handle; the tablet header only names the disease.
+    const heading = card.querySelector('.card-header h2');
+    const gradeChip = document.createElement('span');
+    gradeChip.className = 'gpwa-header-grade';
+    heading?.append(gradeChip);
+    const showGrade = () => {
+      const checked = panel.querySelector('[data-grade-option]:checked');
+      const text = checked ? panel.querySelector(`label[for="${checked.id}"]`)?.textContent.trim() : '';
+      gradeChip.textContent = text ? `· ${text}` : '· choose a grade';
+      gradeChip.classList.toggle('is-chosen', Boolean(text));
+    };
+    panel.addEventListener('change', event => { if (event.target.matches('[data-grade-option]')) showGrade(); });
+    panel.querySelector('[data-clear-selection]')?.addEventListener('click', () => window.requestAnimationFrame(showGrade));
+    showGrade();
+    card.append(pane);
+
+    const place = () => {
+      if (tabsQuery.matches) {
+        if (sidebar.parentElement !== pane) pane.append(sidebar);
+        sidebar.classList.remove('is-collapsed');
+      } else if (sidebar.parentElement !== home.parent) {
+        home.parent.insertBefore(sidebar, home.next);
+        const open = toggle?.getAttribute('aria-pressed') === 'true';
+        sidebar.classList.toggle('is-collapsed', !open);
+      }
+    };
+    const setMode = annotate => {
+      card.classList.toggle('is-annotate', annotate);
+      gradeTab.classList.toggle('active', !annotate);
+      annotateTab.classList.toggle('active', annotate);
+      gradeTab.setAttribute('aria-selected', String(!annotate));
+      annotateTab.setAttribute('aria-selected', String(annotate));
+      toggle?.setAttribute('aria-pressed', String(annotate));
+      toggle?.classList.toggle('active', annotate);
+      lock.classList.toggle('is-locked', panLocked);
+      lock.setAttribute('aria-pressed', String(panLocked));
+      // A hand (pan), crossed out while locked (the header's padlock is Release).
+      lock.innerHTML = '<i class="fa-solid fa-hand" aria-hidden="true"></i>';
+      const lockLabel = panLocked ? 'Pan and zoom locked - tap to unlock' : 'Lock pan and zoom';
+      lock.title = lockLabel;
+      lock.setAttribute('aria-label', lockLabel);
+      // No lock button at 1600px and up, so no lock there either.
+      const locked = panLocked && tabsQuery.matches;
+      if (viewer && viewer.dataset.imggrGestureLocked !== String(locked)) {
+        viewer.dataset.imggrGestureLocked = String(locked);
+        viewer.__imggrState?.refreshLockState?.();
+      }
+    };
+    // Tools opens the Annotate tab. The panel's capture listener runs before the
+    // workbench's own Tools handler, which would fold the sidebar in the viewer.
+    panel.addEventListener('click', event => {
+      if (!tabsQuery.matches || !event.target.closest('[data-annot-toggle]')) return;
+      event.stopPropagation();
+      chooseMode(annotating ? 'grade' : 'annotate');
+    }, true);
+    tabSetters.add(setMode);
+    tabsQuery.addEventListener('change', place);
+    place();
+    setMode(annotating);
+  }
+  tabsQuery.addEventListener('change', event => { if (!event.matches) chooseMode('grade'); });
 
   // Immersive mode: a sideways swipe on the image hides the header, filter
   // strip, grade sheet and pager so the image has the whole screen; another
@@ -558,10 +725,14 @@
   function setupPhoneLayout() {
     setupImmersiveSwipe();
     setupHeaderFullscreen();
-    panels.forEach(panel => { setupSheet(panel); setupToolbar(panel); setupAnnotateMode(panel); });
+    panels.forEach(panel => { setupSheet(panel); setupToolbar(panel); });
   }
+  const setupTabs = () => panels.forEach(setupAnnotateTabs);
+  window.addEventListener('resize', () => window.requestAnimationFrame(() => panels.forEach(placePanLock)));
   if (phone.matches) { setupPhoneLayout(); refitActivePanels(); }
+  if (tabsQuery.matches) setupTabs();
   // Rotating a tablet or resizing a window can cross the phone breakpoint after
   // load; every setup is idempotent, so re-run them when it does.
   phone.addEventListener('change', event => { if (event.matches) setupPhoneLayout(); });
+  tabsQuery.addEventListener('change', event => { if (event.matches) setupTabs(); });
 })();

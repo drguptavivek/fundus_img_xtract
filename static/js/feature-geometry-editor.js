@@ -1362,7 +1362,7 @@
       <div class="fgx-group fgx-tool-category" data-fgx-tool-category="segmentation">
         <span class="fgx-block-label">Segmentation</span>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-rect title="Add filled rectangular segmentation, not a bounding box" aria-label="Add rectangular segmentation">
-          <i class="fa-regular fa-square"></i><span class="ms-1">Rectangle</span>
+          <i class="fa-regular fa-square"></i><span class="ms-1">Rect</span>
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add elliptical segmentation" aria-label="Add elliptical segmentation">
           <i class="fa-solid fa-circle"></i><span class="ms-1">Ellipse</span>

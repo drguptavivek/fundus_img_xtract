@@ -550,7 +550,11 @@
     }
 
     function isPanLocked() {
-      return root?.dataset?.imggrPanLocked === 'true';
+      return root?.dataset?.imggrPanLocked === 'true' || isGestureLocked();
+    }
+    // Full pan/zoom lock (grader PWA): no finger count moves or zooms the image.
+    function isGestureLocked() {
+      return root?.dataset?.imggrGestureLocked === 'true';
     }
 
     function applyMetadataToCard(meta) {
@@ -2290,7 +2294,7 @@
       // active so a finger draws; two fingers always pan and pinch-zoom, and the
       // editor reads the multi-touch flag to keep the stroke out of the gesture.
       root.dataset.imggrMultiTouch = e.touches.length >= 2 ? 'true' : 'false';
-      if (isPanLocked() && e.touches.length === 1) {
+      if (isGestureLocked() || (isPanLocked() && e.touches.length === 1)) {
         return;
       }
       if (e.touches.length === 1) {
@@ -2403,7 +2407,7 @@
         return;
       }
       if (e.touches.length >= 2) root.dataset.imggrMultiTouch = 'true';
-      if (isPanLocked() && e.touches.length === 1) {
+      if (isGestureLocked() || (isPanLocked() && e.touches.length === 1)) {
         return;
       }
       if (e.touches.length === 1 && isDragging) {

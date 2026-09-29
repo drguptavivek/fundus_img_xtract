@@ -97,6 +97,35 @@ def test_phone_viewer_fits_complete_image_without_annotation_overlay():
     assert "body.gpwa-workbench .gwb-viewer-body .imggr-full" in pwa_styles
 
 
+def test_small_screens_annotate_in_a_grade_panel_tab():
+    pwa_script = (ROOT / "static/js/grader-pwa.js").read_text()
+    pwa_styles = (ROOT / "static/css/grader-pwa.css").read_text()
+
+    # Phones and tablets below 1600px: Grade | Annotate tabs; the editor sidebar
+    # moves into the panel and back beside the image at 1600px and up.
+    # Mobile-first CSS: the tabs are the base, 1600px and up switches them off.
+    assert "const TABS_QUERY = '(max-width: 1599.98px)';" in pwa_script
+    assert "@media (min-width: 1600px) {" in pwa_styles
+    assert "tab('annotate', 'Annotate')" in pwa_script
+    assert "home.parent.insertBefore(sidebar, home.next)" in pwa_script
+    # Annotating changes only the panel: no layout grid, nothing else hidden.
+    assert "gpwa-annotate " not in pwa_styles
+    assert "grid-template: \"image" not in pwa_styles
+    assert "const locked = panLocked && tabsQuery.matches;" in pwa_script
+    # Pan/zoom lock: hand button on the image corner, first Annotate locks it,
+    # only its button (or moving to another image) releases it.
+    assert "lock.innerHTML = '<i class=\"fa-solid fa-hand\" aria-hidden=\"true\"></i>';" in pwa_script
+    assert "if (annotate && !panLockChosen) { panLocked = true; panLockChosen = true; }" in pwa_script
+    assert "viewer.dataset.imggrGestureLocked = String(locked);" in pwa_script
+    assert "body.gpwa-workbench .gpwa-pan-lock.is-locked::after" in pwa_styles
+    # Annotate tab counts the annotations; header shows disease · grade.
+    assert "annotateTab.textContent = count ? `Annotate · ${count}` : 'Annotate';" in pwa_script
+    assert "gradeChip.textContent = text ? `· ${text}` : '· choose a grade';" in pwa_script
+    # The old overlay-over-the-image annotate mode is gone.
+    assert "gpwa-annotating" not in pwa_styles
+    assert "gpwa-annotating" not in pwa_script
+
+
 def test_phone_workbench_gives_the_image_the_screen():
     """iPhone review: image too small, controls too big, no way to minimise the
     sheet, fullscreen dead. The PWA fits the image box to the image's aspect
@@ -414,7 +443,10 @@ def test_touch_pan_lock_is_one_finger_only():
     viewer = (ROOT / "static/js/grading-viewer.js").read_text()
     editor = (ROOT / "static/js/feature-geometry-editor.js").read_text()
 
-    assert "if (isPanLocked() && e.touches.length === 1)" in viewer
+    # The editor's pan lock stops one finger; the PWA's pan/zoom lock
+    # (data-imggr-gesture-locked) stops every gesture.
+    assert "if (isGestureLocked() || (isPanLocked() && e.touches.length === 1))" in viewer
+    assert "return root?.dataset?.imggrGestureLocked === 'true';" in viewer
     assert "root.dataset.imggrMultiTouch = e.touches.length >= 2 ? 'true' : 'false'" in viewer
     assert "function isSecondaryTouch(event)" in editor
     assert 'state.viewerRoot?.dataset?.imggrMultiTouch === "true"' in editor

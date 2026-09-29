@@ -266,7 +266,7 @@ def test_geometry_editor_uses_annotations_heading():
     assert 'category.classList.toggle("d-none", !hasVisibleTool);' in editor
     assert 'data-fgx-brush-settings' in editor
     assert 'data-fgx-opacity-settings' in editor
-    assert '>Rectangle</span>' in editor
+    assert '>Rect</span>' in editor
     assert 'not a bounding box' in editor
     assert 'Bounding box records an outline ROI.' not in editor
     assert '>Annotations and segmentations</span>' in editor

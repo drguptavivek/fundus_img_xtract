@@ -4,6 +4,9 @@ set -euo pipefail
 # Ensure bind-mounted directories exist with safe permissions
 mkdir -p /app/logs /app/files
 mkdir -p /var/run/fundus-img-xtract
+# A pidfile from a previous run survives `docker restart`; the old PID can be
+# reused by an unrelated process, and gunicorn then refuses to start.
+rm -f "${GUNICORN_PID_FILE:-${RUNTIME_DIR:-/var/run/fundus-img-xtract}/gunicorn.pid}"
 
 # Default to secure cookie/session settings when behind TLS-terminating proxy
 export SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-true}"

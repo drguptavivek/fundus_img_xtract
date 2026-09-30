@@ -1,0 +1,8 @@
+{# Refer / WAI result pills shared by the EncounterSet browser (left rail, detail header, thumbnails). #}
+{% macro refer_pill(suggestion, cls='') -%}
+{% if suggestion == 'yes' %}<span class="badge rounded-pill text-bg-danger {{ cls }}" title="Refer advised by the Remidio report">Remidio Refer</span>{% endif %}
+{%- endmacro %}
+
+{% macro wai_pills(pills, cls='', show_grade=false) -%}
+{% for pill in pills or [] %}<span class="badge rounded-pill {{ 'text-bg-danger' if pill.positive else 'text-bg-info' }} {{ cls }}" title="{{ pill.title }}">{{ pill.label }}{% if show_grade and pill.grade %} · {{ pill.grade }}{% endif %}</span>{% endfor %}
+{%- endmacro %}

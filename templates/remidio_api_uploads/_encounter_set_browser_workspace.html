@@ -1,3 +1,4 @@
+{% from "remidio_api_uploads/_wai_pills.html" import refer_pill, wai_pills %}
 <div class="row g-3" data-encounter-browser-url="{{ browser_url }}">
   <div class="col-12">
     <div class="card shadow-sm">
@@ -134,9 +135,8 @@
             {% if patient.source_kind == 'iitk_api' %}
             <span class="badge {{ 'text-bg-success' if patient.source_status == 'complete' else 'text-bg-warning' }} ms-1">IITK {{ patient.source_status }}</span>
             {% endif %}
-            {% if patient.referral_suggestion == 'yes' %}
-            <span class="badge rounded-pill text-bg-danger ms-1">Refer+</span>
-            {% endif %}
+            {{ refer_pill(patient.referral_suggestion, 'ms-1') }}
+            {{ wai_pills(patient.wai_pills, 'ms-1', show_grade=true) }}
           </div>
         </button>
         {% else %}
@@ -163,9 +163,8 @@
           {% include "remidio_api_uploads/_encounter_set_project_badge.html" %}
           <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
           {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
-          {% for pill in detail.wai_pills %}
-          <span class="badge text-bg-info" title="{{ pill.title }}">{{ pill.label }}</span>
-          {% endfor %}
+          {{ refer_pill(detail.referral_suggestion) }}
+          {{ wai_pills(detail.wai_pills, show_grade=true) }}
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">
             {{ 'View Verification' if detail.verified_status == 'verified' else 'Verify' }}
           </a>
@@ -230,9 +229,7 @@
                            alt="EncounterSet image {{ image.position_label }}">
                       {% if image.wai_pills %}
                       <div class="position-absolute top-0 end-0 p-1 d-flex flex-column align-items-end gap-1">
-                        {% for pill in image.wai_pills %}
-                        <span class="badge text-bg-info" title="{{ pill.title }}">{{ pill.label }}</span>
-                        {% endfor %}
+                        {{ wai_pills(image.wai_pills) }}
                       </div>
                       {% endif %}
                     </div>
@@ -241,6 +238,9 @@
                       <div class="text-muted text-truncate">
                         {{ image.laterality or '-' }}{% if image.field %} · {{ image.field }}{% endif %}
                       </div>
+                      {% for pill in image.wai_pills %}{% if pill.grade %}
+                      <div class="{{ 'text-danger fw-semibold' if pill.positive else 'text-body-secondary' }} text-truncate" title="{{ pill.title }}">{{ pill.kind_label }}: {{ pill.grade }}</div>
+                      {% endif %}{% endfor %}
                       <div class="text-muted text-truncate">{{ image.camera_name or image.device_type or '-' }}</div>
                       <div class="d-flex flex-wrap gap-1 mt-1">
                         {% if image.image_variant %}

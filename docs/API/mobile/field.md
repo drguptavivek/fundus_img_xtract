@@ -83,7 +83,7 @@ matches what the user considers "today".
       "ai": [
         {
           "kind": "dr",
-          "label": "WAI-DR",
+          "label": "MN-DR+ · Moderate NPDR",
           "run_status": "success",
           "patient_result": "positive",
           "eyes": [

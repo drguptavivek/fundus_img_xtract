@@ -2771,7 +2771,7 @@ def test_encounter_set_wai_inference_by_image_ignores_human_grades(
     """WAI pills come only from Grade rows with role_slot='ai'. A human grade of the
     same disease on the same image must not surface a pill."""
     from models import AIModel
-    from remidio_api_integration.service import _encounter_set_wai_inference_by_image
+    from remidio_api_integration.wai_pills import WaiResult, wai_results_by_encounter
 
     dr = db_session.merge(core_test_data["dr"])
     disease_grading = db_session.query(DiseaseGrading).filter_by(disease_id=dr.id).first()
@@ -2809,9 +2809,11 @@ def test_encounter_set_wai_inference_by_image_ignores_human_grades(
     ))
     db_session.flush()
 
-    result = _encounter_set_wai_inference_by_image(db_session, encounter_set_data["encounter"].id)
+    result = wai_results_by_encounter(db_session, [encounter_set_data["encounter"].id])
 
-    assert result[image.id] == {"dr": "MadhuNetrAI DR-DME v2.1"}
+    assert result[encounter_set_data["encounter"].id][image.id] == {
+        "dr": WaiResult("MadhuNetrAI DR-DME v2.1", positive=False, grade=disease_grading.impression)
+    }
 
 
 def test_encounter_set_browser_detail_includes_wai_pills(
@@ -2852,6 +2854,17 @@ def test_encounter_set_browser_detail_includes_wai_pills(
     admin = UserFactory.create_admin(db_session, username=f"wai_pill_browser_{uuid.uuid4().hex[:8]}")
     detail = _encounter_set_browser_detail(db_session, admin, encounter_set_data["encounter"].id)
 
-    assert detail["wai_pills"] == [{"label": "WAI-DR", "title": "MadhuNetrAI DR-DME v2.1"}]
+    grade = disease_grading.impression
+    positive = grade.casefold() in {"mild dr", "moderate npdr", "severe npdr", "pdr"}
+    expected = {
+        "label": "MN-DR+" if positive else "MN-DR",
+        "title": f"{grade} (MadhuNetrAI DR-DME v2.1{' - refer advised' if positive else ''})",
+        "positive": positive,
+        "kind_label": "MN-DR",
+        "grade": grade,
+    }
+    model_title = f"MadhuNetrAI DR-DME v2.1{' - refer advised' if positive else ''}"
+    # One image here, so the encounter-level pill carries that image's (highest) grade.
+    assert detail["wai_pills"] == [{**expected, "title": f"{grade} ({model_title})"}]
     image_row = next(row for row in detail["images"] if row["id"] == image.id)
-    assert image_row["wai_pills"] == [{"label": "WAI-DR", "title": "MadhuNetrAI DR-DME v2.1"}]
+    assert image_row["wai_pills"] == [expected]

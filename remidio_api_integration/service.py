@@ -46,6 +46,7 @@ from models import (
     RemidioSite,
     User,
 )
+from remidio_api_integration import wai_pills
 from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileKind
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
 from utils.log_sanitize import sanitize_log_value
@@ -354,64 +355,14 @@ def _encounter_set_browser_patients(db: Session, user, project_id: int, selected
             selectinload(PatientEncounters.upload_profile),
         )
     )
-    return [_encounter_set_patient_row(encounter, no_pii=no_pii) for encounter in query.limit(300).all()]
-
-
-# WAI (Wadhwani AI / MadhuNetrAI) automated inference only. Grade.role_slot == 'ai' is
-# written exclusively by the two WAI pipelines - remote_inference/dr_dme_service.py
-# (DR + DME, per image) and services/encounter_set_ai_inference.py (Glaucoma, per
-# image) - never by the separate Remidio OCR/PDF report sync
-# (_sync_attachment_ocr_clinical_reports writes DiabeticRetinopathyReport/AMDReport/
-# GlaucomaReport directly, no Grade row). Do not widen this to include those reports.
-WAI_PILL_LABELS = {"dr": "WAI-DR", "dme": "WAI-DME", "glaucoma": "WAI-Glau"}
-
-
-def _wai_disease_kind(disease: Disease) -> str | None:
-    linkage = (disease.remidio_ocr_linkage or "none").lower()
-    name = disease.name.strip().lower()
-    # remidio_ocr_linkage is the primary signal, but fall back to an exact name match -
-    # mirrors _positive_disease_list_matches' own resilience for a disease whose
-    # linkage isn't configured (e.g. the seeded 'DR'/'Glaucoma' rows in test-db, which
-    # default remidio_ocr_linkage to 'none').
-    if linkage == "dr" or name == "dr":
-        return "dr"
-    if linkage == "glaucoma" or name == "glaucoma":
-        return "glaucoma"
-    if name == "dme":
-        return "dme"
-    return None
-
-
-def _encounter_set_wai_inference_by_image(db: Session, encounter_id: int) -> dict[int, dict[str, str]]:
-    """Map encounter_set_image_id -> {kind ('dr'/'dme'/'glaucoma'): model label} for
-    images belonging to this encounter that have an AI-role grade.
-
-    Grade.ai_model_id (not the denormalized ai_model_name/ai_model_version columns,
-    which the Glaucoma pipeline leaves null) is the one field both WAI pipelines
-    populate, so it is the reliable way to name the model regardless of which pipeline
-    produced the grade - keeping this forward-compatible if a non-WAI API is added.
-    """
-    rows = (
-        db.query(GradingTask.encounter_set_image_id, Disease, AIModel)
-        .join(Grade, Grade.task_id == GradingTask.id)
-        .join(Disease, Disease.id == GradingTask.disease_id)
-        .join(EncounterSetImage, EncounterSetImage.id == GradingTask.encounter_set_image_id)
-        .outerjoin(AIModel, AIModel.id == Grade.ai_model_id)
-        .filter(
-            EncounterSetImage.patient_encounter_id == encounter_id,
-            Grade.role_slot == "ai",
-        )
-        .distinct()
-        .all()
-    )
-    by_image: dict[int, dict[str, str]] = {}
-    for image_id, disease, ai_model in rows:
-        kind = _wai_disease_kind(disease)
-        if kind is None or image_id is None:
-            continue
-        label = f"{ai_model.name} v{ai_model.version}" if ai_model else "Unknown model"
-        by_image.setdefault(image_id, {})[kind] = label
-    return by_image
+    encounters = query.limit(300).all()
+    wai_by_encounter = wai_pills.wai_results_by_encounter(db, [encounter.id for encounter in encounters])
+    rows = []
+    for encounter in encounters:
+        row = _encounter_set_patient_row(encounter, no_pii=no_pii)
+        row["wai_pills"] = wai_pills.encounter_pills(wai_by_encounter.get(encounter.id, {}))
+        rows.append(row)
+    return rows
 
 
 def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pii: bool = False) -> dict[str, Any] | None:
@@ -444,23 +395,11 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         .first()
     )
     images = [_encounter_set_image_row(image) for image in sorted(encounter.encounter_set_images, key=lambda img: img.spatial_position)]
-    wai_by_image = _encounter_set_wai_inference_by_image(db, encounter.id)
-    encounter_wai_models: dict[str, set[str]] = {}
+    wai_by_image = wai_pills.wai_results_by_encounter(db, [encounter.id]).get(encounter.id, {})
     for index, image in enumerate(images):
         image["gallery_index"] = index
-        image_wai_models = wai_by_image.get(image["id"], {})
-        image["wai_pills"] = [
-            {"label": WAI_PILL_LABELS[kind], "title": image_wai_models[kind]}
-            for kind in ("dr", "dme", "glaucoma")
-            if kind in image_wai_models
-        ]
-        for kind, model_label in image_wai_models.items():
-            encounter_wai_models.setdefault(kind, set()).add(model_label)
-    wai_pills = [
-        {"label": WAI_PILL_LABELS[kind], "title": ", ".join(sorted(encounter_wai_models[kind]))}
-        for kind in ("dr", "dme", "glaucoma")
-        if kind in encounter_wai_models
-    ]
+        image["wai_pills"] = wai_pills.image_pills(wai_by_image.get(image["id"], {}))
+    wai_pill_rows = wai_pills.encounter_pills(wai_by_image)
     attachments = sorted(
         encounter.encounter_set_attachments,
         key=lambda item: item.created_at.isoformat() if item.created_at else "",
@@ -503,7 +442,7 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "remidio_exam_id": None if no_pii else remidio_exam.remidio_exam_id if remidio_exam else _metadata_lookup(metadata, "remidio_exam_id"),
         "remidio_site": None if no_pii else remidio_exam.site_custom_identifier if remidio_exam else _metadata_lookup(metadata, "remidio_site_custom_identifier"),
         "images": images,
-        "wai_pills": wai_pills,
+        "wai_pills": wai_pill_rows,
         "image_groups": _group_encounter_set_images(images),
         "final_reports": final_reports,
         "source_attachment_ids": source_attachment_ids,

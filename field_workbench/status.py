@@ -36,11 +36,12 @@ from remote_inference.models import (
     EncounterAITargetResult,
 )
 
+from remidio_api_integration.wai_pills import status_label, wai_disease_kind
+
 from .dto import AIEyeResultDTO, AIStatusDTO, RemidioReportDTO, RemidioVerdictDTO
 
 logger = logging.getLogger("field_workbench.status")
 
-WAI_LABELS = {"dr": "WAI-DR", "dme": "WAI-DME", "glaucoma": "WAI-Glau"}
 OCR_COMPLETE_STATES = {"completed", "success", "ok"}
 NOT_GRADABLE_LABELS = {"not gradable", "ungradable"}
 
@@ -53,24 +54,6 @@ DR_DME_ACTIVE_STATES = {"queued", "presigning", "uploading", "submitting"}
 class WaiDiseaseKind:
     key: str
     label: str
-
-
-def wai_disease_kind(disease: Disease) -> str | None:
-    """Map a Disease onto a WAI pill key.
-
-    ``remidio_ocr_linkage`` is the intended signal, with an exact name match as
-    a fallback for diseases whose linkage was never configured (the seeded
-    DR/Glaucoma rows default it to 'none').
-    """
-    linkage = (getattr(disease, "remidio_ocr_linkage", None) or "none").lower()
-    name = (disease.name or "").strip().lower()
-    if linkage == "dr" or name == "dr":
-        return "dr"
-    if linkage == "glaucoma" or name == "glaucoma":
-        return "glaucoma"
-    if name == "dme":
-        return "dme"
-    return None
 
 
 def encounter_wai_grades_by_image(db, encounter_id: int) -> dict[int, dict[str, str]]:
@@ -196,7 +179,7 @@ def dr_dme_statuses(db, encounter: PatientEncounters, *, workflow_enabled: bool)
         out.append(
             AIStatusDTO(
                 kind=key,
-                label=WAI_LABELS[key],
+                label=status_label(key, (eye.grade for eye in eyes)),
                 run_status=run_status,
                 patient_result=patient_result,
                 eyes=tuple(eyes),
@@ -289,7 +272,7 @@ def glaucoma_status(db, encounter: PatientEncounters, *, workflow_enabled: bool)
 
     return AIStatusDTO(
         kind="glaucoma",
-        label=WAI_LABELS["glaucoma"],
+        label=status_label("glaucoma", (eye.grade for eye in eyes)),
         run_status=run_status,
         patient_result=patient_result,
         eyes=eyes,

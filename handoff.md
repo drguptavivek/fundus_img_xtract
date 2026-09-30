@@ -1,6 +1,38 @@
 # Fresh-session handoff
 
-## Latest session (2026-09-26) — project data sync + gunicorn
+## Latest session (2026-09-30) — passkey fix, worker/pidfile fixes, browse-page WAI pills
+
+- **Passkey login fixed** (`1d8ba294`): `passkeys/service.py::_redis()` read `REDIS_URL` from `app.config` (never set), so
+  challenges lived in per-worker memory and `/login/passkey/verify` returned `challenge_expired` on another Gunicorn
+  worker. Now uses `build_redis_url()`. Login page also single-flights the WebAuthn ceremony.
+- **Stale gunicorn pidfile crash-loop** (`e4d73408`): `docker/entrypoint.sh` now `rm -f`s the pidfile. Only live after
+  the `web` image is rebuilt; until then a plain `restart` can loop with "Already running on PID 49" -> fix by
+  `docker compose up -d --force-recreate --no-deps web`.
+- **OCR worker missing `flask-login`** (`1370c4c7`): added to the `ocr` extra; regenerate with
+  `scripts/export_requirements.sh`, then `docker compose build ocr-venv-builder && docker compose up ocr-venv-builder`
+  and restart `celery-ocr-worker` (builder image bakes the requirements file). Encounter-set attachment id 1683 still
+  needs its MadhuNetrAI inference re-queued from the UI. Cleaner follow-up: move `ROLE_*`/`FIELD_ROLE_NAMES` out of
+  `auth/roles.py` so workers need no Flask-Login.
+- **Browse page** (`/uploads/encountersets/browse`, PII and no-PII; bead `fundus_img_xtract-wtt0`): red **Remidio Refer**
+  pill (left rail + detail header); WAI pills **MN-DR / MN-DME / RPC-Glau**, red with `+` when the AI grade refers, in the
+  left rail (one per encounter, highest grade), detail header (with grade text) and per-thumbnail grade line. Code:
+  `remidio_api_integration/wai_pills.py` (labels, positive rule `WAI_POSITIVE_IMPRESSIONS`, severity
+  `WAI_GRADE_SEVERITY`, batched query) + `templates/remidio_api_uploads/_wai_pills.html`. Positive = DR Mild+,
+  DME M1/Present, Glaucoma Suspect/Glaucoma; the RPC glaucoma model only says referrable so its positive shows as
+  **Refer**. Mobile field API `label` now uses the same text (`MN-DR+ · Moderate NPDR`; contract change, documented in
+  `docs/API/mobile/field.md`).
+- **Not done / open:**
+  - `apps/fundus_glaucoma_mobile` (submodule) `lib/data/models/field_dtos.dart:141` doc comment still describes the old
+    `WAI-DR` labels; update in the submodule and bump the pointer.
+  - "Refer+" pills on the verify screens (`verify_encounter_set` templates) were left unchanged.
+  - `docker-compose.yml` has an uncommitted `test-db` change (`log_min_messages=fatal`, `log_checkpoints=off`) to silence
+    expected constraint errors in test-db logs; decide, then `docker compose up -d --force-recreate --no-deps test-db`.
+  - Web restart needed for browse-page changes; user restarted after the last edit — verify encounter 5273 visually.
+  - The live-DB check of encounter 5273's referral data was blocked; nothing was queried.
+
+---
+
+## Earlier session (2026-09-26) — project data sync + gunicorn
 
 - Branch `main`, pushed to `upstream`: `1493a734` (feature), `18108659` (review fixes). Bead `fundus_img_xtract-83wh` closed.
 - **Project data sync is LIVE** (`PROJECT_SYNC_ENABLED=1` in untracked `deploy.config.env`; web restarted).

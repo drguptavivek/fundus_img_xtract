@@ -313,6 +313,12 @@ services:
       - "max_connections=20"
       - "-c"
       - "max_locks_per_transaction=256" # Test schema teardown locks every migrated object
+      # Tests deliberately trigger constraint violations; pytest reports real failures,
+      # so keep Postgres from logging every expected ERROR and checkpoint.
+      - "-c"
+      - "log_min_messages=fatal"
+      - "-c"
+      - "log_checkpoints=off"
 
 volumes:
   postgres_data:

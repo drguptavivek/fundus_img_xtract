@@ -226,12 +226,21 @@
       if (!response.ok) throw new Error(payload.message || payload.error || `Request failed (HTTP ${response.status})`);
       return payload;
     };
-    const runPasskey = async (username, captcha) => {
-      const { challenge_id, options } = await post(button.dataset.optionsUrl, { username, captcha });
-      const credential = await helper.get(options);
-      const result = await post(button.dataset.verifyUrl, { challenge_id, credential });
-      window.location.assign(result.redirect || '/');
-      return 'signed-in';
+    // One ceremony at a time: a second navigator.credentials.get() (Enter
+    // key repeat, Next + passkey button) can make extensions such as iCloud
+    // Passwords answer the first prompt with the first challenge, which the
+    // server then rejects as "Wrong challenge".
+    let inFlight = null;
+    const runPasskey = (username, captcha) => {
+      if (inFlight) return inFlight;
+      inFlight = (async () => {
+        const { challenge_id, options } = await post(button.dataset.optionsUrl, { username, captcha });
+        const credential = await helper.get(options);
+        const result = await post(button.dataset.verifyUrl, { challenge_id, credential });
+        window.location.assign(result.redirect || '/');
+        return 'signed-in';
+      })().finally(() => { inFlight = null; });
+      return inFlight;
     };
     // Called by the step switcher: 'signed-in', or 'no-passkey' / 'cancelled'
     // so the password step is shown instead (the CAPTCHA is still valid).

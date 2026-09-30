@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import secrets
 import time
 from dataclasses import dataclass
@@ -73,9 +74,11 @@ _memory_store: dict[str, tuple[float, str]] = {}
 
 
 def _redis():
-    url = current_app.config.get("REDIS_URL") or current_app.config.get("CELERY_BROKER_URL")
-    if not url:
-        return None
+    from utils.redis_connection import build_redis_url
+
+    # Gunicorn runs several workers, so challenges must live in shared Redis;
+    # the env vars are not mirrored into app.config.
+    url = current_app.config.get("REDIS_URL") or os.getenv("REDIS_URL") or build_redis_url()
     try:
         import redis
 

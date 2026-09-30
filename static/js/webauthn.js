@@ -70,6 +70,16 @@
     if (name === 'NotSupportedError') {
       return new Error('This browser does not support the requested passkey type.');
     }
+    if (name === 'AbortError') {
+      return new Error(creating ? 'Passkey setup was interrupted. Try again.' : 'Passkey sign-in was interrupted. Try again.');
+    }
+    if (name === 'UnknownError') {
+      return new Error('The passkey provider reported an error (UnknownError). Try again, or use your password.');
+    }
+    // Keep the browser's own name visible so an unmapped failure is diagnosable.
+    const message = (error && error.message) || '';
+    const label = name && name !== 'Error' ? ` (${name})` : '';
+    if (!message) return new Error(`${creating ? 'Passkey setup' : 'Passkey sign-in'} failed${label || '.'}`);
     return error instanceof Error ? error : new Error(String(error));
   }
   async function create(options) {

@@ -386,6 +386,12 @@ Direct-image duplicates are not dead rejected rows. When the shared direct-uploa
 
 ## Flutter PWA Serving
 
+The current Flutter uploader supports multiple images in one `direct_image`
+request, standard upload-profile selections, and plain-text remarks. It does
+not yet render the project-defined encounter/image capture fields or submit
+`encounter_set` capture forms. Those API capabilities must not be confused with
+the controls currently available in the Flutter app.
+
 The Flutter web/PWA app shell can be served by Flask at `/mobile/`; a separate nginx router is not required for this route. Build the PWA with:
 
 ```bash

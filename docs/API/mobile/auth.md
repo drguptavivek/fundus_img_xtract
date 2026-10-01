@@ -435,6 +435,16 @@ other platforms need enrolment, blocked devices stay blocked).
 
 ## Web platform: CAPTCHA and passkey-only re-authentication
 
+The Flutter field PWA sends `platform: "web"` and obtains its CAPTCHA image
+from `GET /refresh-captcha` on the same origin. The browser session cookie binds
+the challenge to the subsequent login request, which includes `captcha`.
+When available, the audio challenge plays within the login screen from
+`GET /captcha-audio`; refreshing the CAPTCHA stops the old audio.
+Native builds send their platform without a CAPTCHA. The field PWA returns to
+full sign-in when the server requires reauthentication; it does not implement
+passkey reauthentication. Previously stored web sessions without platform
+identification require a new sign-in after the client update.
+
 Requests with `"platform": "web"` (the grader PWA) must include `captcha`
 solved against the session CAPTCHA (`GET /refresh-captcha`, `GET
 /captcha-audio`) on `POST /auth/login` and `POST /auth/passkeys/login/options`

@@ -64,7 +64,7 @@ rebuild-main: ## Build main application service images.
 
 .PHONY: mobile-pwa-build
 mobile-pwa-build: ## Build Flutter PWA into static/mobile-pwa for Flask /mobile/ serving.
-	cd apps/fundus_glaucoma_mobile && set -a && [ ! -f .env ] || . ./.env && set +a && flutter build web --release --base-href /mobile/ --dart-define=APP_VERSION=$$(grep '^version:' pubspec.yaml | awk '{print $$2}') $${FUNDUS_API_BASE_URL:+--dart-define=FUNDUS_API_BASE_URL=$$FUNDUS_API_BASE_URL}
+	cd apps/fundus_glaucoma_mobile && set -a && [ ! -f .env ] || . ./.env && set +a && flutter build web --release --no-web-resources-cdn --base-href /mobile/ --dart-define=APP_VERSION=$$(grep '^version:' pubspec.yaml | awk '{print $$2}') $${FUNDUS_API_BASE_URL:+--dart-define=FUNDUS_API_BASE_URL=$$FUNDUS_API_BASE_URL}
 	rm -rf $(MOBILE_PWA_DIR)
 	mkdir -p $(MOBILE_PWA_DIR)
 	cp -R apps/fundus_glaucoma_mobile/build/web/. $(MOBILE_PWA_DIR)/

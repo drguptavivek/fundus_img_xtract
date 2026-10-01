@@ -82,7 +82,7 @@ web = [
     "six==1.17.0",
     "soupsieve==2.9.2",
     "tzdata==2026.2",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
     "wrapt==2.1.2",
     "pyyaml>=6.0.3",
     "captcha>=0.5.0",

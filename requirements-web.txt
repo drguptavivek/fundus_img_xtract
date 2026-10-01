@@ -401,7 +401,7 @@ tzlocal==5.3.1
     # via
     #   apscheduler
     #   celery
-urllib3==2.7.0
+urllib3==2.8.0
     # via
     #   botocore
     #   docker

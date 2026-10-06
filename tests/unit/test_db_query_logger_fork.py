@@ -42,3 +42,20 @@ def test_forked_child_restarts_flush_thread_and_writes_buffered_lines(tmp_path):
     query_logger.stop()
 
     assert os.waitstatus_to_exitcode(status) == 0
+
+
+def test_record_attributes_query_to_the_calling_application_frame():
+    lines = []
+    logger = logging.getLogger("test_db_query_caller")
+    query_logger = QueryLogger(
+        logger=logger,
+        slow_logger=logging.getLogger("test_db_query_caller_slow"),
+        slow_threshold_ms=10_000,
+        flush_interval_seconds=60,
+    )
+    logger.info = lines.append  # type: ignore[method-assign]
+
+    query_logger.record("SELECT 1", 1.0)
+    query_logger.flush()
+
+    assert f"caller={__file__}:" in lines[0]

@@ -1,9 +1,9 @@
 """Debug-only SQLAlchemy query logging with buffered flush."""
 from __future__ import annotations
 
-import inspect
 import logging
 import os
+import sys
 import threading
 import time
 from typing import List, Optional
@@ -95,13 +95,15 @@ class QueryLogger:
 
 
 def _find_caller() -> str:
-    for frame_info in inspect.stack()[2:]:
-        filename = frame_info.filename
-        if "/sqlalchemy/" in filename.replace("\\", "/"):
-            continue
-        if "/utils/db_query_logger.py" in filename.replace("\\", "/"):
-            continue
-        return f"{filename}:{frame_info.lineno}"
+    # Walk raw frames: inspect.stack() reads source context for every frame
+    # and cost ~2 ms per query (~280 ms on a 150-query workbench submit).
+    frame = sys._getframe(2)
+    while frame is not None:
+        filename = frame.f_code.co_filename
+        normalized = filename.replace("\\", "/")
+        if "/sqlalchemy/" not in normalized and "/utils/db_query_logger.py" not in normalized:
+            return f"{filename}:{frame.f_lineno}"
+        frame = frame.f_back
     return "unknown"
 
 

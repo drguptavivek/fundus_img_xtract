@@ -10,7 +10,7 @@ from flask_cors import CORS
 from models import Base, Job, Session, engine
 from zip_processor import setup_environment
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import threading
 import atexit
 
@@ -88,6 +88,11 @@ def _configure_base_settings(app: Flask) -> None:
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
     app.config["SMTP_USE_SSL"] = _env_bool("SMTP_USE_SSL", "false")
     app.config["DB_QUERY_LOGGING"] = _env_bool("DB_QUERY_LOGGING", "false")
+    # Every request's duration goes to request_timing.log until this UTC
+    # ISO-8601 instant (e.g. 2026-10-08T06:00:00Z); unset or past disables it.
+    app.config["REQUEST_TIMING_LOG_UNTIL"] = _parse_utc_instant(
+        os.getenv("REQUEST_TIMING_LOG_UNTIL")
+    )
     app.config["MATERIALIZED_VIEW_SCHEDULE_ENABLED"] = _env_bool("MATERIALIZED_VIEW_SCHEDULE_ENABLED", "true")
     app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv(
         "MATERIALIZED_VIEW_SCHEDULE_TIMES",
@@ -396,7 +401,27 @@ def _register_acl_context(app: Flask) -> None:
         return {"media_cache_version": get_media_cache_version}
 
 
-def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> None:
+def _parse_utc_instant(value: str | None):
+    if not value or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        logging.getLogger("startup_env").warning(
+            "Ignoring invalid REQUEST_TIMING_LOG_UNTIL=%s", sanitize_log_value(value)
+        )
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _register_request_timing(
+    app: Flask,
+    http_error_logger: logging.Logger,
+    request_timing_logger: logging.Logger,
+) -> None:
+    from flask_login import current_user
+    from auth.utils import utcnow
+
     @app.before_request
     def start_timer():
         request.start_time = time.time()
@@ -429,6 +454,21 @@ def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> N
 
         if response.status_code >= 400:
             http_error_logger.warning(line)
+
+        timing_until = app.config.get("REQUEST_TIMING_LOG_UNTIL")
+        if timing_until is not None and utcnow() < timing_until:
+            user_id = getattr(current_user, "id", None)
+            request_timing_logger.info(
+                "%s %s %s %s duration=%sms bytes=%s user=%s endpoint=%s",
+                sanitize_log_value(client_ip),
+                sanitize_log_value(request.method),
+                sanitize_log_value(request.path),
+                response.status_code,
+                duration_ms if duration_ms is not None else "-",
+                response.calculate_content_length() or "-",
+                user_id if user_id is not None else "-",
+                sanitize_log_value(endpoint),
+            )
 
         try:
             if hasattr(response, 'headers') and not response.headers.get('X-RateLimit-Limit'):
@@ -1109,7 +1149,7 @@ def create_app():
     _register_flash_logging(app, loggers["flash"])
     _register_acl_context(app)
     register_csp(app)
-    _register_request_timing(app, loggers["http_error"])
+    _register_request_timing(app, loggers["http_error"], loggers["request_timing"])
     _register_inactivity_timeout(app)
     _register_response_headers(app)
 

@@ -266,6 +266,14 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
         max_bytes=log_max_bytes,
         backup_count=log_backup_count,
     )
+    request_timing_handler = _make_handler(
+        "request_timing.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
     db_query_handler = WatchedFileHandler(
         log_dir / "db_query.log", encoding="utf-8", delay=True
     )
@@ -294,6 +302,9 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
 
     http_error_logger = _configure_logger(
         "http_error", logging.WARNING, http_error_handler
+    )
+    request_timing_logger = _configure_logger(
+        "request_timing", logging.INFO, request_timing_handler
     )
     runtime_error_logger = _configure_logger(
         "runtime_error", logging.ERROR, runtime_error_handler
@@ -473,6 +484,7 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
 
     return {
         "http_error": http_error_logger,
+        "request_timing": request_timing_logger,
         "runtime_error": runtime_error_logger,
         "grades": grades_logger,
         "pregraded_processing": pregraded_processing_logger,

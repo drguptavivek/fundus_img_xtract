@@ -2544,7 +2544,9 @@ class ViewerPresets(Base):
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    engine = create_engine(DATABASE_URL)
+    # pre_ping replaces pooled connections killed by a DB restart instead of
+    # failing the first request/task that draws one.
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 @event.listens_for(engine, "handle_error")
 def _log_sqlalchemy_error(exc_context) -> None:  # pragma: no cover - defensive logging

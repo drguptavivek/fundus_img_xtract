@@ -72,6 +72,9 @@ fi
 
 # Start cron daemon for log rotation
 echo "Starting cron daemon for log rotation..."
+# Reinstall from the bind-mounted repo so config fixes apply on restart.
+install -m 0644 /app/docker/logrotate.conf /etc/logrotate.d/fundus-img-xtract
+install -m 0644 /app/docker/logrotate.cron /etc/cron.d/fundus-img-xtract
 service cron start
 echo "✅ Cron daemon started"
 

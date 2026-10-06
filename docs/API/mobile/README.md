@@ -28,8 +28,12 @@ These endpoints are consumed by mobile clients. They are JSON-only and use beare
 
 ## Hosted PWA
 
-The Flutter client's web build is served by this backend at `GET /mobile/` (public,
-SPA fallback, `no-cache` on `index.html`, `flutter_bootstrap.js`,
+The Flutter client's web build is served by this backend at `GET /mobile/` (only the
+app shell is public - `index.html`, the Flutter loaders, `main.dart.js`, manifests,
+`version.json`, `favicon.png`, and `assets/`, `canvaskit/`, `icons/`, `splash/`; see
+`is_public_mobile_pwa_path` in `app.py`. Every other `/mobile/...` path, including
+the APK download redirects, needs a web session. The client uses hash routing, so
+in-app routes stay at `/mobile/#/...`; `no-cache` on `index.html`, `flutter_bootstrap.js`,
 `flutter_service_worker.js`, and `version.json`) from the build committed at
 `static/mobile-pwa/`. Serving it from the API's own origin is what keeps every call
 same-origin — this surface sends no CORS headers and needs none. **Deploying a new

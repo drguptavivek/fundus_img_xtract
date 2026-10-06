@@ -146,6 +146,13 @@ and restoring the public contract documented in `docs/API/mobile/README.md`:
 PUBLIC_SESSION_PREFIXES = ("/static/", "/help", "/mobile/")
 ```
 
+**Narrowed 2026-10-06:** the blanket `/mobile/` prefix also exposed non-shell paths
+(APK download redirects, `.last_build_id`, `*.symbols`, any unknown path). It was
+replaced by an explicit app-shell allowlist, `is_public_mobile_pwa_path()` in `app.py`
+(`MOBILE_PWA_PUBLIC_FILES` + `MOBILE_PWA_PUBLIC_DIRS`); everything else under
+`/mobile/` requires a session. Covered by
+`tests/security/test_authz_route_coverage.py`.
+
 Verified anonymously against the local container: `/mobile/`, `index.html`,
 `flutter_bootstrap.js`, `version.json`, `flutter_service_worker.js`, `main.dart.js`
 and `manifest.webmanifest` all return `200`, the last with

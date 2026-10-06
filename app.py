@@ -714,10 +714,44 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/login/passkey/verify",
     }
 )
-# "/mobile/" covers the whole hosted Flutter build. The bare "/mobile" above only
-# 308-redirects here, and the manifest is fetched with credentials omitted, so
-# without the prefix an anonymous caller gets /login HTML in place of every asset.
-PUBLIC_SESSION_PREFIXES = ("/static/", "/help", "/mobile/")
+PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
+
+# The hosted Flutter PWA must boot and show its own sign-in screen before any
+# web session exists (the manifest is even fetched with credentials omitted), so
+# exactly its app-shell files are public. Anything else under /mobile/ - APK
+# download redirects, debug symbols, dotfiles, unknown paths - needs a session.
+# The PWA uses hash routing, so in-app routes never hit a /mobile/<path> URL.
+MOBILE_PWA_PUBLIC_FILES = frozenset(
+    {
+        "/mobile/",
+        "/mobile/index.html",
+        "/mobile/flutter.js",
+        "/mobile/flutter_bootstrap.js",
+        "/mobile/flutter_service_worker.js",
+        "/mobile/main.dart.js",
+        "/mobile/manifest.json",
+        "/mobile/manifest.webmanifest",
+        "/mobile/web.manifest",
+        "/mobile/version.json",
+        "/mobile/favicon.png",
+    }
+)
+MOBILE_PWA_PUBLIC_DIRS = (
+    "/mobile/assets/",
+    "/mobile/canvaskit/",
+    "/mobile/icons/",
+    "/mobile/splash/",
+)
+
+
+def is_public_mobile_pwa_path(path: str) -> bool:
+    if path in MOBILE_PWA_PUBLIC_FILES:
+        return True
+    if not path.startswith(MOBILE_PWA_PUBLIC_DIRS):
+        return False
+    if path.endswith((".symbols", ".map")):
+        return False
+    return not any(part.startswith(".") for part in path.split("/"))
 
 # Where a mobile bearer token may stand in for a web session: the grader PWA
 # and the grading / viewer / media APIs it needs. Nowhere else - a leaked
@@ -795,7 +829,11 @@ def _register_login_guard(app: Flask) -> None:
             session.modified = True
             mark_session_ended(prior_session_id)
 
-        if path in PUBLIC_SESSION_PATHS or path.startswith(PUBLIC_SESSION_PREFIXES):
+        if (
+            path in PUBLIC_SESSION_PATHS
+            or path.startswith(PUBLIC_SESSION_PREFIXES)
+            or is_public_mobile_pwa_path(path)
+        ):
             return
         if not current_user.is_authenticated:
             prior_session_id = getattr(session, "session_id", None)

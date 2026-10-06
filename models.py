@@ -2545,8 +2545,14 @@ if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
     # pre_ping replaces pooled connections killed by a DB restart instead of
-    # failing the first request/task that draws one.
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    # failing the first request/task that draws one. JIT is off because the
+    # planner overestimates the queue's lineage queries enough to trigger it,
+    # and compilation (~150 ms) cost 4x the query itself (~48 ms).
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        connect_args={"options": "-c jit=off"},
+    )
 
 @event.listens_for(engine, "handle_error")
 def _log_sqlalchemy_error(exc_context) -> None:  # pragma: no cover - defensive logging

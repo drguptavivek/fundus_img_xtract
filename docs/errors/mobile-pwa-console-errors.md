@@ -110,12 +110,13 @@ mobile/manifest.webmanifest:2 Manifest: Line: 2, column: 1, Syntax error.
 The browser asks for JSON and receives a `<!doctype html>` redirect body, failing on
 line 2 column 1. The file on disk is valid JSON (967 bytes, verified).
 
-**This does not reproduce on every host.** Where nginx serves `/mobile/` off disk the
-request never reaches Flask:
+**This did not reproduce on every host.** (Originally attributed to nginx serving
+`/mobile/` off disk; a 2026-10-06 re-check shows every host proxies `/mobile/` to
+Flask, so the difference was the deployed code version.)
 
 | Host | `/mobile/` served by | Anonymous manifest |
 |---|---|---|
-| `eyeimg.aiims.edu.in` | nginx, static (`cache-control: public, max-age=604800`) | 200, valid JSON — unaffected |
+| `eyeimg.aiims.edu.in` | external reverse proxy → Flask (re-checked 2026-10-06: Flask-only `/mobile/download/android` answers; proxy adds `cache-control: public, max-age=604800`) | 200, valid JSON |
 | `eye.epidemiology.tech` | nginx → Flask | 302 → `/login` |
 | local container `:5001` | Flask | 200 after the fix below |
 | `eyeimg.aiims.edu` | — | does not resolve (listed in CSP `connect-src`) |

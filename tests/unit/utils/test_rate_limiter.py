@@ -623,9 +623,8 @@ class TestUserRateLimits(unittest.TestCase):
 
 class TestDynamicRateLimits(unittest.TestCase):
     """Test dynamic rate limit functions."""
-    
-    def test_dynamic_rate_limit_from_config(self):
-        """Test loading dynamic rate limits from config."""
+
+    def _app(self, **config):
         test_app = create_app()
         test_app.config.update(
             TESTING=True,
@@ -633,70 +632,31 @@ class TestDynamicRateLimits(unittest.TestCase):
             WTF_CSRF_ENABLED=False,
             SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
             LOGIN_DISABLED=False,
+            RATELIMIT_DEFAULT="5000 per hour, 500 per minute",
+            **config,
         )
-        with test_app.test_request_context('/test-rate-limit'), \
-             patch('flask.current_app') as mock_current_app, \
-             patch('flask.request') as mock_request:
+        return test_app
 
-            mock_current_app.config.get.side_effect = lambda key, default=None: {
-                'RATELIMIT_TEST_RATE_LIMIT_LIMIT': '200 per minute',
-                'RATELIMIT_DEFAULT': '5000 per hour, 500 per minute'
-            }.get(key, default)
+    def test_dynamic_rate_limit_from_config(self):
+        """A per-endpoint RATELIMIT_<ENDPOINT>_LIMIT wins over the default."""
+        test_app = self._app(RATELIMIT_TEST_RATE_LIMIT_LIMIT="200 per minute")
+        with test_app.test_request_context("/test-rate-limit"), \
+             patch("utils.rate_limiter.request", new=MagicMock(endpoint="test_rate_limit")):
+            self.assertEqual(dynamic_rate_limit_from_config(), "200 per minute")
 
-            # Mock the request endpoint to match the config key
-            mock_request.endpoint = 'test_rate_limit_limit'
-            limit = dynamic_rate_limit_from_config()
-
-            # The implementation might not be finding the custom limit, so let's check what it returns
-            # If it's not finding the custom limit, it should return the default
-            if limit == "5000 per hour, 500 per minute":
-                # This means the custom limit wasn't found, which is still a valid test
-                self.assertEqual(limit, "5000 per hour, 500 per minute")
-            else:
-                self.assertEqual(limit, "200 per minute")
-    
     def test_dynamic_rate_limit_from_config_default(self):
         """Test loading default rate limit when no custom limit exists."""
-        test_app = create_app()
-        test_app.config.update(
-            TESTING=True,
-            SECRET_KEY="test-secret-key",
-            WTF_CSRF_ENABLED=False,
-            SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
-            LOGIN_DISABLED=False,
-        )
-        with test_app.test_request_context('/test-rate-limit'), \
-             patch('flask.current_app') as mock_current_app:
+        test_app = self._app()
+        with test_app.test_request_context("/test-rate-limit"), \
+             patch("utils.rate_limiter.request", new=MagicMock(endpoint="no_custom_limit")):
+            self.assertEqual(dynamic_rate_limit_from_config(), "5000 per hour, 500 per minute")
 
-            mock_current_app.config.get.side_effect = lambda key, default=None: {
-                'RATELIMIT_DEFAULT': '5000 per hour, 500 per minute'
-            }.get(key, default)
-
-            limit = dynamic_rate_limit_from_config()
-
-            self.assertEqual(limit, "5000 per hour, 500 per minute")
-    
     def test_dynamic_rate_limit_no_endpoint(self):
         """Test dynamic rate limit when no endpoint is available."""
-        test_app = create_app()
-        test_app.config.update(
-            TESTING=True,
-            SECRET_KEY="test-secret-key",
-            WTF_CSRF_ENABLED=False,
-            SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
-            LOGIN_DISABLED=False,
-        )
-        with test_app.test_request_context('/test-rate-limit'), \
-             patch('flask.current_app') as mock_current_app:
-
-            mock_current_app.config.get.return_value = '5000 per hour, 500 per minute'
-
-            # Simulate no endpoint by patching the request
-            with patch('flask.request') as mock_request:
-                mock_request.endpoint = None
-                limit = dynamic_rate_limit_from_config()
-
-            self.assertEqual(limit, "5000 per hour, 500 per minute")
+        test_app = self._app()
+        with test_app.test_request_context("/test-rate-limit"), \
+             patch("utils.rate_limiter.request", new=MagicMock(endpoint=None)):
+            self.assertEqual(dynamic_rate_limit_from_config(), "5000 per hour, 500 per minute")
 
 
 class TestSharedResourceLimits(unittest.TestCase):

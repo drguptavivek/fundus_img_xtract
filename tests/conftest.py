@@ -40,7 +40,18 @@ if "test" not in (_parsed_test_db.path or "").lower():
 # Ensure all model and alembic imports resolve to the test DB. Docker runtime
 # containers already set DATABASE_URL to the application database, so setdefault
 # is not safe for pytest.
+# Load deploy.*.env now: it runs once with override=True, and loading it later
+# (on ``import app``) would clobber the test overrides set below.
+from utils.env_loader import load_environment
+
+load_environment()
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+# Tests that call create_app() directly bypass the app fixture; keep their log
+# handlers off the production-mounted /app/logs files (root-owned in Compose).
+import tempfile
+
+os.environ["LOG_DIR"] = tempfile.mkdtemp(prefix="fundus_img_xtract_pytest_logs_")
 
 from models import Base
 

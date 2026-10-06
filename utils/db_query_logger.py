@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 import threading
 import time
 from typing import List, Optional
@@ -29,9 +30,23 @@ class QueryLogger:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._flush_loop, daemon=True)
+        self._started = False
+        # Gunicorn preload_app and Celery prefork create the logger in the
+        # parent; threads do not survive fork, so without this each child
+        # buffers every query forever and never writes it.
+        os.register_at_fork(after_in_child=self._reset_after_fork)
 
     def start(self) -> None:
+        self._started = True
         if not self._thread.is_alive():
+            self._thread.start()
+
+    def _reset_after_fork(self) -> None:
+        self._buffer = []
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._flush_loop, daemon=True)
+        if self._started:
             self._thread.start()
 
     def stop(self) -> None:

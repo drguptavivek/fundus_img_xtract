@@ -89,18 +89,17 @@ def list_project_encounter_set_queues(
             )
             .where(PatientEncounters.project_id.in_(projects))
             .where(GradingTask.state.in_(tuple(_SLOT_STATES.values())))
+            # Load only what allocation resolution reads. Every task's grades
+            # and every package's task list were also eager-loaded here, and
+            # hydrating them for ~9k tasks cost ~3 s per dashboard load; the
+            # user's own grades come from one query in the eligibility check
+            # and package.tasks is only needed by the rare frozen-target path.
             .options(
                 selectinload(GradingTask.patient_encounter),
                 selectinload(GradingTask.encounter_set_image).selectinload(
                     EncounterSetImage.patient_encounter
                 ),
-                selectinload(GradingTask.encounter_set_package).selectinload(
-                    EncounterSetGradingPackage.patient_encounter
-                ),
-                selectinload(GradingTask.encounter_set_package).selectinload(
-                    EncounterSetGradingPackage.tasks
-                ),
-                selectinload(GradingTask.grades),
+                selectinload(GradingTask.encounter_set_package),
             )
             .order_by(GradingTask.created_at, GradingTask.id)
         )

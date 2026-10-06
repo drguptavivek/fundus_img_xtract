@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from sqlalchemy.orm import selectinload, aliased
-from sqlalchemy import and_, or_, func, exists, case, select
+from sqlalchemy import and_, or_, func, exists, case, select, distinct
 from models import (
     DirectImageUpload,
     Disease,
@@ -116,7 +116,9 @@ def _pending_count(
     query = filter_to_exact_allocation(
         query, user_id=user_id, capacity=capacity.value
     )
-    return query.distinct().count()
+    # count(DISTINCT id), not .distinct().count(): the latter de-duplicates
+    # every grading_tasks column inside a subquery before counting.
+    return query.with_entities(func.count(distinct(GradingTask.id))).scalar() or 0
 
 
 def _resolve_user_disease_slots(db, user_id: int):

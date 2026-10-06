@@ -205,3 +205,58 @@ def test_package_target_purpose_distinguishes_disagreement_from_context():
         workflow="package",
         package_editable=False,
     ) == "evidence"
+
+
+def test_concurrent_acquire_losing_insert_race_raises_active_session_exists(
+    db_session,
+    resident_user,
+    core_test_data,
+    monkeypatch,
+):
+    """A request that passes the active-session check before a concurrent
+    request commits must surface ActiveSessionExists, not an IntegrityError."""
+    import grading.workbench.acquisition as acquisition_module
+
+    user = db_session.merge(resident_user)
+    disease = db_session.merge(core_test_data["glaucoma"])
+    lab = db_session.merge(core_test_data["lab_unit"])
+    for suffix in ("A", "B"):
+        encounter = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=lab.id,
+            patient_id=f"WORKBENCH-RACE-{suffix}",
+        )
+        db_session.add(GradingTask(
+            patient_encounter_id=encounter.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            grading_target_level="encounter",
+            task_source="workbench_test",
+            state="pending",
+        ))
+    db_session.flush()
+
+    winner, _ = acquire_next(
+        db_session,
+        user_id=user.id,
+        disease_id=disease.id,
+        role_slot="resident",
+        lab_unit_id=lab.id,
+    )
+    # Simulate the loser having run its pre-check before the winner committed.
+    monkeypatch.setattr(acquisition_module, "_assert_no_active_session", lambda *a, **k: None)
+
+    with pytest.raises(ActiveSessionExists) as exc_info:
+        acquire_next(
+            db_session,
+            user_id=user.id,
+            disease_id=disease.id,
+            role_slot="resident",
+            lab_unit_id=lab.id,
+        )
+
+    assert exc_info.value.details["session_uuid"] == winner.lease.session_uuid
+    active = db_session.query(GradingWorkbenchSession).filter_by(
+        user_id=user.id, role_slot="resident", status="active"
+    ).all()
+    assert [s.uuid for s in active] == [winner.lease.session_uuid]

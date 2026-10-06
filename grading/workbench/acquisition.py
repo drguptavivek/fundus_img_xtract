@@ -211,7 +211,13 @@ def acquire_linked_followup(
 
 def _assert_no_active_session(db, *, user_id, role_slot):
     expire_stale(db)
-    existing = (
+    existing = _active_session(db, user_id=user_id, role_slot=role_slot)
+    if existing is not None:
+        raise _active_session_exists(existing)
+
+
+def _active_session(db, *, user_id, role_slot):
+    return (
         db.query(GradingWorkbenchSession)
         .filter(
             GradingWorkbenchSession.user_id == user_id,
@@ -221,11 +227,13 @@ def _assert_no_active_session(db, *, user_id, role_slot):
         .with_for_update()
         .first()
     )
-    if existing is not None:
-        raise ActiveSessionExists(
-            "Resume or release the active grading session before acquiring another.",
-            details={"session_uuid": existing.uuid},
-        )
+
+
+def _active_session_exists(existing):
+    return ActiveSessionExists(
+        "Resume or release the active grading session before acquiring another.",
+        details={"session_uuid": existing.uuid},
+    )
 
 
 def _lease_candidate(
@@ -272,8 +280,19 @@ def _lease_candidate(
         idle_expires_at=idle_expires_at,
         absolute_expires_at=absolute_expires_at,
     )
-    db.add(session)
-    db.flush()
+    # The FOR UPDATE in _assert_no_active_session locks nothing when no active
+    # session exists yet, so a concurrent acquire (double-click, second tab) can
+    # race to this INSERT. The savepoint keeps the transaction usable so the
+    # loser resumes the winner's session instead of a 500.
+    try:
+        with db.begin_nested():
+            db.add(session)
+            db.flush()
+    except IntegrityError as exc:
+        existing = _active_session(db, user_id=user_id, role_slot=effective_slot)
+        if existing is None:
+            raise
+        raise _active_session_exists(existing) from exc
     package_editable_ids = (
         {
             item.id

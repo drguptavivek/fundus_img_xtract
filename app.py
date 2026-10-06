@@ -457,7 +457,7 @@ def _register_request_timing(
 
         timing_until = app.config.get("REQUEST_TIMING_LOG_UNTIL")
         if timing_until is not None and utcnow() < timing_until:
-            user_id = getattr(current_user, "id", None)
+            user_id = _current_user_id_for_log(current_user)
             request_timing_logger.info(
                 "%s %s %s %s duration=%sms bytes=%s user=%s endpoint=%s",
                 sanitize_log_value(client_ip),
@@ -486,6 +486,21 @@ def _register_request_timing(
             )
 
         return response
+
+
+def _current_user_id_for_log(user_proxy):
+    """Return the current user's id without triggering a lazy DB refresh.
+
+    A login that commits after ``login_user()`` leaves an expired, detached
+    User behind; reading ``.id`` on it raises DetachedInstanceError.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    user = user_proxy._get_current_object()
+    state = sa_inspect(user, raiseerr=False)
+    if state is not None:
+        return state.identity[0] if state.identity else None
+    return getattr(user, "id", None)
 
 
 def _register_response_headers(app: Flask) -> None:

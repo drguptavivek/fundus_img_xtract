@@ -47,3 +47,36 @@ def test_parse_utc_instant():
     assert _parse_utc_instant("") is None
     assert _parse_utc_instant(None) is None
     assert _parse_utc_instant("not-a-date") is None
+
+
+def test_user_id_read_from_expired_detached_user_without_refresh():
+    from sqlalchemy import Column, Integer, create_engine
+    from sqlalchemy.orm import DeclarativeBase, Session
+    from werkzeug.local import LocalProxy
+
+    from app import _current_user_id_for_log
+
+    class Base(DeclarativeBase):
+        pass
+
+    class Person(Base):
+        __tablename__ = "person"
+        id = Column(Integer, primary_key=True)
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        person = Person(id=7)
+        db.add(person)
+        db.commit()  # expires every attribute, as transaction_scope does
+
+    assert _current_user_id_for_log(LocalProxy(lambda: person)) == 7
+
+
+def test_user_id_is_none_for_anonymous_user():
+    from flask_login import AnonymousUserMixin
+    from werkzeug.local import LocalProxy
+
+    from app import _current_user_id_for_log
+
+    assert _current_user_id_for_log(LocalProxy(lambda: AnonymousUserMixin())) is None

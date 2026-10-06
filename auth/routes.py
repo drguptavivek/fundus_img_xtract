@@ -460,7 +460,9 @@ def _complete_web_login(user, *, username: str, ip: str):
     regenerate_session = getattr(current_app.session_interface, "regenerate", None)
     if callable(regenerate_session):
         regenerate_session(session)
-    login_user(user)
+    # The caller's session commits/closes after this, expiring ``user``; give
+    # Flask-Login the same detached, eager-loaded copy the user_loader returns.
+    login_user(load_user(str(user.id)) or user)
     session.permanent = True
     session["last_active"] = int(time.time())
     session.modified = True

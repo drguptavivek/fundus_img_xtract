@@ -2,26 +2,34 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from typing import NamedTuple
 
-from sqlalchemy import and_, case, exists, literal, or_, select
-from sqlalchemy.orm import Session, aliased, selectinload
+from sqlalchemy import and_, case, distinct, exists, func, literal, or_, select, union_all
+from sqlalchemy.dialects.postgresql import aggregate_order_by, array_agg
+from sqlalchemy.orm import Session, aliased
 
 from grading.workbench.package_workflow import reconcile_active_packages
-from grading_allocation.constants import AllocationScope
+from grading_allocation.constants import (
+    AllocationCapacity,
+    AllocationScope,
+    capacity_for_role_slot,
+)
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectEncounterSetQueueDTO,
     ProjectGradingTargetDTO,
     TargetIdentity,
 )
-from grading_allocation.eligibility import eligible_project_task_contexts
+from grading_allocation.eligibility import (
+    _current_user_eligibility_snapshot,
+    _role_names_have_capacity,
+)
 from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.targets import derive_project_targets
 from models import (
     Disease,
     EncounterSetGradingPackage,
-    EncounterSetImage,
+    Grade,
     GradingTask,
     PatientEncounters,
     Project,
@@ -35,6 +43,12 @@ _SLOT_STATES = {
     "arbitrator": "arbitration",
 }
 _SLOT_ORDER = {slot: index for index, slot in enumerate(_SLOT_STATES)}
+# A user's own grade in these slots bars them from the keyed slot.
+_CONFLICTING_SLOTS = {
+    "resident": ("resident2",),
+    "resident2": ("resident",),
+    "arbitrator": ("resident", "resident2"),
+}
 
 
 def list_project_encounter_set_queues(
@@ -49,7 +63,59 @@ def list_project_encounter_set_queues(
     it when the caller has already reconciled in this request - the read is
     cacheable, but the reconciliation is a write that advances packages past
     their post-Resident2 waiting period and must not be skipped.
+
+    Eligibility, tracker and conflicting-grade exclusion and the per-slot
+    counts are computed in one grouped SQL statement, so no task rows are
+    loaded into Python.
     """
+    projects = _allocated_projects(db, user_id=user_id)
+    if not projects:
+        return ()
+
+    if reconcile:
+        reconcile_active_packages(db)
+
+    snapshot = _current_user_eligibility_snapshot(db, user_id=user_id)
+    if snapshot is None or not _role_names_have_capacity(
+        snapshot[0], AllocationCapacity.RESIDENT
+    ):
+        return ()
+
+    targets_by_project: dict[int, dict[TargetIdentity, ProjectGradingTargetDTO]] = {}
+    grouped: dict[tuple[int, TargetIdentity], dict[str, object]] = {}
+    for row in db.execute(_eligible_slot_counts(user_id=user_id, project_ids=projects)):
+        identity = TargetIdentity(
+            AllocationScope(row.scope),
+            disease_id=row.target_disease_id,
+            encounter_set_type_id=row.target_encounter_set_type_id,
+        )
+        item = grouped.get((row.project_id, identity))
+        if item is None:
+            if row.project_id not in targets_by_project:
+                targets_by_project[row.project_id] = {
+                    target.identity: target
+                    for target in derive_project_targets(db, row.project_id)[0]
+                }
+            target = targets_by_project[row.project_id].get(identity)
+            if target is None:
+                target = _frozen_package_target(
+                    db,
+                    db.get(EncounterSetGradingPackage, row.first_package_id),
+                    identity,
+                )
+            item = grouped[(row.project_id, identity)] = {"target": target, "slots": {}}
+        item["slots"][row.slot] = EncounterSetQueueSlotDTO(
+            slot=row.slot,
+            package_count=row.package_count,
+            task_count=row.task_count,
+            first_package_uuid=row.first_package_uuid,
+        )
+
+    return _queue_dtos(projects, grouped)
+
+
+def _allocated_projects(db: Session, *, user_id: int) -> dict[int, Project]:
+    """Active projects where the user holds an active allocation in an active lab."""
     project_rows = db.execute(
         select(Project)
         .join(ProjectGraderAllocation, ProjectGraderAllocation.project_id == Project.id)
@@ -69,116 +135,96 @@ def list_project_encounter_set_queues(
         .distinct()
         .order_by(Project.title, Project.id)
     ).scalars().all()
-    projects = {project.id: project for project in project_rows}
-    if not projects:
-        return ()
+    return {project.id: project for project in project_rows}
 
-    if reconcile:
-        reconcile_active_packages(db)
 
-    tasks = (
-        db.execute(
-            select(GradingTask)
-            .join(
-                EncounterSetGradingPackage,
-                EncounterSetGradingPackage.id == GradingTask.encounter_set_package_id,
+def _eligible_slot_counts(*, user_id: int, project_ids):
+    """Per (project, target, slot): package/task counts and first package.
+
+    One SELECT per slot, unioned, then grouped. Eligibility is
+    ``exact_allocation_predicate`` (the workbench queue's SQL mirror of
+    ``grading_allocation.resolver``) plus the tracker and conflicting-grade
+    exclusions of ``eligible_project_task_contexts``. "First" package is the
+    package of the oldest eligible task, matching the former Python walk.
+    """
+    per_slot = []
+    for slot, state in _SLOT_STATES.items():
+        package = aliased(EncounterSetGradingPackage)
+        encounter = aliased(PatientEncounters)
+        exprs = _allocation_target_exprs(GradingTask, package)
+        tracker = select(TaskTracker.id).where(
+            TaskTracker.task_id == GradingTask.id,
+            TaskTracker.role_slot == slot,
+        )
+        conflicting_grade = select(Grade.id).where(
+            Grade.task_id == GradingTask.id,
+            Grade.grader_user_id == user_id,
+            Grade.role_slot.in_(_CONFLICTING_SLOTS[slot]),
+        )
+        per_slot.append(
+            select(
+                literal(slot).label("slot"),
+                encounter.project_id.label("project_id"),
+                exprs.scope.label("scope"),
+                exprs.disease_id.label("target_disease_id"),
+                exprs.encounter_set_type_id.label("target_encounter_set_type_id"),
+                package.id.label("package_id"),
+                package.uuid.label("package_uuid"),
+                GradingTask.id.label("task_id"),
+                GradingTask.created_at.label("created_at"),
             )
-            .join(
-                PatientEncounters,
-                PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
-            )
-            .where(PatientEncounters.project_id.in_(projects))
-            .where(GradingTask.state.in_(tuple(_SLOT_STATES.values())))
-            # Load only what allocation resolution reads. Every task's grades
-            # and every package's task list were also eager-loaded here, and
-            # hydrating them for ~9k tasks cost ~3 s per dashboard load; the
-            # user's own grades come from one query in the eligibility check
-            # and package.tasks is only needed by the rare frozen-target path.
-            .options(
-                selectinload(GradingTask.patient_encounter),
-                selectinload(GradingTask.encounter_set_image).selectinload(
-                    EncounterSetImage.patient_encounter
+            .select_from(GradingTask)
+            .join(package, package.id == GradingTask.encounter_set_package_id)
+            .join(encounter, encounter.id == package.patient_encounter_id)
+            .where(
+                encounter.project_id.in_(list(project_ids)),
+                GradingTask.state == state,
+                exact_allocation_predicate(
+                    GradingTask,
+                    package,
+                    user_id=user_id,
+                    capacity=capacity_for_role_slot(slot).value,
                 ),
-                selectinload(GradingTask.encounter_set_package),
+                ~exists(tracker),
+                ~exists(conflicting_grade),
             )
-            .order_by(GradingTask.created_at, GradingTask.id)
         )
-        .scalars()
-        .all()
+    rows = union_all(*per_slot).subquery()
+    oldest_first = (rows.c.created_at, rows.c.task_id)
+    return select(
+        rows.c.project_id,
+        rows.c.scope,
+        rows.c.target_disease_id,
+        rows.c.target_encounter_set_type_id,
+        rows.c.slot,
+        func.count(distinct(rows.c.package_id)).label("package_count"),
+        func.count(distinct(rows.c.task_id)).label("task_count"),
+        array_agg(aggregate_order_by(rows.c.package_uuid, *oldest_first))[1].label(
+            "first_package_uuid"
+        ),
+        array_agg(aggregate_order_by(rows.c.package_id, *oldest_first))[1].label(
+            "first_package_id"
+        ),
+    ).group_by(
+        rows.c.project_id,
+        rows.c.scope,
+        rows.c.target_disease_id,
+        rows.c.target_encounter_set_type_id,
+        rows.c.slot,
     )
-    if not tasks:
-        return ()
 
-    tracker_keys = set(
-        db.execute(
-            select(TaskTracker.task_id, TaskTracker.role_slot).where(
-                TaskTracker.task_id.in_([task.id for task in tasks])
-            )
-        ).all()
-    )
-    targets_by_project = {
-        project_id: {
-            target.identity: target
-            for target in derive_project_targets(db, project_id)[0]
-        }
-        for project_id in projects
-    }
-    task_slots = []
-    for task in tasks:
-        slot = next(
-            (
-                candidate_slot
-                for candidate_slot, state in _SLOT_STATES.items()
-                if state == task.state
-            ),
-            None,
-        )
-        if slot is not None and (task.id, slot) not in tracker_keys:
-            task_slots.append((task, slot))
-    eligible_contexts = eligible_project_task_contexts(
-        db,
-        user_id=user_id,
-        task_slots=task_slots,
-        project_ids=set(projects),
-    )
-    grouped: dict[tuple[int, object], dict[str, object]] = {}
 
-    for task, slot in task_slots:
-        context = eligible_contexts.get((task.id, slot))
-        if context is None:
-            continue
-        if context.project_id not in projects or context.target is None:
-            continue
-        target = targets_by_project[context.project_id].get(context.target)
-        if target is None:
-            target = _frozen_package_target(db, task.encounter_set_package, context.target)
-        package = task.encounter_set_package
-        if package is None:
-            continue
-        item = grouped.setdefault(
-            (context.project_id, context.target),
-            {
-                "target": target,
-                "packages": defaultdict(dict),
-                "tasks": defaultdict(set),
-            },
-        )
-        item["packages"][slot].setdefault(package.uuid, task.id)
-        item["tasks"][slot].add(task.id)
-
+def _queue_dtos(
+    projects: dict[int, Project],
+    grouped: dict[tuple[int, TargetIdentity], dict[str, object]],
+) -> tuple[ProjectEncounterSetQueueDTO, ...]:
     queues: list[ProjectEncounterSetQueueDTO] = []
     for (project_id, target_identity), item in grouped.items():
         project = projects[project_id]
         target = item["target"]
         slots = tuple(
-            EncounterSetQueueSlotDTO(
-                slot=slot,
-                package_count=len(item["packages"][slot]),
-                task_count=len(item["tasks"][slot]),
-                first_package_uuid=next(iter(item["packages"][slot])),
-            )
-            for slot in sorted(item["packages"], key=_SLOT_ORDER.get)
-            if item["packages"][slot]
+            item["slots"][slot]
+            for slot in sorted(item["slots"], key=_SLOT_ORDER.get)
         )
         if slots:
             queues.append(
@@ -330,6 +376,47 @@ def exclude_unallocated_project_tasks(
     return query.filter(~exists(unallocated))
 
 
+class _TargetExprs(NamedTuple):
+    scope: object
+    disease_id: object
+    encounter_set_type_id: object
+    resolvable: object
+
+
+def _allocation_target_exprs(task_entity, package) -> _TargetExprs:
+    """SQL form of ``resolver.resolve_task_allocation_context``'s target."""
+    is_image_task = or_(
+        task_entity.encounter_file_id.isnot(None),
+        task_entity.direct_image_upload_id.isnot(None),
+    )
+    is_unified = package.grading_mode == "unified"
+    return _TargetExprs(
+        scope=case(
+            (is_image_task, literal(AllocationScope.DISEASE_IMAGE.value)),
+            (is_unified, literal(AllocationScope.ENCOUNTER_SET_UNIFIED.value)),
+            else_=literal(AllocationScope.DISEASE_ENCOUNTER.value),
+        ),
+        disease_id=case(
+            (is_image_task, task_entity.disease_id),
+            (is_unified, literal(None)),
+            else_=package.root_scope_disease_id,
+        ),
+        encounter_set_type_id=case(
+            (is_image_task, literal(None)),
+            else_=package.encounter_set_type_id,
+        ),
+        resolvable=or_(
+            is_image_task,
+            and_(is_unified, package.encounter_set_type_id.isnot(None)),
+            and_(
+                ~is_unified,
+                package.encounter_set_type_id.isnot(None),
+                package.root_scope_disease_id.isnot(None),
+            ),
+        ),
+    )
+
+
 def exact_allocation_predicate(task_entity, package, *, user_id: int, capacity: str):
     """SQL form of the enforced-project half of ``is_user_eligible_for_task``.
 
@@ -342,31 +429,10 @@ def exact_allocation_predicate(task_entity, package, *, user_id: int, capacity: 
     disease, and such a task is never eligible. ``target_resolvable`` below is
     that same rule, so the two cannot diverge into granting access.
     """
-    is_image_task = or_(
-        task_entity.encounter_file_id.isnot(None),
-        task_entity.direct_image_upload_id.isnot(None),
-    )
-    is_unified = package.grading_mode == "unified"
-
-    scope_expr = case(
-        (is_image_task, literal(AllocationScope.DISEASE_IMAGE.value)),
-        (is_unified, literal(AllocationScope.ENCOUNTER_SET_UNIFIED.value)),
-        else_=literal(AllocationScope.DISEASE_ENCOUNTER.value),
-    )
-    target_disease_expr = case(
-        (is_image_task, task_entity.disease_id),
-        (is_unified, literal(None)),
-        else_=package.root_scope_disease_id,
-    )
-    target_resolvable = or_(
-        is_image_task,
-        and_(is_unified, package.encounter_set_type_id.isnot(None)),
-        and_(
-            ~is_unified,
-            package.encounter_set_type_id.isnot(None),
-            package.root_scope_disease_id.isnot(None),
-        ),
-    )
+    exprs = _allocation_target_exprs(task_entity, package)
+    scope_expr = exprs.scope
+    target_disease_expr = exprs.disease_id
+    target_resolvable = exprs.resolvable
 
     allocation_match = select(ProjectGraderAllocation.id).where(
         ProjectGraderAllocation.user_id == user_id,

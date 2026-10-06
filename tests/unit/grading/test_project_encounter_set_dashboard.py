@@ -52,38 +52,40 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
         ),
     )
     with app.test_request_context("/grading/"):
-        body = render_template(
+        page = render_template(
             "grading/index.html",
             v="test",
-            project_encounter_set_queues=[queue.to_dict()],
             active_workbench={"session_uuid": "active-workbench-uuid"},
-            is_resident=False,
-            is_resident2=False,
-            user_eligibility={},
+            refresh=False,
+            oob=False,
+        )
+        body = render_template(
+            "grading/_project_encounter_set_queues.html",
+            project_encounter_set_queues=[queue.to_dict()],
+        )
+        eligibility = render_template(
+            "grading/_eligibility_panel.html",
             grading_eligibility={"non_project": [], "project": []},
-            history={
-                "selected_date": "2026-08-10",
-                "used_latest_fallback": False,
-                "history_type": "all",
-                "disease_id": None,
-                "available_diseases": [],
-                "trends": [],
-                "items": [],
-                "total_cards": 0,
-                "total_tasks": 0,
-                "total_images": 0,
-                "page": 1,
-                "total_pages": 1,
-            },
-            my_prev_url=None,
-            my_next_url=None,
-            page_prev_url=None,
-            page_next_url=None,
         )
 
-    assert "Project EncounterSet Grading" in body
-    assert "Resume grading" in body
-    assert "/grading/workbench/active-workbench-uuid" in body
+    # The page paints shells only; queues load after first paint and
+    # eligibility/history on demand, each from its own fragment endpoint.
+    assert "Project EncounterSet Grading" in page
+    assert "Resume grading" in page
+    assert "/grading/workbench/active-workbench-uuid" in page
+    assert "Legacy &amp; Image Grading" in page
+    assert 'id="disease-queues-shell"' in page
+    assert "Loading your grading queues" in page
+    assert 'id="project-encounter-set-queues"' in page
+    assert "/grading/fragments/project-queues" in page
+    assert "/grading/fragments/eligibility" in page
+    assert 'id="show-grading-eligibility"' in page
+    assert 'id="show-grading-history"' in page
+    assert 'click from:#show-grading-history' in page
+    assert page.index("My Grading Eligibility") < page.index("My Grading History")
+    assert "<h3>Pending</h3>" not in page
+    assert "<h3>My Gradings</h3>" not in page
+
     assert "Integrated DR Glaucoma Screening" in body
     assert "ICMR-VG" not in body
     assert "Glaucoma / EncounterSet" in body
@@ -95,20 +97,11 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
     assert 'data-resident-slot="resident2"' in body
     assert "/grading/encounter_set_package/resident2-package-uuid/resident2" in body
     assert "/grading/encounter_set_package/resident-package-uuid/resident" not in body
-    assert "Legacy &amp; Image Grading" in body
-    assert "My Grading Eligibility" in body
-    assert 'data-bs-target="#nonProjectEligibility"' in body
-    assert 'data-bs-target="#projectEligibility"' in body
-    assert 'class="accordion-button collapsed' in body
-    assert body.index("My Grading Eligibility") < body.index("My Grading History")
-    # The pending/completed KPI tiles were removed from this page; per-disease
-    # queue cards now hydrate themselves after the initial render instead.
-    assert "<h3>Pending</h3>" not in body
-    assert "<h3>My Gradings</h3>" not in body
-    # The Legacy panel is fetched from its own endpoint, so the page ships a
-    # loading shell rather than the cards themselves.
-    assert 'id="disease-queues-shell"' in body
-    assert "Loading your grading queues" in body
+
+    assert "My Grading Eligibility" in eligibility
+    assert 'data-bs-target="#nonProjectEligibility"' in eligibility
+    assert 'data-bs-target="#projectEligibility"' in eligibility
+    assert 'class="accordion-button collapsed' in eligibility
 
 
 def test_project_encounter_set_ui_falls_back_to_internal_resident_slot(app):

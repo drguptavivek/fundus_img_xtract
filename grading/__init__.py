@@ -46,6 +46,7 @@ def configure_blueprint() -> Blueprint:
         index,
         disease_queue_fragment,
         disease_queues_fragment,
+        eligibility_fragment,
         project_queues_fragment,
         refresh_queues_trigger,
     )
@@ -68,6 +69,11 @@ def configure_blueprint() -> Blueprint:
     bp.add_url_rule(
         "/fragments/disease-queues",
         view_func=disease_queues_fragment,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/fragments/eligibility",
+        view_func=eligibility_fragment,
         methods=["GET"],
     )
     bp.add_url_rule(

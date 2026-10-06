@@ -127,7 +127,13 @@
     </a>
   </div>
 
-  {% include "grading/_project_encounter_set_queues.html" %}
+  {# Same id and swap as the loaded partial, so its refresh contract holds. #}
+  <div id="project-encounter-set-queues"
+       hx-get="{{ url_for('grading.project_queues_fragment') }}"
+       hx-trigger="load"
+       hx-swap="outerHTML">
+    {% include "grading/_queue_loading.html" %}
+  </div>
 </section>
 
 <section aria-labelledby="legacy-image-grading-heading">
@@ -165,9 +171,40 @@
 </section>
 
 
-{% include "grading/_eligibility_panel.html" %}
+{# On demand: eligibility rarely changes and is not needed to start grading. #}
+<div id="gradingEligibilityPanel"
+     hx-get="{{ url_for('grading.eligibility_fragment') }}"
+     hx-trigger="click from:#show-grading-eligibility"
+     hx-indicator="#show-grading-eligibility"
+     hx-swap="outerHTML">
+  <div class="card shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <strong>My Grading Eligibility</strong>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="show-grading-eligibility">
+        <span class="htmx-indicator spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+        Show my grading eligibility
+      </button>
+    </div>
+  </div>
+</div>
 
-{% include "grading/_history_panel.html" %}
+{# On demand via the index route's HTMX branch. A URL that already carries
+   history filters/pagination (the panel pushes them) opens it straight away. #}
+<div id="gradingHistoryPanel"
+     hx-get="{{ url_for('grading.index', **request.args) }}"
+     hx-trigger="{{ 'load' if request.args else 'click from:#show-grading-history' }}"
+     hx-indicator="#show-grading-history"
+     hx-swap="outerHTML">
+  <div class="card card-aurora shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <strong>My Grading History</strong>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="show-grading-history">
+        <span class="htmx-indicator spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+        Show my grading history
+      </button>
+    </div>
+  </div>
+</div>
 
 
   

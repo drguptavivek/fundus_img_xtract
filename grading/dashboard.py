@@ -1,6 +1,5 @@
-from collections.abc import Mapping
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, url_for, flash
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, desc, distinct, func
@@ -16,7 +15,6 @@ from grading.queue_cards import (
     disease_queue_cards,
     project_encounter_set_cards,
 )
-from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
  
 def _build_history_panel_context(
@@ -74,108 +72,54 @@ def _build_history_panel_context(
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     with transaction_scope() as db:
-        page = request.args.get('p', default=1, type=int) or 1
-        page = max(1, page)
-        per_page = 12
-        filter_date = request.args.get('date', default=None, type=str)
-        history_type = request.args.get("history_type", default="all", type=str)
-        disease_id = request.args.get("disease_id", default=None, type=int)
-        try:
-            history_panel_context = _build_history_panel_context(
-                db,
-                user_id=getattr(current_user, 'id', None),
-                page=page,
-                per_page=per_page,
-                filter_date=filter_date,
-                history_type=history_type,
-                disease_id=disease_id,
-            )
-        except ValueError as exc:
-            flash(str(exc), "warning")
-            return redirect(url_for("grading.index"))
-
+        # The history panel sits below the fold: the full page paints a
+        # placeholder that fetches it through this same route over HTMX.
         if request.headers.get("HX-Request") == "true":
+            page = request.args.get('p', default=1, type=int) or 1
+            try:
+                history_panel_context = _build_history_panel_context(
+                    db,
+                    user_id=getattr(current_user, 'id', None),
+                    page=max(1, page),
+                    per_page=12,
+                    filter_date=request.args.get('date', default=None, type=str),
+                    history_type=request.args.get("history_type", default="all", type=str),
+                    disease_id=request.args.get("disease_id", default=None, type=int),
+                )
+            except ValueError as exc:
+                # A redirect here would make HTMX swap the whole page into the
+                # panel; fall back to the default view of the panel instead.
+                flash(str(exc), "warning")
+                history_panel_context = _build_history_panel_context(
+                    db,
+                    user_id=getattr(current_user, 'id', None),
+                    page=1,
+                    per_page=12,
+                    filter_date=None,
+                    history_type="all",
+                    disease_id=None,
+                )
             return render_template("grading/_history_panel.html", **history_panel_context)
 
-        # Get dual grading tasks for the current user, separated by disease
-        # and role (resident vs resident2) and arbitration tasks
-        
-        # Get user role to determine which tasks to show
-        # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
-        # Any user with role that allows them to grade (resident, ophthalmologist) can do resident grading
-        raw_user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
-        eligibility = grader_eligibility_dto(db, user_id=current_user.id)
-        user_eligibility: dict[str, dict[str, dict[str, list[str]]]] = {}
-        if isinstance(raw_user_eligibility, Mapping):
-            for hospital_name, lab_units in raw_user_eligibility.items():
-                normalized_lab_units: dict[str, dict[str, list[str]]] = {}
-                if not isinstance(lab_units, Mapping):
-                    continue
-                for lab_unit_name, diseases in lab_units.items():
-                    normalized_diseases: dict[str, list[str]] = {}
-                    if not isinstance(diseases, Mapping):
-                        continue
-                    for disease_name, roles in diseases.items():
-                        seen_roles: set[str] = set()
-                        display_roles: list[str] = []
-                        if isinstance(roles, (list, tuple, set)):
-                            iterable_roles = roles
-                        else:
-                            iterable_roles = [roles]
-                        for role in iterable_roles:
-                            if not isinstance(role, str):
-                                continue
-                            role_lower = role.lower()
-                            if role_lower in {"resident", "resident2"}:
-                                display_role = "Resident"
-                            else:
-                                display_role = role.capitalize() if role.islower() else role
-                            key = display_role.lower()
-                            if key not in seen_roles:
-                                seen_roles.add(key)
-                                display_roles.append(display_role)
-                        normalized_diseases[disease_name] = display_roles
-                    normalized_lab_units[lab_unit_name] = normalized_diseases
-                user_eligibility[hospital_name] = normalized_lab_units
-        else:
-            user_eligibility = {}
-
-        # Check if user has any resident eligibility
-        has_resident_eligibility = False
-        for hospital_data in user_eligibility.values():
-            for lab_unit_data in hospital_data.values():
-                for diseases_roles in lab_unit_data.values():
-                    if 'Resident' in diseases_roles:
-                        has_resident_eligibility = True
-                        break
-                if has_resident_eligibility:
-                    break
-            if has_resident_eligibility:
-                break
-        
-        # is_resident means user has permission to do resident-level grading
-        is_resident = has_resident_eligibility and current_user.has_role('ophthalmologist', 'field_ophthalmologist')
-        is_resident2 = current_user.has_role('ophthalmologist', 'field_ophthalmologist')
-        
-        # Which queue cards exist is answered from role rows alone. Their
-        # contents are fetched per disease afterwards, so rendering this page
-        # no longer waits on a sweep of the whole pending queue.
-        project_encounter_set_queues = project_encounter_set_cards(
-            db, user_id=current_user.id
-        )
+        # Queue cards, eligibility and history are fetched as HTMX fragments
+        # (on load or on demand), so first paint only waits on this lookup.
         active_sessions = list_active_sessions(db, user_id=current_user.id)
         active_workbench = active_sessions[0] if active_sessions else None
     return render_template(
         "grading/index.html",
-        is_resident=is_resident,
-        is_resident2=is_resident2,
         refresh=False,
         oob=False,
-        user_eligibility=user_eligibility,
-        grading_eligibility=eligibility,
-        project_encounter_set_queues=project_encounter_set_queues,
         active_workbench=active_workbench,
-        **history_panel_context,
+    )
+
+
+@roles_required("ophthalmologist", "field_ophthalmologist")
+def eligibility_fragment():
+    """The My Grading Eligibility panel, fetched on demand from the dashboard."""
+    with transaction_scope() as db:
+        eligibility = grader_eligibility_dto(db, user_id=current_user.id)
+    return render_template(
+        "grading/_eligibility_panel.html", grading_eligibility=eligibility
     )
 
 

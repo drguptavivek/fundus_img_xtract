@@ -185,6 +185,7 @@ def encounter_rows(ctx: BuildContext) -> list[dict]:
     rows = []
     for encounter in encounters:
         pii = scope.allows_pii(encounter.lab_unit_id)
+        patient = (encounter.metadata_json or {}).get("patient") or {}
         rows.append({
             "encounter_uuid": encounter.uuid,
             "project_id": encounter.project_id,
@@ -201,6 +202,10 @@ def encounter_rows(ctx: BuildContext) -> list[dict]:
             "identifiers_included": pii,
             "patient_id": encounter.patient_id if pii else None,
             "patient_name": encounter.name if pii else None,
+            "sex": patient.get("sex"),
+            "patient_age_years": patient.get("patient_age_yrs"),
+            "date_of_birth": patient.get("patient_dob") if pii else None,
+            "mrn": patient.get("hospital_UHID") if pii else None,
             "remarks": encounter.remarks,
             "metadata": _json(_sanitize_encounter_metadata(encounter.metadata_json, pii=pii)),
         })

@@ -57,6 +57,10 @@ ENCOUNTERS = Table(
         C("identifiers_included", "BOOLEAN", "False when patient_id/patient_name were withheld."),
         C("patient_id", "VARCHAR", "Patient id; only with an identifiers grant."),
         C("patient_name", "VARCHAR", "Patient name; only with an identifiers grant."),
+        C("sex", "VARCHAR", "Patient sex (male | female | other), from the API or the ZIP/PDF OCR import."),
+        C("patient_age_years", "INTEGER", "Patient age in years at capture, from the API or the ZIP/PDF OCR import."),
+        C("date_of_birth", "VARCHAR", "Date of birth, when the source gave one (API); only with an identifiers grant."),
+        C("mrn", "VARCHAR", "Hospital MRN / UHID; only with an identifiers grant."),
         C("remarks", "VARCHAR", "Free-text encounter remarks, exported as entered."),
         C("metadata", "JSON", "Project-defined and source metadata. Identifier keys removed without an identifiers "
                               "grant. May still contain the verification block (see verification tables)."),

@@ -55,6 +55,8 @@ def format_user_datetime(value: Optional[datetime | date], fmt: str = "%Y-%m-%d 
         return ""
 
     try:
+        if isinstance(value, str):  # ISO strings from JSON/status payloads
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if isinstance(value, date) and not isinstance(value, datetime):
             value = datetime.combine(value, time.min, tzinfo=timezone.utc)
 

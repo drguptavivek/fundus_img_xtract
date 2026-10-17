@@ -23,7 +23,10 @@ Layout under --dest:
         <image-uuid>.jsonl              image, tasks, every grader's grade +
                                         annotations, and a COCO record
     data/direct_images/<YYYY-MM>/<image-uuid>.<ext> (+ .jsonl)
-    exports/<YYYYmmdd_HHMMSS>/encounters.csv, images.csv, gradings.csv, report.json
+    exports/<YYYYmmdd_HHMMSS>/encounters.csv, images.csv, gradings.csv, report.json,
+        and the server-built files of the latest export: project_encounterset_export.xlsx and
+        project_<code>.duckdb (the complete staged package: every table, a manifest and a structure
+        guide; limited to your grant's labs, identifiers only if the grant includes them)
     .sync/config.json (0600), state.json, sync.lock, sync.log
 """
 from __future__ import annotations
@@ -351,6 +354,37 @@ def _safe(value: str) -> str:
     return "".join(c for c in str(value) if c.isalnum() or c in "-_") or "x"
 
 
+def _encounter_payload_json(encounter: dict) -> str:
+    """One CSV cell: project/IITK/Remidio metadata plus DR/AMD/Glaucoma OCR and AI reports."""
+    return json.dumps(
+        {"metadata": encounter.get("metadata"), "ocr_reports": encounter.get("ocr_reports")},
+        ensure_ascii=False, separators=(",", ":"),
+    )
+
+
+def _remedio_row(encounter: dict) -> dict:
+    """Latest OCR-extracted DR / AMD / Glaucoma result and Remidio AI fields for one encounter."""
+    reports = encounter.get("ocr_reports") or {}
+    dr = (reports.get("dr") or [{}])[-1]
+    amd = (reports.get("amd") or [{}])[-1]
+    gl = (reports.get("glaucoma") or [{}])[-1]
+    ai: dict = {}
+    for att in reports.get("attachments") or []:
+        ai.update({k: v for k, v in att.items() if v not in (None, "")})
+    return {
+        "encounter_uuid": encounter["uuid"],
+        "dr_result": dr.get("result"), "dr_qualitative_result": dr.get("qualitative_result"),
+        "amd_result": amd.get("result"), "amd_qualitative_result": amd.get("qualitative_result"),
+        "glaucoma_result": gl.get("result"), "glaucoma_qualitative_result": gl.get("qualitative_result"),
+        "glaucoma_vcdr_right": gl.get("vcdr_right"), "glaucoma_vcdr_left": gl.get("vcdr_left"),
+        "glaucoma_vcdr_right_num": gl.get("vcdr_right_num"), "glaucoma_vcdr_left_num": gl.get("vcdr_left_num"),
+        **{k: ai.get(k) for k in (
+            "refer_required", "left_eye_diagnosis", "right_eye_diagnosis", "ai_suggested_refer",
+            "gma_suggested_refer", "gma_patient_level_result", "gma_left_eye_cdr", "gma_right_eye_cdr",
+        )},
+    }
+
+
 def encounter_folder(paths: Paths, encounter: dict) -> Path:
     capture = (encounter.get("capture_date") or "")[:10]
     month = capture[:7] if len(capture) >= 7 else "undated"
@@ -397,6 +431,7 @@ class SyncRun:
         self.stats = {"encounters": 0, "images": 0, "downloaded": 0, "bytes": 0, "sidecars": 0,
                       "failed": 0, "md5_mismatch": 0, "missing_on_server": 0}
         self.errors: list[str] = []
+        self.remedio_rows: list[dict] = []
 
     # -- walking ------------------------------------------------------------
 
@@ -443,6 +478,7 @@ class SyncRun:
                 "folder": rel_folder, "fingerprint": known.get("fingerprint"),
                 "pending_fingerprint": encounter.get("sidecar_fingerprint"),
             }
+            self.remedio_rows.append(_remedio_row(encounter))
             encounter_rows.append({
                 "encounter_uuid": encounter["uuid"],
                 "lab_unit_id": encounter.get("lab_unit_id"),
@@ -457,6 +493,7 @@ class SyncRun:
                 "patient_id": encounter.get("patient_id") or "",
                 "patient_name": encounter.get("patient_name") or "",
                 "image_count": len(encounter.get("images", [])),
+                "payload_json": _encounter_payload_json(encounter),
                 "local_folder": rel_folder,
             })
             for image in encounter.get("images", []):
@@ -576,6 +613,7 @@ class SyncRun:
                 "folder": rel_folder, "fingerprint": known.get("fingerprint"),
                 "pending_fingerprint": encounter.get("sidecar_fingerprint"),
             }
+            self.remedio_rows.append(_remedio_row(encounter))
             encounter_rows.append({
                 "encounter_uuid": encounter["uuid"],
                 "lab_unit_id": encounter.get("lab_unit_id"),
@@ -590,6 +628,7 @@ class SyncRun:
                 "patient_id": encounter.get("patient_id") or "",
                 "patient_name": encounter.get("patient_name") or "",
                 "image_count": len(encounter.get("images", [])),
+                "payload_json": _encounter_payload_json(encounter),
                 "local_folder": rel_folder,
             })
             for image in encounter.get("images", []):
@@ -830,7 +869,8 @@ class SyncRun:
         stamp = started.strftime("%Y%m%d_%H%M%S")
         export_dir = self.paths.exports / stamp
         export_dir.mkdir(parents=True, exist_ok=True)
-        for name, rows in (("encounters", encounters), ("images", images), ("gradings", self._grading_rows())):
+        for name, rows in (("encounters", encounters), ("images", images), ("gradings", self._grading_rows()),
+                            ("remedio_results", self.remedio_rows)):
             path = export_dir / f"{name}.csv"
             fields = list(rows[0].keys()) if rows else ["empty"]
             with path.open("w", encoding="utf-8", newline="") as handle:

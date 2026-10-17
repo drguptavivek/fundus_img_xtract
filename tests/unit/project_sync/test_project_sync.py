@@ -433,6 +433,25 @@ def test_sidecars_include_every_grader_with_annotations_and_coco(sync_on, db_ses
 # ---------------------------------------------------------------------------
 
 
+def test_encounters_carry_project_metadata_and_ocr_reports(sync_on, client, db_session, world):
+    from models import DiabeticRetinopathyReport
+
+    enc = world["enc_a1"]
+    enc.metadata_json = {"patient": {"patient_age_yrs": 61}, "encounter": {"mode_capture": "handheld"},
+                         "upstream_payload": {"mrn": "X"}}
+    db_session.add(DiabeticRetinopathyReport(patient_encounter_id=enc.id, result="R2", report_file_name="jane.pdf"))
+    db_session.flush()
+    _, credential = _approved_credential(db_session, world, world["dm"])
+    headers = {"Authorization": f"Bearer {credential}"}
+    item = client.get("/api/sync/v1/encounters?limit=10", headers=headers).get_json()["items"][0]
+    assert item["metadata"] == {"patient": {"patient_age_yrs": 61}, "encounter": {"mode_capture": "handheld"}}
+    dr = item["ocr_reports"]["dr"]
+    assert [r["result"] for r in dr] == ["R2"] and dr[0]["report_file_name"] is None
+    sidecar = client.post("/api/sync/v1/sidecars", json={"encounters": [enc.uuid]}, headers=headers).get_json()
+    records = sidecar["encounters"][enc.uuid]
+    assert any(r["record_type"] == "ocr_report" and r["disease"] == "DR" for r in records)
+
+
 def test_sync_api_rejects_missing_or_bad_credentials(sync_on, client, world):
     assert client.get("/api/sync/v1/whoami").status_code == 401
     response = client.get("/api/sync/v1/whoami", headers={"Authorization": "Bearer pds_wrong"})
@@ -581,3 +600,33 @@ def test_pages_render_for_requester_and_admin(sync_on, db_session, world, app):
     g.pop("_login_user", None)
     status = pi_client.get("/api/project-sync/status").get_json()
     assert status["enabled"] is True and status["eligible_projects"][0]["code"] == "SYNC_P"
+
+
+def test_sync_export_duckdb_follows_the_grants_scope_and_identifier_rights(sync_on, db_session, world, tmp_path):
+    duckdb = pytest.importorskip("duckdb")
+    from project_review.export_service import _write_sync_duckdb
+
+    _, credential = _approved_credential(db_session, world, world["dm"])
+    ctx = service.authenticate_credential(db_session, credential=credential, meta=META)
+    labs, pii_labs = service.grant_export_scope(
+        db_session, grant_uuid=ctx.grant_uuid, user_id=ctx.user_id, project_id=ctx.project_id
+    )
+    assert (labs, pii_labs) == (ctx.lab_unit_ids, ctx.pii_lab_unit_ids) and not pii_labs
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    _write_sync_duckdb(db_session, ctx.project_id, labs, pii_labs, plain)
+    con = duckdb.connect(str(plain / "project_SYNC_P.duckdb"), read_only=True)
+    assert con.execute("select patient_id, patient_name, identifiers_included, lab_unit_id from encounters").fetchall() == [
+        (None, None, False, world["lab_a1"].id)]  # the data manager's lab only, no identifiers
+
+    _, pi_credential = _approved_credential(db_session, world, world["pi"], include_pii=True)
+    pi_ctx = service.authenticate_credential(db_session, credential=pi_credential, meta=META)
+    pi_labs, pi_pii = service.grant_export_scope(
+        db_session, grant_uuid=pi_ctx.grant_uuid, user_id=pi_ctx.user_id, project_id=pi_ctx.project_id
+    )
+    assert pi_pii and pi_pii == pi_ctx.pii_lab_unit_ids
+    with_ids = tmp_path / "ids"
+    with_ids.mkdir()
+    _write_sync_duckdb(db_session, pi_ctx.project_id, pi_labs, pi_pii, with_ids)
+    con = duckdb.connect(str(with_ids / "project_SYNC_P.duckdb"), read_only=True)
+    assert ("PID-A1", True) in con.execute("select patient_id, identifiers_included from encounters").fetchall()

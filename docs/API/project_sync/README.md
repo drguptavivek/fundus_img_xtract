@@ -28,6 +28,7 @@ Audit: `sensitive_operations_audit.operation_type = 'project_data_sync'` with st
 - `PROJECT_SYNC_MIN_INTERVAL_MS` (default 250): gap the client leaves between requests (advertised in `/whoami`).
 - Per-IP rate limits on every endpoint; S3-stored media is a 307 to a presigned URL (no web worker time).
 - The Excel workbook is built on the Celery `exports` queue, never in a web worker; one active export per grant.
+- The same job also writes `project_<code>.duckdb`, the staged DuckDB package (see [project_export](../project_export/README.md)), limited to the grant's labs and with identifiers only when the grant includes them. It is skipped on servers where the DuckDB engine is not installed yet. The client downloads every file the job lists, so it arrives in `exports/<timestamp>/` with the workbook.
 
 ## Session API (web app, `api_bp`, cookie + CSRF `X-CSRFToken`)
 
@@ -59,7 +60,7 @@ Browser sessions are ignored; CSRF-exempt; all responses `Cache-Control: no-stor
 | GET | `/media/<uuid>?variant=original\|edited` | file bytes or `307` to presigned S3 URL (client must not forward the bearer) |
 | POST | `/exports` | `202 {export}` queues the project workbook; `409 export_in_progress` |
 | GET | `/exports/latest` | `{export: {job_token,status,files[],...} or null}` |
-| GET | `/exports/<job_token>/<filename>` | workbook download |
+| GET | `/exports/<job_token>/<filename>` | download of any file the export job listed (workbook, `project_<code>.duckdb`) |
 
 Image item: `uuid, kind (encounter_set_image|encounter_file|encounter_file_pdf|direct_image_upload), ext, eye_side, position, is_pii, has_edited, source_md5, created_at, sidecar_fingerprint`.
 
@@ -89,6 +90,6 @@ python3 project_sync_client.py sync --dest ./P1_mirror --interval 21600       # 
 python3 project_sync_client.py status --dest ./P1_mirror
 ```
 
-Layout: `data/encounters/<YYYY-MM>/<capture-date>_<encounter-uuid>/{encounter.jsonl, <uuid>.<ext>, <uuid>.edited.<ext>, <uuid>.jsonl}`, `data/direct_images/<YYYY-MM>/…`, `exports/<YYYYmmdd_HHMMSS>/{encounters.csv, images.csv, gradings.csv, project_encounterset_export.xlsx, report.json}`, `.sync/{config.json (0600), state.json, sync.log}`.
+Layout: `data/encounters/<YYYY-MM>/<capture-date>_<encounter-uuid>/{encounter.jsonl, <uuid>.<ext>, <uuid>.edited.<ext>, <uuid>.jsonl}`, `data/direct_images/<YYYY-MM>/…`, `exports/<YYYYmmdd_HHMMSS>/{encounters.csv, images.csv, gradings.csv, project_encounterset_export.xlsx, project_<code>.duckdb, report.json}`, `.sync/{config.json (0600), state.json, sync.log}`.
 
 The client never deletes local files, refuses plain `http` to non-local hosts, strips the bearer on storage redirects, writes atomically, resumes after interruption, moves folders if an encounter's capture date changes, and exits with code 3 when the credential is rejected (revoked/expired/role removed).

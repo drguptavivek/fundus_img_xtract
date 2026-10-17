@@ -26,13 +26,18 @@ from media.authorization import (
     resolve_media_source,
 )
 from models import (
+    AMDReport,
     Consensus,
+    DiabeticRetinopathyReport,
     DirectImageUpload,
     Disease,
     EncounterFile,
     EncounterFilePDF,
+    EncounterSetAttachment,
     EncounterSetGradingPackage,
     EncounterSetImage,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
     Grade,
     GradingTask,
     ImageMetadata,
@@ -401,6 +406,286 @@ def _coco_record(image_uuid: str, file_name: str, bundles: list[_TaskBundle], di
 # ---------------------------------------------------------------------------
 
 
+_PII_METADATA_EXACT_KEYS = frozenset(
+    {
+        "name",
+        "firstname",
+        "lastname",
+        "first_name",
+        "last_name",
+        "patient_name",
+        "mrn",
+        "uhid",
+        "hospital_uhid",
+        "patient_id",
+        "patientid",
+        "remidio_patient_id",
+        "remidio_exam_id",
+        "remidio_exam_row_id",
+        "remidio_image_id",
+        "remidio_image_local_id",
+        "remidio_image_exam_id",
+        "original_remidio_image_ids",
+        "dob",
+        "patient_dob",
+        "date_of_birth",
+        "dateofbirth",
+        "phone",
+        "mobile",
+        "email",
+        "address",
+        "remarks",
+        "clinician_uid",
+        "clinicianuid",
+        "reporting_doctor_id",
+        "reportingdoctorid",
+        "source_session_id",
+        "sessionid",
+    }
+)
+_PII_METADATA_SUBSTRINGS = (
+    "patient_name",
+    "file_name",
+    "filename",
+    "patient_folder",
+    "source_path",
+    "source_folder",
+)
+_INTERNAL_IMAGE_METADATA_KEYS = frozenset(
+    {
+        "remidio_image_raw_metadata",
+        "remidio_image_exif_metadata",
+        "upstream_payload",
+        "_stored_exists",
+    }
+)
+
+
+def _is_pii_metadata_key(key: str) -> bool:
+    lowered = str(key).strip().lower()
+    if "raw_metadata" in lowered or lowered.startswith("upstream_"):
+        return True
+    if lowered in _PII_METADATA_EXACT_KEYS:
+        return True
+    if lowered == "source_filename_hash":
+        return False
+    return any(marker in lowered for marker in _PII_METADATA_SUBSTRINGS)
+
+
+def _sanitize_metadata_dict(metadata: dict | None, *, pii: bool, drop_keys: frozenset[str] = frozenset()) -> dict | None:
+    if not isinstance(metadata, dict) or not metadata:
+        return None
+    if pii and not drop_keys:
+        return metadata
+    cleaned: dict = {}
+    for key, value in metadata.items():
+        if key in drop_keys:
+            continue
+        if not pii and _is_pii_metadata_key(key):
+            continue
+        if isinstance(value, dict):
+            nested = _sanitize_metadata_dict(value, pii=pii, drop_keys=drop_keys)
+            if nested:
+                cleaned[key] = nested
+        else:
+            cleaned[key] = value
+    return cleaned or None
+
+
+def _sanitize_encounter_metadata(metadata: dict | None, *, pii: bool) -> dict | None:
+    return _sanitize_metadata_dict(metadata, pii=pii)
+
+
+def _sanitize_image_metadata(metadata: dict | None, *, pii: bool) -> dict | None:
+    return _sanitize_metadata_dict(metadata, pii=pii, drop_keys=_INTERNAL_IMAGE_METADATA_KEYS)
+
+
+def _sanitize_attachment_ocr(ocr: dict | None, *, pii: bool) -> dict | None:
+    if not isinstance(ocr, dict) or not ocr:
+        return None
+    cleaned = dict(ocr)
+    if not pii:
+        cleaned["source_pdf_filename"] = None
+    for sub_key in ("dr_report", "amd_report", "glaucoma_report"):
+        sub = cleaned.get(sub_key)
+        if isinstance(sub, dict):
+            sub_copy = dict(sub)
+            if not pii:
+                sub_copy["report_file_name"] = None
+            cleaned[sub_key] = sub_copy
+    return cleaned
+
+
+def _load_encounter_ocr_reports(db, ctx: SyncContext, encounters: list[PatientEncounters]) -> dict[int, dict]:
+    """Load canonical DR/AMD/Glaucoma OCR rows and EncounterSetAttachment reports."""
+    by_id = {e.id: e for e in encounters}
+    ids = list(by_id)
+    if not ids:
+        return {}
+    dr_rows = db.execute(
+        select(DiabeticRetinopathyReport)
+        .where(DiabeticRetinopathyReport.patient_encounter_id.in_(ids))
+        .order_by(DiabeticRetinopathyReport.id)
+    ).scalars().all()
+    amd_rows = db.execute(
+        select(AMDReport)
+        .where(AMDReport.patient_encounter_id.in_(ids))
+        .order_by(AMDReport.id)
+    ).scalars().all()
+    gl_rows = db.execute(
+        select(GlaucomaReport)
+        .where(GlaucomaReport.patient_encounter_id.in_(ids))
+        .order_by(GlaucomaReport.id)
+    ).scalars().all()
+    gl_cleaned_rows = db.execute(
+        select(GlaucomaResultsCleaned)
+        .where(GlaucomaResultsCleaned.patient_encounter_id.in_(ids))
+        .order_by(GlaucomaResultsCleaned.id)
+    ).scalars().all()
+    att_rows = db.execute(
+        select(EncounterSetAttachment)
+        .where(EncounterSetAttachment.patient_encounter_id.in_(ids))
+        .order_by(EncounterSetAttachment.id)
+    ).scalars().all()
+
+    dr_by_enc: dict[int, list[DiabeticRetinopathyReport]] = defaultdict(list)
+    for row in dr_rows:
+        dr_by_enc[row.patient_encounter_id].append(row)
+    amd_by_enc: dict[int, list[AMDReport]] = defaultdict(list)
+    for row in amd_rows:
+        amd_by_enc[row.patient_encounter_id].append(row)
+    gl_by_enc: dict[int, list[GlaucomaReport]] = defaultdict(list)
+    for row in gl_rows:
+        gl_by_enc[row.patient_encounter_id].append(row)
+    gl_cleaned_by_enc: dict[int, list[GlaucomaResultsCleaned]] = defaultdict(list)
+    for row in gl_cleaned_rows:
+        gl_cleaned_by_enc[row.patient_encounter_id].append(row)
+    att_by_enc: dict[int, list[EncounterSetAttachment]] = defaultdict(list)
+    for row in att_rows:
+        if _child_in_project(row, ctx):
+            att_by_enc[row.patient_encounter_id].append(row)
+
+    reports_by_enc: dict[int, dict] = {}
+    for enc_id, encounter in by_id.items():
+        pii = ctx.allows_pii(encounter.lab_unit_id)
+        dr_list = [
+            {
+                "id": r.id,
+                "uuid": r.uuid,
+                "result": r.result,
+                "qualitative_result": r.qualitative_result,
+                "report_file_name": r.report_file_name if pii else None,
+            }
+            for r in dr_by_enc.get(enc_id, [])
+        ]
+        amd_list = [
+            {
+                "id": r.id,
+                "uuid": r.uuid,
+                "result": r.result,
+                "qualitative_result": r.qualitative_result,
+                "report_file_name": r.report_file_name if pii else None,
+            }
+            for r in amd_by_enc.get(enc_id, [])
+        ]
+        cleaned_For_enc = gl_cleaned_by_enc.get(enc_id, [])
+        cleaned_by_report_id = {c.glaucoma_report_id: c for c in cleaned_For_enc if c.glaucoma_report_id}
+        seen_cleaned_ids: set[int] = set()
+        gl_list = []
+        for r in gl_by_enc.get(enc_id, []):
+            c = cleaned_by_report_id.get(r.id)
+            if c is not None:
+                seen_cleaned_ids.add(c.id)
+            gl_list.append(
+                {
+                    "id": r.id,
+                    "uuid": r.uuid,
+                    "vcdr_right": r.vcdr_right,
+                    "vcdr_left": r.vcdr_left,
+                    "vcdr_right_num": c.vcdr_right_num if c else None,
+                    "vcdr_left_num": c.vcdr_left_num if c else None,
+                    "result": r.result,
+                    "qualitative_result": r.qualitative_result,
+                    "cleaned_id": c.id if c else None,
+                    "report_file_name": r.report_file_name if pii else None,
+                    "updated_at": _iso(c.updated_at) if c else None,
+                }
+            )
+        for c in cleaned_For_enc:
+            if c.id in seen_cleaned_ids:
+                continue
+            gl_list.append(
+                {
+                    "id": c.glaucoma_report_id,
+                    "uuid": c.report_uuid,
+                    "vcdr_right": c.original_vcdr_right,
+                    "vcdr_left": c.original_vcdr_left,
+                    "vcdr_right_num": c.vcdr_right_num,
+                    "vcdr_left_num": c.vcdr_left_num,
+                    "result": c.result,
+                    "qualitative_result": c.qualitative_result,
+                    "cleaned_id": c.id,
+                    "report_file_name": c.report_file_name if pii else None,
+                    "updated_at": _iso(c.updated_at),
+                }
+            )
+        attachments_list = []
+        for att in att_by_enc.get(enc_id, []):
+            meta = att.metadata_json if isinstance(att.metadata_json, dict) else {}
+            ocr = _sanitize_attachment_ocr(meta.get("ocr") if isinstance(meta.get("ocr"), dict) else None, pii=pii)
+            attachments_list.append(
+                {
+                    "attachment_id": att.id,
+                    "attachment_uuid": att.uuid,
+                    "asset_kind": att.asset_kind,
+                    "mime_type": att.mime_type,
+                    "report_type": meta.get("remidio_report_type") or meta.get("report_type") or meta.get("document_type"),
+                    "remidio_report_id": meta.get("remidio_report_id") if pii else None,
+                    "report_datetime": meta.get("remidio_report_datetime") or (ocr.get("source_report_datetime") if ocr else None),
+                    "camera_type": meta.get("camera_type"),
+                    "source_kind": meta.get("source_kind"),
+                    "refer_required": meta.get("refer_required"),
+                    "left_eye_diagnosis": meta.get("left_eye_diagnosis"),
+                    "left_eye_report_comments": meta.get("left_eye_report_comments"),
+                    "right_eye_diagnosis": meta.get("right_eye_diagnosis"),
+                    "right_eye_report_comments": meta.get("right_eye_report_comments"),
+                    "ai_confidence": meta.get("ai_confidence"),
+                    "ai_input_sufficient": meta.get("ai_input_sufficient"),
+                    "ai_quality_sufficient": meta.get("ai_quality_sufficient"),
+                    "ai_suggested_refer": meta.get("ai_suggested_refer"),
+                    "number_of_heatmap_images": meta.get("number_of_heatmap_images"),
+                    "gma_left_eye_cdr": meta.get("gma_left_eye_cdr"),
+                    "gma_right_eye_cdr": meta.get("gma_right_eye_cdr"),
+                    "gma_suggested_refer": meta.get("gma_suggested_refer"),
+                    "gma_patient_level_result": meta.get("gma_patient_level_result"),
+                    "filename": att.original_filename if pii else None,
+                    "ocr": ocr,
+                }
+            )
+        reports_by_enc[enc_id] = {
+            "dr": dr_list,
+            "amd": amd_list,
+            "glaucoma": gl_list,
+            "attachments": attachments_list,
+        }
+    return reports_by_enc
+
+
+def _ocr_sidecar_records(ocr_reports: dict | None) -> list[dict]:
+    if not isinstance(ocr_reports, dict):
+        return []
+    records: list[dict] = []
+    for item in ocr_reports.get("dr") or []:
+        records.append({"record_type": "ocr_report", "source": "dr_report", "disease": "DR", **item})
+    for item in ocr_reports.get("amd") or []:
+        records.append({"record_type": "ocr_report", "source": "amd_report", "disease": "AMD", **item})
+    for item in ocr_reports.get("glaucoma") or []:
+        records.append({"record_type": "ocr_report", "source": "glaucoma_report", "disease": "Glaucoma", **item})
+    for item in ocr_reports.get("attachments") or []:
+        records.append({"record_type": "ocr_report", "source": "attachment", **item})
+    return records
+
+
 def _encounter_scope(ctx: SyncContext):
     return (
         PatientEncounters.project_id == ctx.project_id,
@@ -412,7 +697,13 @@ def _child_in_project(row, ctx: SyncContext) -> bool:
     return getattr(row, "project_id", None) in (None, ctx.project_id)
 
 
-def _encounter_record(encounter: PatientEncounters, disease_names: dict, ctx: SyncContext) -> dict:
+def _encounter_record(
+    encounter: PatientEncounters,
+    disease_names: dict,
+    ctx: SyncContext,
+    *,
+    ocr_reports: dict | None = None,
+) -> dict:
     pii = ctx.allows_pii(encounter.lab_unit_id)
     return {
         "record_type": "encounter",
@@ -431,7 +722,8 @@ def _encounter_record(encounter: PatientEncounters, disease_names: dict, ctx: Sy
         "patient_id": encounter.patient_id if pii else None,
         "patient_name": encounter.name if pii else None,
         "remarks": encounter.remarks if pii else None,
-        "metadata": encounter.metadata_json if pii else None,
+        "metadata": _sanitize_encounter_metadata(encounter.metadata_json, pii=pii),
+        "ocr_reports": ocr_reports if ocr_reports is not None else {"dr": [], "amd": [], "glaucoma": [], "attachments": []},
     }
 
 
@@ -475,7 +767,15 @@ def _collect_encounter_media(db, ctx: SyncContext, encounters: list[PatientEncou
     return media
 
 
-def _media_item(kind: str, row, *, fingerprint: str | None) -> dict:
+def _first_non_empty(metadata: dict, *keys: str):
+    for key in keys:
+        value = metadata.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _media_item(kind: str, row, *, fingerprint: str | None, pii: bool = False) -> dict:
     if kind == KIND_ENCOUNTER_FILE:
         return {
             "uuid": row.uuid, "kind": kind, "ext": _ext(row.filename) or "jpg",
@@ -484,12 +784,21 @@ def _media_item(kind: str, row, *, fingerprint: str | None) -> dict:
             "created_at": None, "sidecar_fingerprint": fingerprint,
         }
     if kind == KIND_ENCOUNTER_SET_IMAGE:
+        raw_meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        eye_side = _first_non_empty(raw_meta, "laterality", "eye", "eye_side")
+        centering = _first_non_empty(raw_meta, "focus", "fundus_image_view", "fundus_field", "field", "image_segment", "centering")
+        gaze_position = _first_non_empty(raw_meta, "gaze_position", "strabismus_gaze_position", "gaze")
         return {
             "uuid": row.uuid, "kind": kind, "ext": _ext(row.original_filename) or "jpg",
-            "eye_side": None, "centering": None, "position": row.spatial_position,
+            "eye_side": eye_side, "centering": centering or gaze_position, "gaze_position": gaze_position,
+            "position": row.spatial_position,
             "is_pii": bool(row.is_pii), "has_edited": bool(row.edited_filename or row.s3_object_key_edited),
             "source_md5": row.file_hash, "created_at": _iso(row.created_at),
-            "is_not_gradable": row.is_not_gradable, "sidecar_fingerprint": fingerprint,
+            "is_reviewed": row.is_reviewed, "visible_to_grader": row.visible_to_grader,
+            "is_not_gradable": row.is_not_gradable,
+            "referral_needed_or_positive_image": row.referral_needed_or_positive_image,
+            "metadata": _sanitize_image_metadata(raw_meta, pii=pii),
+            "sidecar_fingerprint": fingerprint,
         }
     if kind == KIND_ENCOUNTER_FILE_PDF:
         return {
@@ -516,6 +825,7 @@ def list_encounters(db, ctx: SyncContext, *, after_id: int, limit: int) -> dict:
     ).scalars().all()
     disease_names = dict(db.execute(select(Disease.id, Disease.name)).all())
     media = _collect_encounter_media(db, ctx, encounters)
+    ocr_by_encounter = _load_encounter_ocr_reports(db, ctx, encounters)
     file_ids = [row.id for rows in media.values() for kind, row in rows if kind == KIND_ENCOUNTER_FILE]
     set_ids = [row.id for rows in media.values() for kind, row in rows if kind == KIND_ENCOUNTER_SET_IMAGE]
     bundles = _load_task_bundles(
@@ -531,15 +841,33 @@ def list_encounters(db, ctx: SyncContext, *, after_id: int, limit: int) -> dict:
             by_image[bundle.image_uuid].append(bundle)
     items = []
     for encounter in encounters:
-        record = _encounter_record(encounter, disease_names, ctx)
-        images = [
-            _media_item(kind, row, fingerprint=_fingerprint(by_image.get(row.uuid, []), extra=row.uuid))
-            for kind, row in media.get(encounter.id, [])
-        ]
+        pii = ctx.allows_pii(encounter.lab_unit_id)
+        ocr_reports = ocr_by_encounter.get(encounter.id, {"dr": [], "amd": [], "glaucoma": [], "attachments": []})
+        record = _encounter_record(encounter, disease_names, ctx, ocr_reports=ocr_reports)
+        images = []
+        for kind, row in media.get(encounter.id, []):
+            raw_item = _media_item(kind, row, fingerprint=None, pii=pii)
+            img_fp = _fingerprint(
+                by_image.get(row.uuid, []),
+                extra=[row.uuid, raw_item.get("metadata"), raw_item.get("is_not_gradable"), record.get("metadata"), ocr_reports],
+            )
+            raw_item["sidecar_fingerprint"] = img_fp
+            images.append(raw_item)
         record.pop("record_type")
         record["images"] = images
         record["sidecar_fingerprint"] = _fingerprint(
-            by_encounter.get(encounter.id, []), extra=[record.get("capture_date"), record.get("encounter_verified_status"), len(images)]
+            by_encounter.get(encounter.id, []),
+            extra=[
+                record.get("capture_date"),
+                record.get("encounter_verified_status"),
+                record.get("dr_verified_status"),
+                record.get("glaucoma_verified_status"),
+                record.get("referral_suggestion"),
+                record.get("referral_positive_diseases"),
+                len(images),
+                record.get("metadata"),
+                ocr_reports,
+            ],
         )
         items.append(record)
     next_after = encounters[-1].id if len(encounters) == limit else None
@@ -607,6 +935,7 @@ def build_sidecars(db, ctx: SyncContext, *, encounter_uuids, image_uuids) -> dic
         found = {e.uuid for e in encounters}
         result["missing"].extend(u for u in encounter_uuids if u not in found)
         media = _collect_encounter_media(db, ctx, encounters)
+        ocr_by_encounter = _load_encounter_ocr_reports(db, ctx, encounters)
         file_ids = [row.id for rows in media.values() for kind, row in rows if kind == KIND_ENCOUNTER_FILE]
         set_ids = [row.id for rows in media.values() for kind, row in rows if kind == KIND_ENCOUNTER_SET_IMAGE]
         bundles = _load_task_bundles(
@@ -617,9 +946,12 @@ def build_sidecars(db, ctx: SyncContext, *, encounter_uuids, image_uuids) -> dic
         for bundle in bundles:
             by_encounter[bundle.encounter_id].append(bundle)
         for encounter in encounters:
-            records = [{"schema": SIDECAR_SCHEMA, **_encounter_record(encounter, disease_names, ctx)}]
+            pii = ctx.allows_pii(encounter.lab_unit_id)
+            ocr_reports = ocr_by_encounter.get(encounter.id, {"dr": [], "amd": [], "glaucoma": [], "attachments": []})
+            records = [{"schema": SIDECAR_SCHEMA, **_encounter_record(encounter, disease_names, ctx, ocr_reports=ocr_reports)}]
             for kind, row in media.get(encounter.id, []):
-                records.append({"record_type": "image", **_media_item(kind, row, fingerprint=None)})
+                records.append({"record_type": "image", **_media_item(kind, row, fingerprint=None, pii=pii)})
+            records.extend(_ocr_sidecar_records(ocr_reports))
             for bundle in by_encounter.get(encounter.id, []):
                 records.append(_task_record(bundle))
                 records.extend(_grade_record(bundle, grade, with_annotations=False) for grade in bundle.grades)
@@ -649,16 +981,21 @@ def _image_sidecar(db, ctx: SyncContext, resource: AuthorizedMediaSource) -> lis
     row = db.get(model, resource.source_id)
     bundles = _load_task_bundles(db, ctx, with_annotations=True, **{arg: [row.id]})
     encounter_uuid = None
+    encounter_metadata = None
+    encounter_ocr_reports = None
+    pii = ctx.allows_pii(resource.lab_unit_id)
     if resource.patient_encounter_id:
-        encounter_uuid = db.execute(
-            select(PatientEncounters.uuid).where(PatientEncounters.id == resource.patient_encounter_id)
-        ).scalar_one_or_none()
+        encounter = db.get(PatientEncounters, resource.patient_encounter_id)
+        if encounter is not None:
+            encounter_uuid = encounter.uuid
+            encounter_metadata = _sanitize_encounter_metadata(encounter.metadata_json, pii=pii)
+            encounter_ocr_reports = _load_encounter_ocr_reports(db, ctx, [encounter]).get(encounter.id)
     dims = db.execute(
         select(ImageMetadata.width, ImageMetadata.height).where(
             ImageMetadata.image_uuid == row.uuid, ImageMetadata.image_variant == "orig"
         ).limit(1)
     ).first()
-    item = _media_item(kind, row, fingerprint=None)
+    item = _media_item(kind, row, fingerprint=None, pii=pii)
     file_name = f"{row.uuid}.{item['ext']}"
     records = [
         {
@@ -666,6 +1003,8 @@ def _image_sidecar(db, ctx: SyncContext, resource: AuthorizedMediaSource) -> lis
             "record_type": "image",
             **item,
             "encounter_uuid": encounter_uuid,
+            "encounter_metadata": encounter_metadata,
+            "encounter_ocr_reports": encounter_ocr_reports,
             "lab_unit_id": resource.lab_unit_id,
             "file_name": file_name,
             "width": dims[0] if dims else None,

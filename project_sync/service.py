@@ -513,8 +513,8 @@ def authenticate_credential(db, *, credential: str, meta: RequestMeta) -> SyncCo
     )
 
 
-def grant_export_lab_unit_ids(db, *, grant_uuid: str, user_id: int, project_id: int) -> frozenset[int]:
-    """Labs a queued sync export may include; empty when the grant lapsed.
+def grant_export_scope(db, *, grant_uuid: str, user_id: int, project_id: int) -> tuple[frozenset[int], frozenset[int]]:
+    """``(labs, identifier labs)`` a queued sync export may include; both empty when the grant lapsed.
 
     Runs inside Celery, so it checks the grant row directly rather than the
     request-time server switch (enforced when the job was enqueued).
@@ -530,8 +530,15 @@ def grant_export_lab_unit_ids(db, *, grant_uuid: str, user_id: int, project_id: 
         or grant.expires_at is None
         or grant.expires_at <= utcnow()
     ):
-        return frozenset()
+        return frozenset(), frozenset()
     user = db.get(User, user_id)
     if user is None or not user.is_active:
-        return frozenset()
-    return eligible_lab_unit_ids(db, user, project_id=project_id)
+        return frozenset(), frozenset()
+    labs = frozenset(eligible_lab_unit_ids(db, user, project_id=project_id))
+    pii_labs = frozenset(pii_lab_unit_ids(db, user, project_id=project_id) & labs) if grant.include_pii else frozenset()
+    return labs, pii_labs
+
+
+def grant_export_lab_unit_ids(db, *, grant_uuid: str, user_id: int, project_id: int) -> frozenset[int]:
+    """Labs a queued sync export may include; empty when the grant lapsed."""
+    return grant_export_scope(db, grant_uuid=grant_uuid, user_id=user_id, project_id=project_id)[0]

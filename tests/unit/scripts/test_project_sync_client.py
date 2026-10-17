@@ -140,3 +140,20 @@ def test_refuses_plain_http_for_remote_hosts():
     with pytest.raises(SystemExit):
         client_mod.check_server_url("http://example.org", allow_http=False)
     assert client_mod.check_server_url("http://localhost:5001", allow_http=False) == "http://localhost:5001"
+
+
+def test_encounter_payload_json_cell_carries_metadata_and_ocr():
+    import json
+    from scripts.project_sync_client import _encounter_payload_json
+
+    cell = _encounter_payload_json({"metadata": {"patient": {"sex": "F"}}, "ocr_reports": {"dr": [{"result": "R2"}]}})
+    assert json.loads(cell) == {"metadata": {"patient": {"sex": "F"}}, "ocr_reports": {"dr": [{"result": "R2"}]}}
+
+
+def test_remedio_row_flattens_latest_ocr_results():
+    row = client_mod._remedio_row({"uuid": "e1", "ocr_reports": {
+        "dr": [{"result": "R0"}, {"result": "R2", "qualitative_result": "moderate"}],
+        "glaucoma": [{"result": "suspect", "vcdr_right": "0.7"}],
+        "attachments": [{"ai_suggested_refer": True, "left_eye_diagnosis": "DR"}],
+    }})
+    assert (row["dr_result"], row["glaucoma_vcdr_right"], row["ai_suggested_refer"], row["amd_result"]) == ("R2", "0.7", True, None)

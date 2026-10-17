@@ -71,7 +71,7 @@ Source of truth: `project_export/schema.py` (every table and column, generated i
 | creation | `encounters`, `images`, plus typed flattened copies `encounter_metadata` and `image_metadata_values` |
 | api_metadata | `api_exams`, `api_images`, `api_reports` (original Remidio API data), `iitk_sessions` |
 | verification | `verification_encounters`, `verification_images` (effective vs original laterality, gradability and reasons), `verification_history` |
-| ocr | `ocr_reports` |
+| ocr | `ocr_reports`, `report_documents` |
 | remote_ai | `ai_runs` (task-level and encounter-level), `ai_image_results`, `ai_target_results` |
 | tasks / grades | `tasks`, `grades` (all roles incl. AI and AI-review fields), `consensus` |
 | annotations | `coco_annotations` (one row per annotation instance, image fields repeated), `coco_categories`, `coco_images` (incl. images without annotations) |

@@ -26,9 +26,9 @@ GUIDE: tuple[tuple[str, str, str], ...] = (
     ("stages", "verification: verification_encounters, verification_images, verification_history",
      "What verifiers recorded: encounter status, exclusion and reason, observations; per image the effective laterality, "
      "centre, gradability and reason, next to the original API values (`source_laterality`, `laterality_corrected`)."),
-    ("stages", "ocr: ocr_reports",
-     "OCR-extracted DR, AMD and glaucoma results (ZIP/PDF OCR) and the imported Remidio report documents with their AI "
-     "and GMA fields. `source` says which kind each row is."),
+    ("stages", "ocr: ocr_reports, report_documents",
+     "`ocr_reports`: OCR-extracted DR, AMD and glaucoma results (ZIP/PDF OCR). `report_documents`: the primary Remidio report "
+     "PDFs with the API JSON (AI and GMA fields, raw OCR block); duplicate PDFs are left out. `ocr_reports.document_uuid` joins to it."),
     ("stages", "remote_ai: ai_runs, ai_image_results, ai_target_results",
      "Remote AI inference. `ai_runs` has task-level (single image) and encounter-level (Wadhwani DR/DME) runs; "
      "encounter runs have per-image results and per-target results whose `grade_id` joins to `grades`."),
@@ -127,7 +127,9 @@ RELATIONSHIPS: tuple[tuple[str, str, str, str, str], ...] = (
     ("verification_images", "image_uuid", "images", "image_uuid", "One row per image."),
     ("verification_images", "encounter_uuid", "encounters", "encounter_uuid", "Parent encounter."),
     ("verification_history", "encounter_uuid", "encounters", "encounter_uuid", "Audit trail of the encounter."),
-    ("ocr_reports", "encounter_uuid", "encounters", "encounter_uuid", "OCR / report rows of the encounter."),
+    ("ocr_reports", "encounter_uuid", "encounters", "encounter_uuid", "OCR report rows of the encounter."),
+    ("ocr_reports", "document_uuid", "report_documents", "document_uuid", "Primary report PDF the result came from."),
+    ("report_documents", "encounter_uuid", "encounters", "encounter_uuid", "Report PDFs of the encounter."),
     ("ai_runs", "encounter_uuid", "encounters", "encounter_uuid", "Encounter the run belongs to."),
     ("ai_runs", "task_uuid", "tasks", "task_uuid", "Task-level runs only."),
     ("ai_runs", "image_uuid", "images", "image_uuid", "Task-level runs only."),

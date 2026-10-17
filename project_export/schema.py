@@ -226,6 +226,8 @@ VERIFICATION_ENCOUNTERS = Table(
         C("observation_at", "TIMESTAMPTZ", "When the observation was written."),
         C("referral_suggestion", "VARCHAR", "Encounter referral suggestion (missing when unset)."),
         C("referral_suggestion_updated_at", "TIMESTAMPTZ", "When the referral suggestion last changed."),
+        C("referral_positive_diseases", "JSON", "Diseases the verifier marked positive (Positive Diseases checkboxes); "
+          "positive diseases drive negative-control task creation."),
         C("verification", "JSON", "Full verification block from the encounter metadata."),
     ),
 )

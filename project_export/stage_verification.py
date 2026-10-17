@@ -76,6 +76,7 @@ def _encounter_rows(ctx: BuildContext) -> list[dict]:
             "observation_at": ts(block.get("observation_at")),
             "referral_suggestion": encounter.referral_suggestion,
             "referral_suggestion_updated_at": encounter.referral_suggestion_updated_at,
+            "referral_positive_diseases": _json(encounter.referral_positive_diseases_json or None),
             "verification": _json(block or None),
         })
     return rows

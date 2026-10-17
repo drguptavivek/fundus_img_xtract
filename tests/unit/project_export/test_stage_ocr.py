@@ -23,11 +23,13 @@ def test_duplicate_pdfs_dropped_and_reports_link_to_primary_pdf(monkeypatch):
         ],
     }}
     monkeypatch.setattr(stage_ocr, "_load_encounter_ocr_reports", lambda *_: found)
+    monkeypatch.setattr(stage_ocr, "_source_paths", lambda *_: {1: "remidio_zip"})
     ctx = SimpleNamespace(db=None, scope=None, encounters=[SimpleNamespace(id=1, uuid="enc")])
 
     built = stage_ocr.build(ctx)
 
     assert [r["document_uuid"] for r in built["report_documents"]] == ["a1"]
+    assert {r["source_path"] for r in built["ocr_reports"] + built["report_documents"]} == {"remidio_zip"}
     assert built["report_documents"][0]["camera_type"] == "FOP"
     assert [(r["report_uuid"], r["document_uuid"]) for r in built["ocr_reports"]] == [("dr-7", "a1"), ("gl-9", "a1")]
 

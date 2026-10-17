@@ -1,5 +1,39 @@
 # Fresh-session handoff
 
+## Latest session (2026-10-17) — DuckDB project export (bead `fundus_img_xtract-6k5f`)
+
+State: built and tested, **uncommitted**, not deployed. Plan/decisions/gotchas live in the bead notes.
+
+- **Module** `project_export/` (deep; call only `export_package`, `export_workbook`, `export_options`,
+  `export_package_for_scope`). `schema.py` is the single table contract and generates the `data_dictionary`;
+  `stage_*.py` one per capture stage; `guide.py` = in-file structure guide + runnable example queries; `xlsx.py` builds
+  Excel FROM the DuckDB file. 30+ tables (encounters, images, api_*, verification_*, ocr, ai_*, tasks, grades, consensus,
+  coco_*, grading timing, review/regrade, intra_rater, dim_*, typed metadata). No image/PDF files.
+- **Admin API** (role `admin`, password re-entry, 6/h, audited): `/api/admin/project-export/options`,
+  `/api/admin/projects/<id>/export.{duckdb,xlsx}`, `/api/admin/no-project/export.{duckdb,xlsx}`
+  (repeat `hospital_id`/`lab_unit_id`; `identifiers=1` opt-in). Page `/admin/project-export` (HTMX). Doc:
+  `docs/API/project_export/README.md`.
+- **Sync**: the queued sync export also writes `project_<code>.duckdb` within the grant's labs/identifier rights
+  (`project_sync.service.grant_export_scope`); the client downloads it unchanged.
+- **Decisions**: admin role only; staff free text as entered; PII-flagged images keep their rows (`pii_detected`);
+  project scope = all mapped labs incl. inactive; no-project export = `project_id` NULL; DuckDB pinned 1.5.5 (bump to 2.x
+  when stable).
+- **Test**: `docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run --with duckdb==1.5.5 python -m pytest tests/unit/project_export tests/unit/project_sync tests/unit/scripts/test_project_sync_client.py -q`
+  (`python -m pytest`, not `pytest`; `test-db` must be up). Real-data parity and an identifier-leak probe were run for
+  ICMR-VG, GLAU_SCR_APP and no-project.
+- **Gotchas**: `duckdb` is not in the images yet (endpoints 503, sync ships workbook only) until the venv-builder is
+  rebuilt; web restart runs `alembic upgrade head` on the live DB (get a go-ahead); keep `duckdb` imports lazy
+  (`api/__init__.py` imports all routes at start-up).
+- **Next**: 1) commit/push (one commit or split: export / sync+OCR / docs); 2) rebuild images + restart web and celery,
+  smoke-test; 3) fix `fundus_img_xtract-57l8` (hourly Remidio sync fails every run: unwrap `request` in
+  `_reauthorize_project_sync_job`); 4) background build for very large projects; 5) DuckDB 2.x bump; 6) structured
+  verification tags, mask `hospital_UHID`/`remidio_patient_id` in the old workbook, optional `local_admin` access.
+- Also uncommitted from earlier today: `/api/sync/v1/encounters` + sidecars now carry encounter metadata and OCR
+  reports (`project_sync/inventory.py`), the sync client's `payload_json`/`remedio_results.csv`, and OCR columns in the
+  server workbook (`project_review/export_service.py`). Live routing was changed by the user on the web UI
+  (MOHFW route for `retina_lab_01`); the local DB is a dev replica of the live DB.
+
+---
 ## Latest session (2026-09-30) — passkey fix, worker/pidfile fixes, browse-page WAI pills
 
 - **Passkey login fixed** (`1d8ba294`): `passkeys/service.py::_redis()` read `REDIS_URL` from `app.config` (never set), so
@@ -58,38 +92,10 @@
 
 ---
 
-## Earlier handoff (2026-08-28)
+---
 
-Start here, then read the linked files in order.
+## Earlier handoff (2026-08-28) — authorization / test-suite stabilization
 
-## Repository state
-
-- Repository: `fundus_img_xtract`
-- Completed checkpoint: `03e954ce` (`Serialize PostgreSQL test database lifecycle`)
-- Authorization checkpoint: `ff0fd5a1` (`Replace authorization with lean scoped helpers`)
-- Source branch: `vg-work/authz-clean-redesign-2026-08-26`
-- Fresh-work branch: `vg-work/full-suite-cleanup`
-- Open Beads issue: `fundus_img_xtract-vsa`
-
-The lean authorization cutover and PostgreSQL test-harness repair are committed,
-audited, and pushed. The next task is test-suite stabilization without weakening
-the new authorization contract.
-
-## Read in this order
-
-1. [`handoff/01_GUARDRAILS.md`](handoff/01_GUARDRAILS.md)
-2. [`handoff/02_CURRENT_STATE.md`](handoff/02_CURRENT_STATE.md)
-3. [`handoff/03_FAILURE_INVENTORY.md`](handoff/03_FAILURE_INVENTORY.md)
-4. [`handoff/04_EXECUTION_PLAN.md`](handoff/04_EXECUTION_PLAN.md)
-5. [`handoff/05_START_PROMPT.md`](handoff/05_START_PROMPT.md)
-6. [`handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md`](handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md)
-7. [`handoff/07_POLICY_DECISIONS.md`](handoff/07_POLICY_DECISIONS.md)
-8. [`handoff/full_suite_failures.txt`](handoff/full_suite_failures.txt)
-
-## Status (2026-08-28, this branch)
-
-Full suite is GREEN: 1502 passed, 32 skipped, 12 xfailed, 2 xpassed,
-0 failed, 0 errors. All phases of `04_EXECUTION_PLAN.md` are complete; the
-gate ledger with evidence lives in `GATES.md`. Deferred items are recorded
-in `02_CURRENT_STATE.md` (PWA security boundary, linked-grading inactive
-disease guard, unwired encounter-set thumbnail scheduler).
+Done: lean authorization cutover and PostgreSQL test-harness repair; full suite green (1502 passed at the time).
+The detailed notes (guardrails, current state, failure inventory, execution plan, policy decisions) were removed from the
+tree; recover with `git show c43c89e5:handoff/<file>` (files `01_GUARDRAILS.md` … `07_POLICY_DECISIONS.md`). Gate ledger: `GATES.md`.

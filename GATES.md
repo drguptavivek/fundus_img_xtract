@@ -4,7 +4,7 @@ Scope: repair the 122 failed + 71 error results from the 2026-08-28 `make test`
 baseline, in the handoff's dependency order, without weakening lean fail-closed
 authorization. Baseline: 1,314 passed, 29 skipped, 13 xfailed, 1 xpassed.
 No new skips/xfails without explicit user approval. Guardrails in
-handoff/01_GUARDRAILS.md are binding for every gate below.
+the guardrails (`git show c43c89e5:handoff/01_GUARDRAILS.md`) are binding for every gate below.
 
 - [x] P1.1: shared user-fixture cluster green (unique-seed collisions, role assertions, partial app login_manager)
   CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run pytest -q tests/unit/test_user_fixtures.py tests/integration/auth/test_login_fixtures.py tests/unit/auth/test_site_admin_isolation.py > /tmp/gate_p11.log 2>&1 && echo GATE_OK
@@ -16,7 +16,7 @@ handoff/01_GUARDRAILS.md are binding for every gate below.
   EXPECT: GATE_OK
   EVIDENCE: GATE_OK (44 passed; /admin 404 fixed to real route /admin/users)
 
-- [x] P2.1: every remaining 403/404 failure classified (test | route | actor | supplied facts | required facts | policy | action) in handoff/03_FAILURE_INVENTORY.md or Beads
+- [x] P2.1: every remaining 403/404 failure classified (test | route | actor | supplied facts | required facts | policy | action) in the failure inventory (`git show c43c89e5:handoff/03_FAILURE_INVENTORY.md`) or Beads
   EVIDENCE: all 403/404 families classified with recorded action: stale fixtures (missing ProjectRoleGrant → _grant_project_verify helper; missing ProjectLabUnit joins; legacy seed IDs modernized to 100/101), stale expectations (non-disclosing 404 family kept; viewer-shell pages assert isolation at the JSON API /api/encounter-viewer/*), stale test symbols (scope→clinical_rows, created_by_id, final_plus_review, status_override, /admin→/admin/users, hyphenated verify URLs). No product authorization semantics changed.
 
 - [x] P2.2: lean-authz/security regression gate green

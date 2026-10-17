@@ -427,6 +427,8 @@ GRADES = Table(
         C("started_at", "TIMESTAMPTZ", "Grading start (AI grades only)."),
         C("ai_model", "VARCHAR", "AI grades: model name."),
         C("ai_model_version", "VARCHAR", "AI grades: model version."),
+        C("ai_probability", "DOUBLE", "AI grades: probability parsed from the comment."),
+        C("ai_predicted_class_name", "VARCHAR", "AI grades: predicted class name parsed from the comment."),
         C("ai_review_status", "VARCHAR", "Review of an AI grade: ok | minor_miss | major_miss."),
         C("ai_review_comment", "VARCHAR", "AI review comment, exported as entered."),
         C("ai_reviewed_by_user_id", "INTEGER", "AI reviewer."),

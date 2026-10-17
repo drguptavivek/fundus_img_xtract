@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from sqlalchemy import select
 
@@ -26,6 +27,20 @@ def _scopes(ctx: BuildContext) -> dict:
         for scope in ctx.db.execute(select(EncounterSetGradingScope).where(EncounterSetGradingScope.id.in_(chunk))).scalars():
             found[scope.id] = scope
     return found
+
+
+_AI_PROBABILITY = re.compile(r"AI probability:\s*([0-9.]+)", re.IGNORECASE)
+_AI_CLASS_NAME = re.compile(r"Predicted class name:[ \t]*(.+)")
+
+
+def _ai_comment_fields(comment: str | None) -> dict:
+    """Structured values from the text an AI grade stores in its comment (left as entered in `comment`)."""
+    probability = _AI_PROBABILITY.search(comment or "")
+    class_name = _AI_CLASS_NAME.search(comment or "")
+    return {
+        "ai_probability": float(probability.group(1).rstrip(".")) if probability else None,
+        "ai_predicted_class_name": class_name.group(1).strip() if class_name else None,
+    }
 
 
 def build(ctx: BuildContext) -> dict[str, list[dict]]:
@@ -61,6 +76,7 @@ def build(ctx: BuildContext) -> dict[str, list[dict]]:
                 "annotation_count": stats[0] if stats else None,
                 "time_taken_seconds": grade.time_taken, "started_at": grade.start_time,
                 "ai_model": grade.ai_model_name, "ai_model_version": grade.ai_model_version,
+                **_ai_comment_fields(grade.comment),
                 "ai_review_status": grade.ai_review_status, "ai_review_comment": grade.ai_review_comment,
                 "ai_reviewed_by_user_id": grade.ai_reviewed_by_user_id, "ai_reviewed_at": grade.ai_reviewed_at,
                 "created_at": grade.created_at, "updated_at": grade.updated_at,

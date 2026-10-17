@@ -30,3 +30,11 @@ def test_duplicate_pdfs_dropped_and_reports_link_to_primary_pdf(monkeypatch):
     assert [r["document_uuid"] for r in built["report_documents"]] == ["a1"]
     assert built["report_documents"][0]["camera_type"] == "FOP"
     assert [(r["report_uuid"], r["document_uuid"]) for r in built["ocr_reports"]] == [("dr-7", "a1"), ("gl-9", "a1")]
+
+
+def test_ai_comment_fields_parsed():
+    from project_export.stage_grading import _ai_comment_fields
+
+    text = "AI probability: 0.5144\nPrediction ID: x\nPredicted class: 0\nPredicted class name: Glaucoma Absent\nExternal request ID:"
+    assert _ai_comment_fields(text) == {"ai_probability": 0.5144, "ai_predicted_class_name": "Glaucoma Absent"}
+    assert _ai_comment_fields("looks fine") == {"ai_probability": None, "ai_predicted_class_name": None}

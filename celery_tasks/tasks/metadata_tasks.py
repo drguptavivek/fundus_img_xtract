@@ -21,7 +21,7 @@ def run_image_metadata_backfill_job_task(self, job_id: int, user_id: int | None 
 def enqueue_system_metadata_backfill_task(
     self,
     *,
-    limit: int = 5,
+    limit: int = 30,
     mode: str = "both",
     user_id: int | None = None,
     hospital_id: int | None = None,

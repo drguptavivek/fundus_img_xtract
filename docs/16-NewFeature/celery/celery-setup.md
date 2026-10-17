@@ -64,8 +64,8 @@ Notes:
 `metadata-backfill-continuous` is scheduled in the database (not in code).
 
 Default parameters:
-- interval: 300 seconds
-- limit: 5 (task default)
+- interval: 60 seconds
+- limit: 30 (task default)
 - queue: `metadata`
 
 To verify from DB:

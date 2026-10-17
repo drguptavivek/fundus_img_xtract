@@ -22,7 +22,7 @@
                 </div>
                 <div class="operation-info">
                     <div class="text-uppercase ls-wide text-muted fw-bold x-small">Target Operation</div>
-                    <div class="fw-bold text-dark">{{ operation_name|replace('_', ' ')|title }}</div>
+                    <div class="fw-bold text-body">{{ operation_name|replace('_', ' ')|title }}</div>
                 </div>
             </div>
 
@@ -67,7 +67,7 @@
                 <span class="small text-muted fw-medium">{{ current_user.username }}</span>
             </div>
             <div
-                class="timer-badge bg-light border px-2 py-1 rounded small text-secondary d-flex align-items-center gap-2">
+                class="timer-badge bg-body-secondary border px-2 py-1 rounded small text-secondary d-flex align-items-center gap-2">
                 <i class="bi bi-clock-history"></i>
                 <span>Expires in <strong id="countdown">05:00</strong></span>
             </div>
@@ -81,7 +81,7 @@
         --reauth-accent: #0d6efd;
     }
 
-    [data-bs-theme="dark"] :root {
+    [data-bs-theme="dark"] {
         --reauth-card-bg: rgba(33, 37, 41, 0.85);
         --reauth-accent: #3d8bfd;
     }
@@ -197,6 +197,10 @@
                 submitBtn.disabled = true;
                 spinner.classList.remove('d-none');
                 submitBtn.innerHTML = 'Authorizing...';
+                // A file download leaves this page open; tell the user it is done.
+                setTimeout(function () {
+                    submitBtn.innerHTML = 'Authorized. If a download started, check your downloads and go back.';
+                }, 6000);
             }
             form.classList.add('was-validated');
         });
@@ -212,7 +216,7 @@
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
                 countdownEl.textContent = "Expired";
-                countdownEl.closest('.timer-badge').classList.replace('bg-light', 'bg-danger-subtle');
+                countdownEl.closest('.timer-badge').classList.replace('bg-body-secondary', 'bg-danger-subtle');
                 countdownEl.closest('.timer-badge').classList.add('text-danger');
             } else if (timeLeft <= 30) {
                 countdownEl.closest('.timer-badge').classList.add('text-danger', 'fw-bold');

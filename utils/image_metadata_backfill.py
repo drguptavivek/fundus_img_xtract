@@ -15,6 +15,8 @@ from db_transaction_manager import get_db_session
 from models import (
     DirectImageUpload,
     EncounterFile,
+    BASE_DIR,
+    EncounterSetImage,
     IMAGE_DIR,
     ImageMetadataBackfillJob,
     ImageMetadata,
@@ -134,6 +136,7 @@ class ImageWorkItem:
     path: Path
     encounter_file_id: Optional[int] = None
     direct_image_upload_id: Optional[int] = None
+    encounter_set_image_id: Optional[int] = None
 
 
 def _needs_metadata(db, image_uuid: str, image_variant: str) -> bool:
@@ -180,6 +183,45 @@ def _iter_encounter_items(db, *, allowed_lab_unit_ids: set[int]) -> Iterable[Ima
             image_variant="orig",
             path=path,
             encounter_file_id=enc_id,
+        )
+
+
+def _iter_encounter_set_items(db, *, allowed_lab_unit_ids: set[int]) -> Iterable[ImageWorkItem]:
+    """Encounter-set images (project or not) still missing metadata or PII rows."""
+    if not allowed_lab_unit_ids:
+        return
+    rows = (
+        db.query(EncounterSetImage.id, EncounterSetImage.uuid, EncounterSetImage.folder_rel, EncounterSetImage.original_filename)
+        .join(PatientEncounters, EncounterSetImage.patient_encounter_id == PatientEncounters.id)
+        .outerjoin(
+            ImageMetadata,
+            (ImageMetadata.image_uuid == EncounterSetImage.uuid) & (ImageMetadata.image_variant == "orig"),
+        )
+        .outerjoin(
+            ImagePiiVerification,
+            (ImagePiiVerification.image_uuid == EncounterSetImage.uuid) & (ImagePiiVerification.image_variant == "orig"),
+        )
+        .filter(
+            PatientEncounters.lab_unit_id.in_(allowed_lab_unit_ids),
+            EncounterSetImage.s3_object_key.is_(None),
+            (ImageMetadata.id.is_(None)) | (ImagePiiVerification.id.is_(None)),
+        )
+        .order_by(EncounterSetImage.id.asc())
+        .all()
+    )
+    for image_id, image_uuid, folder_rel, filename in rows:
+        folder = (BASE_DIR / folder_rel).resolve()
+        path = folder / Path(filename).name
+        try:
+            folder.relative_to(BASE_DIR.resolve())
+        except ValueError as exc:
+            _LOGGER.warning("Invalid encounter-set path for %s: %s", sanitize_log_value(image_uuid), sanitize_log_value(exc))
+            continue
+        yield ImageWorkItem(
+            image_uuid=str(image_uuid),
+            image_variant="orig",
+            path=path,
+            encounter_set_image_id=image_id,
         )
 
 
@@ -547,9 +589,12 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
                 db.commit()
                 return
 
-            items = list(_iter_encounter_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids)) + list(
-                _iter_direct_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids)
+            items = (
+                list(_iter_encounter_set_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids))
+                + list(_iter_encounter_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids))
+                + list(_iter_direct_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids))
             )
+            missing_files = 0
             for item in items:
                 if _current_job_lab_units(db, job) != allowed_lab_unit_ids:
                     raise PermissionError("Creator authorization changed during backfill")
@@ -562,27 +607,24 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
                     return
                 if job.requested_limit is not None and job.processed_count >= job.requested_limit:
                     break
-                if not item.path.exists():
-                    _LOGGER.warning(
-                        "Image missing for %s (%s): %s",
-                        sanitize_log_value(item.image_uuid),
-                        sanitize_log_value(item.image_variant),
-                        sanitize_log_value(str(item.path)),
-                    )
-                    job.error_count += 1
-                    job.processed_count += 1
-                    _maybe_commit(db, job)
-                    time.sleep(_ITEM_SLEEP_SECONDS)
-                    continue
-
+                # Check need first: finished items with missing files must not eat the run limit.
                 metadata_needed = job.run_metadata and _needs_metadata(db, item.image_uuid, item.image_variant)
                 pii_needed = job.run_pii and _needs_pii(db, item.image_uuid, item.image_variant)
                 if not metadata_needed and not pii_needed:
                     continue
 
+                if not item.path.exists():
+                    # Skip without using the run limit; one summary warning per job.
+                    missing_files += 1
+                    continue
+
                 try:
-                    file_type = "encounter_file" if item.encounter_file_id else "direct_upload"
-                    file_id = item.encounter_file_id or item.direct_image_upload_id
+                    if item.encounter_set_image_id:
+                        file_type, file_id = "encounter_set_image", item.encounter_set_image_id
+                    elif item.encounter_file_id:
+                        file_type, file_id = "encounter_file", item.encounter_file_id
+                    else:
+                        file_type, file_id = "direct_upload", item.direct_image_upload_id
                     result = process_file_data_pipeline(
                         file_id=file_id,
                         file_type=file_type,
@@ -627,6 +669,8 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
                 _maybe_commit(db, job)
                 time.sleep(_ITEM_SLEEP_SECONDS)
 
+            if missing_files:
+                _LOGGER.warning("Backfill job %s skipped %s images whose files are missing", job.id, missing_files)
             if _current_job_lab_units(db, job) != allowed_lab_unit_ids:
                 raise PermissionError("Creator authorization changed during backfill")
             job.status = "completed"

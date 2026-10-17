@@ -215,6 +215,8 @@ VERIFICATION_ENCOUNTERS = Table(
         C("glaucoma_verified_status", "VARCHAR", "Disease-specific (glaucoma) verification status, legacy."),
         C("glaucoma_verified_by", "VARCHAR", "Glaucoma verifier."),
         C("glaucoma_verified_at", "TIMESTAMPTZ", "Glaucoma verification time."),
+        C("task_diseases", "JSON", "Diseases the encounter creates grading tasks for (list of names)."),
+        C("default_task_disease", "VARCHAR", "The default one of those diseases, when marked."),
         C("excluded", "BOOLEAN", "Encounter excluded from grading and task creation."),
         C("excluded_reason", "VARCHAR", "Exclusion reason, exported as entered."),
         C("excluded_by", "VARCHAR", "Who excluded it."),

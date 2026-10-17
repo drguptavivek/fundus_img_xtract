@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from models import DirectImageVerify, User
+from models import DirectImageVerify, Disease, User
 from project_sync.inventory import (
     KIND_DIRECT_IMAGE,
     KIND_ENCOUNTER_FILE,
@@ -11,6 +11,7 @@ from project_sync.inventory import (
     _first_non_empty,
     _sanitize_metadata_dict,
 )
+from upload_profiles.models import PatientEncounterTargetDisease
 from verify_encounter_set.models import EncounterVerificationHistory
 
 from . import stage_api
@@ -33,12 +34,30 @@ def _dict(value) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _task_diseases(ctx: BuildContext) -> dict[int, list[tuple[str, bool]]]:
+    """Per encounter id: (disease name, is_default) for each disease the encounter creates tasks for."""
+    found: dict[int, list[tuple[str, bool]]] = {}
+    for chunk in _chunks([encounter.id for encounter in ctx.encounters]):
+        for encounter_id, name, is_default in ctx.db.execute(
+            select(PatientEncounterTargetDisease.patient_encounter_id, Disease.name, PatientEncounterTargetDisease.is_default)
+            .join(Disease, Disease.id == PatientEncounterTargetDisease.disease_id)
+            .where(PatientEncounterTargetDisease.patient_encounter_id.in_(chunk))
+            .order_by(PatientEncounterTargetDisease.id)
+        ):
+            found.setdefault(encounter_id, []).append((name, bool(is_default)))
+    return found
+
+
 def _encounter_rows(ctx: BuildContext) -> list[dict]:
     rows = []
+    task_diseases = _task_diseases(ctx)
     for encounter in ctx.encounters:
         block = _dict(_dict(encounter.metadata_json).get("verification"))
+        diseases = task_diseases.get(encounter.id, [])
         rows.append({
             "encounter_uuid": encounter.uuid,
+            "task_diseases": _json([name for name, _ in diseases] or None),
+            "default_task_disease": next((name for name, is_default in diseases if is_default), None),
             "status": encounter.encounter_verified_status,
             "verified_by": encounter.encounter_verified_by,
             "verified_at": encounter.encounter_verified_at,

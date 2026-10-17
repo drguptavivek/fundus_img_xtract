@@ -50,6 +50,8 @@ cyclonedx-python-lib==11.7.0
     # via pip-audit
 defusedxml==0.7.1
     # via py-serializable
+duckdb==1.5.5
+    # via fundus-img-xtract
 et-xmlfile==2.0.0
     # via openpyxl
 fido2==2.2.1

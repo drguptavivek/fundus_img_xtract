@@ -101,15 +101,16 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
             if request_data.get("sync_grant_uuid"):
                 # Desktop mirror export: authority is the approved sync grant,
                 # re-derived now in case it was revoked while queued.
-                from project_sync.service import grant_export_lab_unit_ids
+                from project_sync.service import grant_export_scope
 
-                allowed_labs = grant_export_lab_unit_ids(
+                allowed_labs, grant_pii_labs = grant_export_scope(
                     db,
                     grant_uuid=str(request_data["sync_grant_uuid"]),
                     user_id=request.actor_user_id,
                     project_id=request.project_id,
                 )
             else:
+                grant_pii_labs = frozenset()
                 allowed_labs = (
                     authorized_project_export_labs(db, actor=actor, project_id=request.project_id)
                     if actor else frozenset()
@@ -129,6 +130,8 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
             export_dir.mkdir(parents=True, exist_ok=True)
             if request.kind == "workbook":
                 _write_workbook(export_dir / "project_encounterset_export.xlsx", encounters, images, tasks)
+                if request_data.get("sync_grant_uuid"):
+                    _write_sync_duckdb(db, request.project_id, allowed_labs, grant_pii_labs, export_dir)
             else:
                 _write_image_bundle(export_dir, encounters, images, tasks)
         db_set_job_status(job_token, "done")
@@ -136,6 +139,25 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
     except Exception as exc:
         db_set_job_status(job_token, "error", error=str(exc))
         db_set_item_state(job_token, "project_export", "error", str(exc))
+
+
+def _write_sync_duckdb(db, project_id: int, labs, pii_labs, export_dir: Path) -> None:
+    """Add the staged DuckDB package to a sync export, limited to the grant's labs and identifier rights.
+
+    Skipped (workbook only) while the duckdb wheel is not installed, so the older export keeps working.
+    """
+    try:
+        from project_export import ExportScope, export_package_for_scope
+    except ImportError:
+        return
+    project = db.get(Project, project_id)
+    try:
+        export_package_for_scope(
+            db, ExportScope(project_id, frozenset(labs), frozenset(pii_labs)), export_dir,
+            stem=f"project_{project.code}", code=project.code, title=project.title,
+        )
+    except ImportError:  # duckdb itself missing: build_package imports it lazily
+        return
 
 
 def enqueue_project_export(app, job_token: str, request_data: dict[str, Any]) -> None:
@@ -249,7 +271,17 @@ def _encounters(db, request: ProjectExportRequest, allowed_labs: frozenset[int])
         statement = statement.where(has_grade)
     elif request.grading_filter == "completed":
         statement = statement.where(has_task, ~incomplete_task)
-    return list(db.execute(statement.order_by(PatientEncounters.capture_date_dt, PatientEncounters.id)).scalars())
+    return list(
+        db.execute(
+            statement.options(
+                selectinload(PatientEncounters.dr_reports),
+                selectinload(PatientEncounters.amd_reports),
+                selectinload(PatientEncounters.glaucoma_reports),
+                selectinload(PatientEncounters.glaucoma_results_cleaned),
+                selectinload(PatientEncounters.encounter_set_attachments),
+            ).order_by(PatientEncounters.capture_date_dt, PatientEncounters.id)
+        ).scalars()
+    )
 
 
 def _images(db, encounter_ids: list[int]):
@@ -289,6 +321,139 @@ def _export_filename(image: EncounterSetImage) -> str:
     return f"{image.uuid}{Path(source_name).suffix.lower() or '.jpg'}"
 
 
+def _first_image_meta(image: Any, *keys: str) -> Any:
+    meta = getattr(image, "metadata_json", None)
+    if not isinstance(meta, dict):
+        return None
+    for key in keys:
+        val = meta.get(key)
+        if val not in (None, ""):
+            return val
+    return None
+
+
+def _encounter_ocr_summary(encounter: Any) -> dict[str, Any]:
+    dr_reports = sorted(getattr(encounter, "dr_reports", None) or [], key=lambda r: getattr(r, "id", 0) or 0)
+    amd_reports = sorted(getattr(encounter, "amd_reports", None) or [], key=lambda r: getattr(r, "id", 0) or 0)
+    gl_reports = sorted(getattr(encounter, "glaucoma_reports", None) or [], key=lambda r: getattr(r, "id", 0) or 0)
+    gl_cleaned = sorted(
+        getattr(encounter, "glaucoma_results_cleaned", None) or [],
+        key=lambda r: getattr(r, "id", 0) or 0,
+    )
+    attachments = sorted(
+        getattr(encounter, "encounter_set_attachments", None) or [],
+        key=lambda r: getattr(r, "id", 0) or 0,
+    )
+
+    dr_latest = dr_reports[-1] if dr_reports else None
+    amd_latest = amd_reports[-1] if amd_reports else None
+    gl_latest = gl_reports[-1] if gl_reports else None
+    gl_cleaned_latest = gl_cleaned[-1] if gl_cleaned else None
+
+    dr_result = getattr(dr_latest, "result", None) if dr_latest else None
+    dr_qual = getattr(dr_latest, "qualitative_result", None) if dr_latest else None
+    amd_result = getattr(amd_latest, "result", None) if amd_latest else None
+    amd_qual = getattr(amd_latest, "qualitative_result", None) if amd_latest else None
+    gl_result = (
+        getattr(gl_cleaned_latest, "result", None)
+        if gl_cleaned_latest and getattr(gl_cleaned_latest, "result", None)
+        else (getattr(gl_latest, "result", None) if gl_latest else None)
+    )
+    gl_qual = (
+        getattr(gl_cleaned_latest, "qualitative_result", None)
+        if gl_cleaned_latest and getattr(gl_cleaned_latest, "qualitative_result", None)
+        else (getattr(gl_latest, "qualitative_result", None) if gl_latest else None)
+    )
+    gl_vcdr_right = (
+        getattr(gl_latest, "vcdr_right", None)
+        if gl_latest and getattr(gl_latest, "vcdr_right", None)
+        else (getattr(gl_cleaned_latest, "original_vcdr_right", None) if gl_cleaned_latest else None)
+    )
+    gl_vcdr_left = (
+        getattr(gl_latest, "vcdr_left", None)
+        if gl_latest and getattr(gl_latest, "vcdr_left", None)
+        else (getattr(gl_cleaned_latest, "original_vcdr_left", None) if gl_cleaned_latest else None)
+    )
+    gl_vcdr_right_num = getattr(gl_cleaned_latest, "vcdr_right_num", None) if gl_cleaned_latest else None
+    gl_vcdr_left_num = getattr(gl_cleaned_latest, "vcdr_left_num", None) if gl_cleaned_latest else None
+
+    remidio_ai_refer = None
+    remidio_left_diag = None
+    remidio_right_diag = None
+    remidio_gma_refer = None
+    remidio_gma_result = None
+    remidio_gma_left_cdr = None
+    remidio_gma_right_cdr = None
+
+    for att in attachments:
+        meta = getattr(att, "metadata_json", None)
+        if not isinstance(meta, dict):
+            continue
+        if meta.get("ai_suggested_refer") is not None:
+            remidio_ai_refer = meta.get("ai_suggested_refer")
+        if meta.get("left_eye_diagnosis") not in (None, ""):
+            remidio_left_diag = meta.get("left_eye_diagnosis")
+        if meta.get("right_eye_diagnosis") not in (None, ""):
+            remidio_right_diag = meta.get("right_eye_diagnosis")
+        if meta.get("gma_suggested_refer") is not None:
+            remidio_gma_refer = meta.get("gma_suggested_refer")
+        if meta.get("gma_patient_level_result") not in (None, ""):
+            remidio_gma_result = meta.get("gma_patient_level_result")
+        if meta.get("gma_left_eye_cdr") is not None:
+            remidio_gma_left_cdr = meta.get("gma_left_eye_cdr")
+        if meta.get("gma_right_eye_cdr") is not None:
+            remidio_gma_right_cdr = meta.get("gma_right_eye_cdr")
+
+        ocr = meta.get("ocr") if isinstance(meta.get("ocr"), dict) else {}
+        dr_ocr = ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else {}
+        if dr_result is None and dr_ocr.get("result"):
+            dr_result = dr_ocr.get("result")
+        if dr_qual is None and dr_ocr.get("qualitative_result"):
+            dr_qual = dr_ocr.get("qualitative_result")
+
+        amd_ocr = ocr.get("amd_report") if isinstance(ocr.get("amd_report"), dict) else {}
+        if amd_result is None and amd_ocr.get("result"):
+            amd_result = amd_ocr.get("result")
+        if amd_qual is None and amd_ocr.get("qualitative_result"):
+            amd_qual = amd_ocr.get("qualitative_result")
+
+        gl_ocr = ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else {}
+        if gl_result is None and gl_ocr.get("result"):
+            gl_result = gl_ocr.get("result")
+        if gl_qual is None and gl_ocr.get("qualitative_result"):
+            gl_qual = gl_ocr.get("qualitative_result")
+        if gl_vcdr_right is None and gl_ocr.get("vcdr_right"):
+            gl_vcdr_right = gl_ocr.get("vcdr_right")
+        if gl_vcdr_left is None and gl_ocr.get("vcdr_left"):
+            gl_vcdr_left = gl_ocr.get("vcdr_left")
+        if gl_vcdr_right_num is None and gl_ocr.get("vcdr_right_num") is not None:
+            gl_vcdr_right_num = gl_ocr.get("vcdr_right_num")
+        if gl_vcdr_left_num is None and gl_ocr.get("vcdr_left_num") is not None:
+            gl_vcdr_left_num = gl_ocr.get("vcdr_left_num")
+
+    return {
+        "referral_suggestion": getattr(encounter, "referral_suggestion", None),
+        "referral_positive_diseases": _xlsx_value(getattr(encounter, "referral_positive_diseases_json", None)),
+        "dr_ocr_result": dr_result,
+        "dr_ocr_qualitative_result": dr_qual,
+        "amd_ocr_result": amd_result,
+        "amd_ocr_qualitative_result": amd_qual,
+        "glaucoma_ocr_result": gl_result,
+        "glaucoma_ocr_qualitative_result": gl_qual,
+        "glaucoma_ocr_vcdr_right": gl_vcdr_right,
+        "glaucoma_ocr_vcdr_left": gl_vcdr_left,
+        "glaucoma_ocr_vcdr_right_num": gl_vcdr_right_num,
+        "glaucoma_ocr_vcdr_left_num": gl_vcdr_left_num,
+        "remidio_ai_suggested_refer": remidio_ai_refer,
+        "remidio_left_eye_diagnosis": remidio_left_diag,
+        "remidio_right_eye_diagnosis": remidio_right_diag,
+        "remidio_gma_suggested_refer": remidio_gma_refer,
+        "remidio_gma_patient_level_result": remidio_gma_result,
+        "remidio_gma_left_eye_cdr": remidio_gma_left_cdr,
+        "remidio_gma_right_eye_cdr": remidio_gma_right_cdr,
+    }
+
+
 def _write_workbook(path: Path, encounters, images, tasks) -> None:
     metadata_headers = collect_non_pii_metadata_headers(encounters)
     images_by_encounter = {}
@@ -314,6 +479,7 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
             "final_task_count": sum(task.state == "final" for task in encounter_tasks),
             "all_tasks_complete": bool(encounter_tasks) and all(task.state == "final" for task in encounter_tasks),
         }
+        encounter_row.update(_encounter_ocr_summary(encounter))
         metadata_values = non_pii_metadata_values(encounter.metadata_json)
         encounter_row.update({
             header: _xlsx_value(metadata_values.get(header, ""))
@@ -321,14 +487,23 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
         })
         encounter_rows.append(encounter_row)
     for image in images:
+        gaze_position = _first_image_meta(image, "gaze_position", "strabismus_gaze_position", "gaze")
+        centering = (
+            _first_image_meta(image, "focus", "fundus_image_view", "fundus_field", "field", "image_segment", "centering")
+            or gaze_position
+        )
         image_rows.append({
             "encounter_uuid": next(item.uuid for item in encounters if item.id == image.patient_encounter_id),
             "image_uuid": image.uuid,
             "exported_filename": _export_filename(image),
             "spatial_position": image.spatial_position,
+            "laterality": _first_image_meta(image, "laterality", "eye", "eye_side"),
+            "centering": centering,
+            "gaze_position": gaze_position,
             "visible_to_grader": image.visible_to_grader,
             "is_reviewed": image.is_reviewed,
             "is_not_gradable": image.is_not_gradable,
+            "referral_needed_or_positive_image": getattr(image, "referral_needed_or_positive_image", None),
         })
     for task in tasks:
         encounter_id = task.patient_encounter_id or task.encounter_set_image.patient_encounter_id

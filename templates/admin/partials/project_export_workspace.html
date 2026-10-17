@@ -1,0 +1,55 @@
+{# GET-only form: the download is the API response, so no CSRF field is needed. #}
+<form id="project-export-form" method="get" class="card shadow-sm"
+      data-project-url="{{ url_for('fundus_api.download_project_duckdb', project_id=0) }}"
+      data-no-project-url="{{ url_for('fundus_api.download_no_project_duckdb') }}"
+      data-project-xlsx-url="{{ url_for('fundus_api.download_project_workbook', project_id=0) }}"
+      data-no-project-xlsx-url="{{ url_for('fundus_api.download_no_project_workbook') }}">
+  <div class="card-body vstack gap-3">
+    <div>
+      <label class="form-label" for="export-project">Project</label>
+      <select class="form-select" id="export-project" required>
+        <option value="" selected disabled>Select a project…</option>
+        {% for project in projects %}
+        <option value="{{ project.id }}">{{ project.title }} ({{ project.code }}){% if not project.active %} (inactive){% endif %}</option>
+        {% endfor %}
+        <option value="none">No project (classical uploads)</option>
+      </select>
+    </div>
+
+    <div id="no-project-fields" class="vstack gap-3" hidden>
+      <div class="alert alert-info mb-0 py-2">Choose one or more hospitals and/or lab units. Selecting hospitals alone
+        exports all of their lab units. Selected lab units are limited to the selected hospitals.</div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="export-hospitals">Hospitals</label>
+          <select class="form-select" id="export-hospitals" name="hospital_id" multiple size="8" disabled>
+            {% for hospital in hospitals %}
+            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="export-labs">Lab units</label>
+          <select class="form-select" id="export-labs" name="lab_unit_id" multiple size="8" disabled>
+            {% for lab in lab_units %}
+            <option value="{{ lab.id }}" data-hospital="{{ lab.hospital_id }}">{{ lab.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="export-identifiers" name="identifiers" value="1">
+      <label class="form-check-label" for="export-identifiers">Include patient identifiers
+        <span class="text-muted">(audited; patient id and name, original file names)</span></label>
+    </div>
+    <div class="text-muted small">You may be asked to confirm your password before the download starts.
+      Large projects can take a minute to prepare. DuckDB is the complete package; the Excel file is generated from it
+      (very long cells are truncated and large tables cut, noted on its last sheet).</div>
+  </div>
+  <div class="card-footer text-end">
+    <button class="btn btn-outline-secondary" type="submit" value="xlsx">Download Excel</button>
+    <button class="btn btn-primary" type="submit" value="duckdb">Download DuckDB</button>
+  </div>
+</form>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Project Data Export{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 860px;">
+  <h1 class="h3 mb-1">Project Data Export</h1>
+  <p class="text-muted">Download a DuckDB package with the encounters, images and related data for one project,
+    or for encounters that belong to no project. Image and PDF files are not included, only references.</p>
+  <div id="project-export-workspace"
+       hx-get="{{ url_for('admin.project_export_workspace') }}"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="text-muted">Loading…</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-project-export.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+{% endblock %}

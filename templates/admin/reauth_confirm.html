@@ -56,6 +56,14 @@
                     </a>
                 </div>
             </form>
+
+            <div id="reauth-done" class="text-center d-none py-3">
+                <i class="bi bi-check-circle-fill text-success display-4"></i>
+                <h5 class="fw-bold mt-3">Authorized</h5>
+                <p class="text-secondary small mb-4">If the operation was a download, it has started. Check your browser's downloads.</p>
+                <a id="reauth-back" class="btn btn-primary btn-lg fw-bold w-100"
+                    href="{{ url_for('admin.admin_status') }}">Back</a>
+            </div>
         </div>
 
         <div class="reauth-footer border-top p-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -180,6 +188,13 @@
         const spinner = submitBtn.querySelector('.spinner-border');
         const countdownEl = document.getElementById('countdown');
 
+        // Back goes to the page that started the operation (same origin only).
+        try {
+            if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+                document.getElementById('reauth-back').href = document.referrer;
+            }
+        } catch (e) { /* keep the default link */ }
+
         // Toggle Password Visibility
         toggleBtn.addEventListener('click', function () {
             const isPassword = passwordInput.getAttribute('type') === 'password';
@@ -197,10 +212,11 @@
                 submitBtn.disabled = true;
                 spinner.classList.remove('d-none');
                 submitBtn.innerHTML = 'Authorizing...';
-                // A file download leaves this page open; tell the user it is done.
+                // A file download leaves this page open: after a moment, show a done screen with a way back.
                 setTimeout(function () {
-                    submitBtn.innerHTML = 'Authorized. If a download started, check your downloads and go back.';
-                }, 6000);
+                    form.classList.add('d-none');
+                    document.getElementById('reauth-done').classList.remove('d-none');
+                }, 3000);
             }
             form.classList.add('was-validated');
         });

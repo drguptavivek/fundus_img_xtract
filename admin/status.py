@@ -369,7 +369,7 @@ def get_recent_activity(limit=10):
                 'type': 'maintenance',
                 'title': 'Last Maintenance',
                 'description': maintenance_status['last_run'].get('operation', 'Unknown'),
-                'timestamp': maintenance_status['last_run'].get('completed_at'),
+                'timestamp': _coerce_datetime(maintenance_status['last_run'].get('completed_at')),
                 'status': maintenance_status['last_run'].get('status', 'unknown')
             })
     except Exception as e:
@@ -416,7 +416,7 @@ def get_recent_activity(limit=10):
         current_app.logger.warning("Failed to fetch recent health activity: %s", sanitize_log_value(e))
 
     # Sort by timestamp and limit
-    recent_activity.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
+    recent_activity.sort(key=lambda x: x.get('timestamp') or datetime.min.replace(tzinfo=pytz.UTC), reverse=True)
     return recent_activity[:limit]
 
 

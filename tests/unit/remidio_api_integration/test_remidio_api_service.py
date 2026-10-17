@@ -67,3 +67,20 @@ def test_upsert_routing_rule_requires_site_custom_identifier(db_session, core_te
                 "camera_id": camera.id,
             },
         )
+
+
+def test_reauthorize_scheduled_job_accepts_flat_and_finished_items(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from remidio_api_integration import service
+
+    flat = json.dumps({"mode": "prospective_hourly", "project_id": 1})
+    done = json.dumps({"request": {"mode": "prospective_hourly"}, "result": {}})
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [(flat,), (done,)]
+    monkeypatch.setattr(service, "_eligible_project_ids_for_auto_sync", lambda _db: [1])
+    job = SimpleNamespace(id=1, project_id=1, uploader_user_id=None)
+
+    service._reauthorize_project_sync_job(db, job)

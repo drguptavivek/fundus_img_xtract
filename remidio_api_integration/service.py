@@ -2396,6 +2396,10 @@ def _reauthorize_project_sync_job(db: Session, job: Job) -> None:
             payload = json.loads(detail or "{}")
         except json.JSONDecodeError as exc:
             raise RemidioConfigError("Scheduled sync job facts are invalid.") from exc
+        # Finished items are rewritten as {"request": {...}, "result": ...}.
+        request = payload.get("request")
+        if isinstance(request, dict):
+            payload = request
         modes.add(str(payload.get("mode") or ""))
     eligible_projects = set(_eligible_project_ids_for_auto_sync(db))
     if modes != {"prospective_hourly"} or job.project_id not in eligible_projects:

@@ -8,7 +8,7 @@ from __future__ import annotations
 from project_sync.inventory import _load_encounter_ocr_reports
 
 from .schema import OCR_REPORTS, REPORT_DOCUMENTS
-from .tables import BuildContext, _json
+from .tables import BuildContext, _json, _source_paths
 
 _DISEASE = {"dr": ("dr_report", "DR"), "amd": ("amd_report", "AMD"), "glaucoma": ("glaucoma_report", "Glaucoma")}
 _SUB_REPORTS = (("dr", "dr_report", "diabetic_retinopathy_report_id"), ("amd", "amd_report", "amd_report_id"),
@@ -39,6 +39,7 @@ def _promotions(item: dict) -> list[tuple[str, int | None, str | None]]:
 def build(ctx: BuildContext) -> dict[str, list[dict]]:
     reports = _load_encounter_ocr_reports(ctx.db, ctx.scope, ctx.encounters)
     ocr_rows, document_rows = [], []
+    source_paths = _source_paths(ctx.db, ctx.scope)
     for encounter in ctx.encounters:
         found = reports.get(encounter.id) or {}
         # Promotion status decides which PDFs count: one whose every report was a duplicate is dropped.
@@ -51,7 +52,8 @@ def build(ctx: BuildContext) -> dict[str, list[dict]]:
                 if status == _CREATED and report_id is not None:
                     created[(key, report_id)] = item["attachment_uuid"]
             document_rows.append(_row(
-                REPORT_DOCUMENTS, {**item, "encounter_uuid": encounter.uuid},
+                REPORT_DOCUMENTS,
+                {**item, "encounter_uuid": encounter.uuid, "source_path": source_paths.get(encounter.id, "other")},
                 {"attachment_uuid": "document_uuid", "filename": "report_file_name"},
             ))
         for key, (source, disease) in _DISEASE.items():
@@ -59,6 +61,7 @@ def build(ctx: BuildContext) -> dict[str, list[dict]]:
                 ocr_rows.append(_row(
                     OCR_REPORTS,
                     {**item, "encounter_uuid": encounter.uuid, "source": source, "disease": disease,
+                     "source_path": source_paths.get(encounter.id, "other"),
                      "document_uuid": created.get((key, item.get("id")))},
                     {"id": None, "uuid": "report_uuid"},
                 ))

@@ -282,6 +282,8 @@ OCR_REPORTS = Table(
         C("encounter_uuid", "VARCHAR", "Encounter."),
         C("source", "VARCHAR", "dr_report | amd_report | glaucoma_report."),
         C("disease", "VARCHAR", "DR | AMD | Glaucoma."),
+        C("source_path", "VARCHAR", "How the encounter arrived: remidio_api | remidio_zip | iitk_api | other. "
+          "ZIP-upload reports have no report_documents row; their PDF name is in report_file_name (identifiers grant)."),
         C("report_uuid", "VARCHAR", "Report row id."),
         C("document_uuid", "VARCHAR", "Primary report PDF (report_documents.document_uuid) this result was created from, when known."),
         C("result", "VARCHAR", "Extracted result."),
@@ -301,6 +303,7 @@ REPORT_DOCUMENTS = Table(
     "a duplicate of an earlier one (promotion status not_promoted_duplicate) is left out.",
     (
         C("encounter_uuid", "VARCHAR", "Encounter."),
+        C("source_path", "VARCHAR", "How the encounter arrived (remidio_api | remidio_zip | iitk_api | other)."),
         C("document_uuid", "VARCHAR", "Report PDF (attachment) id."),
         C("report_type", "VARCHAR", "Remidio report type."),
         C("report_datetime", "VARCHAR", "report date/time."),

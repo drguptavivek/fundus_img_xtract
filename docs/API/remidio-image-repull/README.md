@@ -8,7 +8,7 @@ Remidio file links are signed and expire, so the job asks the Remidio API for ea
 (fresh links), downloads only the images whose stored file still has the quality-75 signature, strips
 them losslessly and overwrites the file in place (atomic replace). **It writes nothing to the database**:
 no OCR re-run, no metadata or row changes. Thumbnails and `edited_filename` derivatives are not rebuilt.
-Only Remidio-sourced images are covered; IITK images need their own re-pull.
+Only images are re-pulled, never PDFs or reports. Only Remidio-sourced images are covered; IITK images need their own re-pull.
 
 Module: `remidio_api_integration/image_repull.py`. Task:
 `celery_tasks.tasks.remidio_tasks.repull_remidio_images_task` (queue `maintenance`, general worker;
@@ -38,8 +38,13 @@ curl -X POST https://HOST/api/admin/remidio/image-repull \
   -d '{"limit_images": 50, "batches": 100, "dry_run": true}'
 ```
 
-Pacing: `REMIDIO_REPULL_PAUSE_SECONDS` (default 2.5, per Remidio API call) and
-`REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS` (default 1.0, per download).
+Every restored image is logged (`Remidio image restored image=... encounter=... bytes before -> after`) and
+appended as one JSON line to `logs/remidio_image_repull.jsonl` (`REMIDIO_REPULL_LOG` to move it), so
+`wc -l` on that file is the number healed.
+
+Pacing: `REMIDIO_REPULL_PAUSE_SECONDS` (default 2.5, per Remidio API call),
+`REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS` (default 1.0, per download) and
+`REMIDIO_REPULL_ENCOUNTER_PAUSE_SECONDS` (default 10, extra gap between encounters).
 
 ## Remidio ingestion no longer runs the PII scan
 

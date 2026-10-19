@@ -9,6 +9,7 @@ See docs/API/remidio-image-repull/README.md.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -22,6 +23,7 @@ from PIL import Image
 from sqlalchemy import select
 
 from db_transaction_manager import get_db_session
+from auth.utils import utcnow
 from models import BASE_DIR, EncounterSetImage, RemidioConnection, RemidioExam, RemidioImage
 from utils.image_processing import has_default_quality_75_tables, strip_exif_data
 from utils.log_sanitize import sanitize_log_value
@@ -37,12 +39,18 @@ HEADER_BYTES = 4096
 DEFAULT_BATCH_IMAGES = 50
 PAUSE_BETWEEN_API_CALLS_SECONDS = float(os.getenv("REMIDIO_REPULL_PAUSE_SECONDS", "2.5"))
 PAUSE_BETWEEN_DOWNLOADS_SECONDS = float(os.getenv("REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS", "1.0"))
+PAUSE_BETWEEN_ENCOUNTERS_SECONDS = float(os.getenv("REMIDIO_REPULL_ENCOUNTER_PAUSE_SECONDS", "10"))
+
+
+# One JSON line per restored image: the durable record of what was healed (line count = images restored).
+RESTORE_LOG = Path(os.getenv("REMIDIO_REPULL_LOG", str(BASE_DIR / "logs" / "remidio_image_repull.jsonl")))
 
 
 @dataclass(frozen=True)
 class Candidate:
     remidio_image_id: str
     path: Path
+    encounter_id: int = 0
 
 
 @dataclass
@@ -70,7 +78,7 @@ def repull_batch(
     dry_run: bool = False,
     pause: bool = True,
 ) -> RepullSummary:
-    """Repair up to about ``limit_images`` damaged images, newest exams first, older than ``before``."""
+    """Repair about ``limit_images`` damaged images (whole days at a time), newest exams first, older than ``before``."""
     summary = RepullSummary()
     groups = _damaged_groups(limit_images=max(1, limit_images), before=before, summary=summary)
     summary.groups = len(groups)
@@ -89,7 +97,11 @@ def repull_batch(
             continue
         if pause:
             time.sleep(PAUSE_BETWEEN_API_CALLS_SECONDS)
-        for candidate in candidates:
+        previous_encounter = None
+        for candidate in sorted(candidates, key=lambda item: item.encounter_id):
+            if pause and previous_encounter is not None and candidate.encounter_id != previous_encounter:
+                time.sleep(PAUSE_BETWEEN_ENCOUNTERS_SECONDS)  # a pause between encounters, on top of the per-download one
+            previous_encounter = candidate.encounter_id
             _repair_one(clients[connection_id], candidate, fresh.get(candidate.remidio_image_id), summary)
             if pause:
                 time.sleep(PAUSE_BETWEEN_DOWNLOADS_SECONDS)
@@ -110,6 +122,7 @@ def _damaged_groups(*, limit_images: int, before: date | None, summary: RepullSu
                 RemidioExam.exam_date,
                 EncounterSetImage.folder_rel,
                 EncounterSetImage.original_filename,
+                EncounterSetImage.patient_encounter_id,
             )
             .join(RemidioExam, RemidioExam.id == RemidioImage.remidio_exam_id)
             .join(EncounterSetImage, EncounterSetImage.id == RemidioImage.encounter_set_image_id)
@@ -118,11 +131,11 @@ def _damaged_groups(*, limit_images: int, before: date | None, summary: RepullSu
         )
         if before is not None:
             statement = statement.where(RemidioExam.exam_date < datetime.combine(before, clock.min, tzinfo=timezone.utc))
-        current_key = None
-        for image_id, connection_id, site, exam_date, folder_rel, filename in db.execute(statement).yield_per(2000):
+        current_day = None
+        for image_id, connection_id, site, exam_date, folder_rel, filename, encounter_id in db.execute(statement).yield_per(2000):
             key = (connection_id, site, exam_date.date())
-            if found >= limit_images and key != current_key:
-                break  # finish the day being collected, then stop
+            if found >= limit_images and key[2] != current_day:
+                break  # finish the whole day (every site) being collected, then stop: ``before`` is a day cursor
             path = BASE_DIR / folder_rel / filename
             try:
                 with open(path, "rb") as handle:
@@ -133,10 +146,10 @@ def _damaged_groups(*, limit_images: int, before: date | None, summary: RepullSu
             if not has_default_quality_75_tables(head):
                 summary.already_ok += 1
                 continue
-            groups.setdefault(key, []).append(Candidate(str(image_id), path))
+            groups.setdefault(key, []).append(Candidate(str(image_id), path, encounter_id))
             summary.candidates += 1
             found += 1
-            current_key = key
+            current_day = key[2]
     return groups
 
 
@@ -171,12 +184,33 @@ def _repair_one(client: RemidioClient, candidate: Candidate, url: str | None, su
         clean = strip_exif_data(content)
         with Image.open(BytesIO(clean)) as image:
             image.verify()
+        bytes_before = candidate.path.stat().st_size if candidate.path.exists() else None
         _replace_file(candidate.path, clean)
         summary.replaced += 1
+        _log_restored(candidate, bytes_before, len(clean), len(content))
     except (OSError, RemidioIntegrationError, Image.UnidentifiedImageError, SyntaxError) as exc:
         summary.failed += 1
         summary.errors.append(f"{candidate.remidio_image_id}: {sanitize_log_value(exc)}"[:300])
         LOGGER.warning("Remidio image re-pull failed image=%s error=%s", candidate.remidio_image_id, sanitize_log_value(exc))
+
+
+def _log_restored(candidate: Candidate, bytes_before: int | None, bytes_after: int, bytes_downloaded: int) -> None:
+    LOGGER.info(
+        "Remidio image restored image=%s encounter=%s path=%s bytes %s -> %s",
+        sanitize_log_value(candidate.remidio_image_id), candidate.encounter_id,
+        sanitize_log_value(candidate.path), bytes_before, bytes_after,
+    )
+    record = {
+        "at_utc": utcnow().isoformat(), "remidio_image_id": candidate.remidio_image_id,
+        "encounter_id": candidate.encounter_id, "path": str(candidate.path),
+        "bytes_before": bytes_before, "bytes_downloaded": bytes_downloaded, "bytes_after": bytes_after,
+    }
+    try:
+        RESTORE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(RESTORE_LOG, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError as exc:  # the log is a convenience: never fail a restored image over it
+        LOGGER.warning("Could not append to %s: %s", RESTORE_LOG, sanitize_log_value(exc))
 
 
 def _replace_file(path: Path, data: bytes) -> None:

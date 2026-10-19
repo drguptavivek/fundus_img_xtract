@@ -43,7 +43,9 @@ class FakeClient:
         return self.content, "image/jpeg"
 
 
-def test_damaged_file_is_replaced_losslessly_and_without_exif(tmp_path):
+def test_damaged_file_is_replaced_losslessly_and_without_exif(tmp_path, monkeypatch):
+    log = tmp_path / "repull.jsonl"
+    monkeypatch.setattr(image_repull, "RESTORE_LOG", log)
     path = tmp_path / "a.jpg"
     path.write_bytes(_photo(75))
     original = _photo(95, with_exif=True)
@@ -56,6 +58,11 @@ def test_damaged_file_is_replaced_losslessly_and_without_exif(tmp_path):
     with Image.open(BytesIO(original)) as before, Image.open(BytesIO(restored)) as after:
         assert list(after.getdata()) == list(before.getdata())
     assert not list(tmp_path.glob(".*.repull"))  # no temp file left behind
+    import json
+
+    (line,) = log.read_text().splitlines()
+    record = json.loads(line)
+    assert record["remidio_image_id"] == "img-1" and record["bytes_after"] == len(restored)
 
 
 def test_source_that_is_itself_quality_75_is_left_alone(tmp_path):
@@ -122,5 +129,25 @@ def test_candidates_are_damaged_files_newest_exam_first_and_database_is_untouche
 
     groups = image_repull._damaged_groups(limit_images=10, before=None, summary=image_repull.RepullSummary())
     assert [key[2] for key in groups] == [date(2026, 9, 3), date(2026, 9, 1)]  # newest first, the intact 09-02 skipped
+    one_per_batch = image_repull._damaged_groups(limit_images=1, before=None, summary=image_repull.RepullSummary())
+    assert [key[2] for key in one_per_batch] == [date(2026, 9, 3)]  # stops at the day boundary
     older = image_repull._damaged_groups(limit_images=10, before=date(2026, 9, 3), summary=image_repull.RepullSummary())
     assert [key[2] for key in older] == [date(2026, 9, 1)]
+
+
+def test_a_pause_separates_encounters(tmp_path, monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(image_repull.time, "sleep", sleeps.append)
+    monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_ENCOUNTERS_SECONDS", 10.0)
+    monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_API_CALLS_SECONDS", 2.5)
+    monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_DOWNLOADS_SECONDS", 1.0)
+    candidates = [image_repull.Candidate(f"i{n}", tmp_path / f"{n}.jpg", encounter) for n, encounter in enumerate([7, 7, 9])]
+    for candidate in candidates:
+        candidate.path.write_bytes(_photo(75))
+    groups = {(1, "SITE", date(2026, 9, 1)): candidates}
+    monkeypatch.setattr(image_repull, "_damaged_groups", lambda **_k: groups)
+    monkeypatch.setattr(image_repull, "_fresh_image_urls", lambda clients, *_a: clients.setdefault(1, FakeClient(_photo(95))) and {})
+
+    summary = image_repull.repull_batch(limit_images=10)
+    assert sleeps.count(10.0) == 1  # only between encounter 7 and encounter 9
+    assert summary.not_returned_by_source == 3

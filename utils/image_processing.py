@@ -391,17 +391,69 @@ def create_thumbnail_for_image(
     return None
 
 
+# JPEG segments that carry no pixel data and may carry identifiers: APP1 (Exif/XMP), APP3-APP13
+# (IPTC, Photoshop, ...), APP15 and comments. APP0 JFIF, APP2 ICC colour profile and APP14 Adobe
+# (colour transform) change how pixels are interpreted, so they are kept.
+_JPEG_STANDALONE = frozenset({0x01, *range(0xD0, 0xD9)})
+
+
+def _strip_jpeg_metadata(data: bytes) -> bytes | None:
+    """Drop metadata segments from a JPEG without touching the compressed image data.
+
+    Returns None when ``data`` is not a JPEG this parser understands, so the caller can fall back.
+    """
+    if data[:2] != b"\xff\xd8":
+        return None
+    out = bytearray(b"\xff\xd8")
+    pos = 2
+    while pos + 4 <= len(data):
+        if data[pos] != 0xFF:
+            return None
+        marker = data[pos + 1]
+        if marker == 0xFF:  # fill byte
+            pos += 1
+            continue
+        if marker in _JPEG_STANDALONE:
+            out += data[pos:pos + 2]
+            pos += 2
+            continue
+        length = int.from_bytes(data[pos + 2:pos + 4], "big")
+        if length < 2 or pos + 2 + length > len(data):
+            return None
+        segment = data[pos:pos + 2 + length]
+        payload = segment[4:]
+        if marker == 0xDA:  # start of scan: the rest is entropy-coded data up to EOI
+            out += segment
+            rest = data[pos + 2 + length:]
+            end = rest.find(b"\xff\xd9")
+            out += rest if end < 0 else rest[:end + 2]  # anything appended after EOI is dropped
+            return bytes(out)
+        keep = not (
+            marker == 0xFE
+            or marker == 0xE1
+            or 0xE3 <= marker <= 0xED
+            or marker == 0xEF
+            or (marker == 0xE0 and not payload.startswith(b"JFIF\x00"))
+            or (marker == 0xE2 and not payload.startswith(b"ICC_PROFILE\x00"))
+            or (marker == 0xEE and not payload.startswith(b"Adobe"))
+        )
+        if keep:
+            out += segment
+        pos += 2 + length
+    return None
+
+
 def strip_exif_data(image_data: bytes) -> bytes:
     """
-    Strip EXIF and other metadata from an image byte stream.
-    
-    This function creates a new image from the source data, dropping all
-    metadata tags (EXIF, IPTC, XMP) which effectively anonymizes technical
-    metadata that might contain PII (e.g., GPS, Patient Name in user comment).
-    
+    Strip EXIF and other metadata from an image byte stream without changing the pixels.
+
+    JPEGs are rewritten segment by segment, so the compressed image data is byte-identical
+    (no re-encoding, no quality loss, no resizing). Other formats are rebuilt from their pixels
+    in a lossless way; a JPEG this parser cannot read is re-encoded at maximum quality.
+
     Args:
         image_data: Raw image data as bytes
-        
+
     Returns:
         Cleaned image data as bytes. Returns original data if processing fails.
     """
@@ -409,21 +461,20 @@ def strip_exif_data(image_data: bytes) -> bytes:
         if not image_data:
             return image_data
 
+        stripped = _strip_jpeg_metadata(image_data)
+        if stripped is not None:
+            return stripped
+
         with BytesIO(image_data) as in_stream:
             with Image.open(in_stream) as img:
-                data = list(img.getdata())
-                # Create a new image without metadata
                 clean_img = Image.new(img.mode, img.size)
-                clean_img.putdata(data)
-                
-                # Copy format
+                clean_img.putdata(list(img.getdata()))
                 fmt = img.format or 'JPEG'
-                
+                save_kwargs = {"quality": 100, "subsampling": 0} if fmt == "JPEG" else {}
                 with BytesIO() as out_stream:
-                    # Save without extra metadata
-                    clean_img.save(out_stream, format=fmt)
+                    clean_img.save(out_stream, format=fmt, **save_kwargs)
                     return out_stream.getvalue()
-                    
+
     except Exception as e:
         logger.error(
             "Failed to strip EXIF data: %s",

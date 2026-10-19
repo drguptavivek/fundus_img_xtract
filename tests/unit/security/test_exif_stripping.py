@@ -63,3 +63,50 @@ class TestExifStripping:
         garbage = b"not an image"
         # Function catches exception and returns original
         assert strip_exif_data(garbage) == garbage
+
+
+class TestLosslessJpegStrip:
+    """The strip must remove metadata without re-encoding the image."""
+
+    def _photo_with_metadata(self):
+        import random
+
+        rng = random.Random(7)
+        img = Image.new("RGB", (160, 120))
+        img.putdata([(rng.randrange(256), rng.randrange(256), rng.randrange(256)) for _ in range(160 * 120)])
+        exif = img.getexif()
+        exif[0x010E] = "Sensitive Patient Data"
+        out = BytesIO()
+        img.save(out, format="JPEG", quality=92, exif=exif, comment=b"patient: Jane")
+        return out.getvalue()
+
+    def test_compressed_image_data_is_byte_identical(self):
+        original = self._photo_with_metadata()
+        clean = strip_exif_data(original)
+        scan_start = original.index(b"\xff\xda")
+        assert clean[clean.index(b"\xff\xda"):] == original[scan_start:]  # entropy data untouched
+        assert len(clean) < len(original)
+
+    def test_decoded_pixels_are_identical_and_size_unchanged(self):
+        original = self._photo_with_metadata()
+        clean = strip_exif_data(original)
+        with Image.open(BytesIO(original)) as before, Image.open(BytesIO(clean)) as after:
+            assert after.size == before.size
+            assert list(after.getdata()) == list(before.getdata())
+
+    def test_exif_and_comments_are_gone(self):
+        clean = strip_exif_data(self._photo_with_metadata())
+        assert b"Sensitive Patient Data" not in clean and b"Jane" not in clean
+        assert b"Exif\x00\x00" not in clean
+
+    def test_icc_profile_is_kept(self):
+        img = Image.new("RGB", (8, 8), "red")
+        out = BytesIO()
+        icc = b"\x00" * 128
+        img.save(out, format="JPEG", icc_profile=icc, exif=Image.Exif())
+        assert b"ICC_PROFILE\x00" in strip_exif_data(out.getvalue())
+
+    def test_undecodable_jpeg_is_returned_unchanged(self):
+        original = self._photo_with_metadata()
+        broken = original[:2] + b"\x00\x00" + original[2:]  # not a valid marker stream
+        assert strip_exif_data(broken) == broken  # undecodable: returned unchanged

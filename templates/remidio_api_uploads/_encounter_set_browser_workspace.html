@@ -165,6 +165,16 @@
           {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
           {{ refer_pill(detail.referral_suggestion) }}
           {{ wai_pills(detail.wai_pills, show_grade=true) }}
+          {% set pdfs = namespace(count=0) %}
+          {% for attachment in detail.attachments %}{% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}{% set pdfs.count = pdfs.count + 1 %}{% endif %}{% endfor %}
+          {% set pdf_count = pdfs.count %}
+          {% if detail.images or pdf_count %}
+          <button type="button" class="btn btn-sm btn-outline-success"
+                  onclick="openPswpGallery('encounter-set-media-gallery-{{ detail.id }}', 0); return false;"
+                  title="Step through every image, then every PDF report, in one viewer">
+            Review all ({{ detail.images | length }} image{{ '' if detail.images | length == 1 else 's' }} + {{ pdf_count }} PDF{{ '' if pdf_count == 1 else 's' }})
+          </button>
+          {% endif %}
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">
             {{ 'View Verification' if detail.verified_status == 'verified' else 'Verify' }}
           </a>

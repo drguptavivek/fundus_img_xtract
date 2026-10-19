@@ -158,7 +158,8 @@ def job_status_json(job_token: str):
         # Add upload_type to the payload
         payload["upload_type"] = job.upload_type
         if job.upload_type in ("discrepancy_export", "dataset_export", "project_export"):
-            payload["export_files"] = _list_export_files(job.token)
+            # Writers create the file before filling it; offering it early hands out empty downloads.
+            payload["export_files"] = _list_export_files(job.token) if job.status == "done" else []
             if job.upload_type == "project_export":
                 payload["download_base"] = url_for(
                     "fundus_api.download_project_export",

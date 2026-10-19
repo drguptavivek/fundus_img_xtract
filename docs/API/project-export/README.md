@@ -66,6 +66,16 @@ the task has not reached `final`. `Final Grades` contains every task and marks
 whether a persisted consensus/final grade exists, so unresolved tasks are not
 silently omitted.
 
+When the project has remote inference (Wadhwani AI) configured, the same
+workbook also contains `WAI Encounter Results` (one row per encounter run:
+model, status, errors, submitted image count and a DR/DME positive roll-up)
+and `WAI Image Results` (one row per image and target: detected eye,
+similarity, quality, raw label/score, mapped grade; single-image runs appear
+with their status). They are built from the DuckDB package's `remote_ai`
+stage (`project_export/stage_ai.py`), without an identifiers grant, so patient
+ids and file names are scrubbed. Raw provider payloads and remote keys stay in
+the DuckDB package only. Projects without remote inference get no WAI sheets.
+
 The `Encounters` sheet includes the core `patient_id` plus MRN and hospital
 UHID metadata when available. These stable project identifiers support joins
 to other research datasets.

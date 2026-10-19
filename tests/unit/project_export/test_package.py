@@ -334,3 +334,42 @@ def test_intra_rater_tables_follow_the_source_task(db_session, world, core_test_
                        "from intra_rater_batches").fetchone() == (label.impression, "pilot", "random")
     assert con.execute("select grade_name, comment, selected_features from intra_rater_grades").fetchone() == (
         label.impression, "again", "[1, 2]")
+
+
+def test_project_workbook_wai_tables_come_from_the_ai_stage(db_session, world, tmp_path):
+    from models import AIModel
+    from project_review.export_service import _project_uses_remote_inference, _wai_tables
+    from remote_inference.models import (
+        EncounterAIImageResult, EncounterAIInferenceRun, EncounterAIOutputTarget,
+        EncounterAITargetResult, ProjectEncounterAIWorkflow,
+    )
+
+    project, encounter, image = world["project"], world["encounter"], world["image"]
+    assert not _project_uses_remote_inference(db_session, project.id)
+    model = AIModel(name="wai", version="1")
+    db_session.add(model)
+    db_session.flush()
+    db_session.add(ProjectEncounterAIWorkflow(project_id=project.id, ai_model_id=model.id, active=True))
+    target = EncounterAIOutputTarget(ai_model_id=model.id, target_key="dr", disease_id=encounter.disease_id)
+    run = EncounterAIInferenceRun(
+        patient_encounter_id=encounter.id, ai_model_id=model.id, request_id="req-1", status="success",
+        error_message="failed on img1.jpg",
+    )
+    db_session.add_all([target, run])
+    db_session.flush()
+    result = EncounterAIImageResult(run_id=run.id, encounter_set_image_id=image.id, submitted_eye="right", remote_key="secret/key")
+    db_session.add(result)
+    db_session.flush()
+    db_session.add(EncounterAITargetResult(
+        image_result_id=result.id, output_target_id=target.id, mapped_grade="Mild NPDR", derivation_reason="provider",
+    ))
+    db_session.flush()
+    assert _project_uses_remote_inference(db_session, project.id)
+
+    sheets = _wai_tables(db_session, project.id, {world["lab"].id}, [encounter])
+    run_row = sheets["WAI Encounter Results"][0]
+    assert run_row["encounter_uuid"] == encounter.uuid and run_row["dr_positive"] is True
+    assert "img1.jpg" not in str(run_row["error_message"])
+    image_row = sheets["WAI Image Results"][0]
+    assert image_row["image_uuid"] == image.uuid and image_row["mapped_grade"] == "Mild NPDR"
+    assert "remote_key" not in image_row

@@ -35,6 +35,12 @@ from models import (
     Project,
     User,
 )
+from remote_inference.encounter_service import is_positive_output
+from remote_inference.models import (
+    ProjectAutomatedRemoteInferenceRule,
+    ProjectEncounterAIWorkflow,
+    ProjectManualRemoteInferenceWorkflow,
+)
 from review.discrepancy_export import EXPORT_DIR, _write_zips
 
 
@@ -129,7 +135,14 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
             export_dir = EXPORT_DIR / job_token
             export_dir.mkdir(parents=True, exist_ok=True)
             if request.kind == "workbook":
-                _write_workbook(export_dir / "project_encounterset_export.xlsx", encounters, images, tasks)
+                wai_tables = (
+                    _wai_tables(db, request.project_id, allowed_labs, encounters)
+                    if _project_uses_remote_inference(db, request.project_id) else None
+                )
+                _write_workbook(
+                    export_dir / "project_encounterset_export.xlsx", encounters, images, tasks,
+                    wai_tables=wai_tables,
+                )
                 if request_data.get("sync_grant_uuid"):
                     _write_sync_duckdb(db, request.project_id, allowed_labs, grant_pii_labs, export_dir)
             else:
@@ -316,6 +329,85 @@ def _tasks(db, encounter_ids: list[int]):
     ).unique().scalars())
 
 
+def _project_uses_remote_inference(db, project_id: int) -> bool:
+    """True when the project has any active remote-inference (WAI) configuration."""
+    return any(
+        db.execute(
+            select(exists().where(model.project_id == project_id, model.active.is_(True)))
+        ).scalar_one()
+        for model in (
+            ProjectEncounterAIWorkflow,
+            ProjectAutomatedRemoteInferenceRule,
+            ProjectManualRemoteInferenceWorkflow,
+        )
+    )
+
+
+def _wai_tables(db, project_id: int, labs, encounters) -> dict[str, list[dict]]:
+    """WAI sheets from the DuckDB package's remote_ai stage, so both exports read the same data.
+
+    Scoped to the already-filtered encounters; no identifiers grant, so patient ids and file names
+    are scrubbed exactly as they are in the package.
+    """
+    from project_export import ExportScope
+    from project_export import stage_ai, tables
+
+    scope = ExportScope(project_id, frozenset(labs))
+    ctx = tables.BuildContext(db, scope, encounters, tables.collect_media(db, scope, encounters))
+    return _wai_sheet_rows(stage_ai.build(ctx))
+
+
+_WAI_BULKY = frozenset({"request_manifest", "response", "config_snapshot", "remote_key", "raw_output"})
+
+
+def _wai_sheet_rows(ai: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """Encounter-level sheet (one row per run, DR/DME roll-up) and image-level sheet (one row per image x target).
+
+    Raw provider payloads stay in the DuckDB package; they are too large for a worksheet.
+    """
+    targets_by_image: dict[tuple, list[dict]] = {}
+    positives: dict[str, dict[str, Any]] = {}
+    for target in ai["ai_target_results"]:
+        targets_by_image.setdefault((target["run_id"], target["image_uuid"]), []).append(target)
+        key = target["target_key"]
+        entry = positives.setdefault(target["run_id"], {}).setdefault(key, {"positive": False, "grades": []})
+        entry["positive"] = entry["positive"] or is_positive_output(key, target["mapped_grade"])
+        if target["mapped_grade"] not in entry["grades"]:
+            entry["grades"].append(target["mapped_grade"])
+    image_counts: dict[str, int] = {}
+    for image in ai["ai_image_results"]:
+        image_counts[image["run_id"]] = image_counts.get(image["run_id"], 0) + 1
+
+    encounter_rows = []
+    for run in ai["ai_runs"]:
+        if run["run_scope"] != "encounter":
+            continue
+        row = {k: _xlsx_value(v) for k, v in run.items() if k not in _WAI_BULKY and k not in ("task_uuid", "image_uuid", "prediction_id", "retry_count")}
+        row["submitted_image_count"] = image_counts.get(run["run_id"], 0)
+        for key, entry in sorted(positives.get(run["run_id"], {}).items()):
+            row[f"{key}_positive"] = entry["positive"]
+            row[f"{key}_grades"] = "; ".join(entry["grades"])
+        encounter_rows.append(row)
+
+    image_rows = []
+    for image in ai["ai_image_results"]:
+        base = {k: v for k, v in image.items() if k not in _WAI_BULKY}
+        for target in targets_by_image.get((image["run_id"], image["image_uuid"])) or [{}]:
+            image_rows.append({
+                **base,
+                **{k: _xlsx_value(target.get(k)) for k in ("target_key", "raw_label", "raw_score", "mapped_grade", "derivation_reason")},
+            })
+    # Single-image (task-level) runs have no per-image result rows; keep them visible rather than dropping them.
+    for run in ai["ai_runs"]:
+        if run["run_scope"] == "task":
+            image_rows.append({
+                "run_id": run["run_id"], "encounter_uuid": run["encounter_uuid"], "image_uuid": run["image_uuid"],
+                "ai_model": run["ai_model"], "ai_model_version": run["ai_model_version"],
+                "run_status": run["status"], "error_code": run["error_code"],
+            })
+    return {"WAI Encounter Results": encounter_rows, "WAI Image Results": image_rows}
+
+
 def _export_filename(image: EncounterSetImage) -> str:
     source_name = image.edited_filename or image.original_filename
     return f"{image.uuid}{Path(source_name).suffix.lower() or '.jpg'}"
@@ -454,7 +546,7 @@ def _encounter_ocr_summary(encounter: Any) -> dict[str, Any]:
     }
 
 
-def _write_workbook(path: Path, encounters, images, tasks) -> None:
+def _write_workbook(path: Path, encounters, images, tasks, wai_tables=None) -> None:
     metadata_headers = collect_non_pii_metadata_headers(encounters)
     images_by_encounter = {}
     for image in images:
@@ -558,11 +650,14 @@ def _write_workbook(path: Path, encounters, images, tasks) -> None:
                 if task.consensus and task.consensus.decided_at else None
             ),
         })
+    sheets = [
+        ("Encounters", encounter_rows), ("Images", image_rows), ("Tasks", task_rows),
+        ("Grade Submissions", grade_rows), ("Final Grades", final_rows),
+    ]
+    if wai_tables is not None:
+        sheets += list(wai_tables.items())
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        for sheet, rows in (
-            ("Encounters", encounter_rows), ("Images", image_rows), ("Tasks", task_rows),
-            ("Grade Submissions", grade_rows), ("Final Grades", final_rows),
-        ):
+        for sheet, rows in sheets:
             pd.DataFrame(rows).to_excel(writer, sheet_name=sheet, index=False)
 
 

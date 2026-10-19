@@ -89,7 +89,7 @@ def process_encounter_set_image_thumbnail_task(
     bind=True,
     acks_late=True,
 )
-def process_encounter_set_image_data_combined_task(self, prev_result: dict) -> dict:
+def process_encounter_set_image_data_combined_task(self, prev_result: dict, run_pii: bool = True) -> dict:
     _ = self
     if prev_result.get("status") != "ok":
         return prev_result
@@ -111,7 +111,7 @@ def process_encounter_set_image_data_combined_task(self, prev_result: dict) -> d
             file_path,
             session,
             run_metadata=True,
-            run_pii=True,
+            run_pii=run_pii,
             run_strip=True,
         )
         return {"set_image_id": set_image_id, "file_path": file_path, "status": "ok"}

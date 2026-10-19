@@ -2072,10 +2072,12 @@ def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_i
     if not image_ids:
         return {"images_queued": 0}
     # Shared with the IITK ingester so both paths run the same metadata and
-    # burned-in-PII scan; a second copy here would be free to drift.
+    # strip pipeline; a second copy here would be free to drift. Remidio camera
+    # exports do not carry burned-in patient text, so the PII scan is skipped
+    # (metadata extraction and the lossless EXIF strip still run).
     from encounter_sets.post_processing import queue_image_post_processing
 
-    return {"images_queued": queue_image_post_processing(image_ids, user_id=user_id)}
+    return {"images_queued": queue_image_post_processing(image_ids, user_id=user_id, run_pii=False)}
 
 
 def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:

@@ -138,7 +138,7 @@ def test_candidates_are_damaged_files_newest_exam_first_and_database_is_untouche
 def test_a_pause_separates_encounters(tmp_path, monkeypatch):
     sleeps = []
     monkeypatch.setattr(image_repull.time, "sleep", sleeps.append)
-    monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_ENCOUNTERS_SECONDS", 10.0)
+    monkeypatch.setattr(image_repull, "ENCOUNTER_PAUSE_RANGE_SECONDS", (3.0, 8.0))
     monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_API_CALLS_SECONDS", 2.5)
     monkeypatch.setattr(image_repull, "PAUSE_BETWEEN_DOWNLOADS_SECONDS", 1.0)
     candidates = [image_repull.Candidate(f"i{n}", tmp_path / f"{n}.jpg", encounter) for n, encounter in enumerate([7, 7, 9])]
@@ -149,5 +149,6 @@ def test_a_pause_separates_encounters(tmp_path, monkeypatch):
     monkeypatch.setattr(image_repull, "_fresh_image_urls", lambda clients, *_a: clients.setdefault(1, FakeClient(_photo(95))) and {})
 
     summary = image_repull.repull_batch(limit_images=10)
-    assert sleeps.count(10.0) == 1  # only between encounter 7 and encounter 9
+    gaps = [value for value in sleeps if value not in (1.0, 2.5)]
+    assert len(gaps) == 1 and 3.0 <= gaps[0] <= 8.0  # only between encounter 7 and encounter 9
     assert summary.not_returned_by_source == 3

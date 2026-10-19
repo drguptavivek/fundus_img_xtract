@@ -44,7 +44,7 @@ appended as one JSON line to `logs/remidio_image_repull.jsonl` (`REMIDIO_REPULL_
 
 Pacing: `REMIDIO_REPULL_PAUSE_SECONDS` (default 2.5, per Remidio API call),
 `REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS` (default 1.0, per download) and
-`REMIDIO_REPULL_ENCOUNTER_PAUSE_SECONDS` (default 10, extra gap between encounters).
+`REMIDIO_REPULL_ENCOUNTER_PAUSE_MIN_SECONDS` / `..._MAX_SECONDS` (default 3 and 8: a random extra gap between encounters).
 
 ## Remidio ingestion no longer runs the PII scan
 

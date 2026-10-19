@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
@@ -39,7 +40,11 @@ HEADER_BYTES = 4096
 DEFAULT_BATCH_IMAGES = 50
 PAUSE_BETWEEN_API_CALLS_SECONDS = float(os.getenv("REMIDIO_REPULL_PAUSE_SECONDS", "2.5"))
 PAUSE_BETWEEN_DOWNLOADS_SECONDS = float(os.getenv("REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS", "1.0"))
-PAUSE_BETWEEN_ENCOUNTERS_SECONDS = float(os.getenv("REMIDIO_REPULL_ENCOUNTER_PAUSE_SECONDS", "10"))
+# A random gap between encounters (not a fixed beat) keeps the load on the provider irregular.
+ENCOUNTER_PAUSE_RANGE_SECONDS = (
+    float(os.getenv("REMIDIO_REPULL_ENCOUNTER_PAUSE_MIN_SECONDS", "3")),
+    float(os.getenv("REMIDIO_REPULL_ENCOUNTER_PAUSE_MAX_SECONDS", "8")),
+)
 
 
 # One JSON line per restored image: the durable record of what was healed (line count = images restored).
@@ -100,7 +105,7 @@ def repull_batch(
         previous_encounter = None
         for candidate in sorted(candidates, key=lambda item: item.encounter_id):
             if pause and previous_encounter is not None and candidate.encounter_id != previous_encounter:
-                time.sleep(PAUSE_BETWEEN_ENCOUNTERS_SECONDS)  # a pause between encounters, on top of the per-download one
+                time.sleep(random.uniform(*ENCOUNTER_PAUSE_RANGE_SECONDS))  # between encounters, on top of the per-download pause
             previous_encounter = candidate.encounter_id
             _repair_one(clients[connection_id], candidate, fresh.get(candidate.remidio_image_id), summary)
             if pause:

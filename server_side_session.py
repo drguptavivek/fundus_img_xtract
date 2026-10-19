@@ -11,6 +11,7 @@ from flask.sessions import SessionInterface, SessionMixin
 from werkzeug.datastructures import CallbackDict
 from sqlalchemy import select, and_
 
+from auth.utils import get_client_ip
 from models import Session as DbSession, FlaskSession
 
 # Logger for session operations
@@ -83,16 +84,6 @@ class DatabaseSessionInterface(SessionInterface):
             return None
         if request.path in ("/healthz", "/healthz/"):
             return None
-
-        # Get client IP address
-        def get_client_ip():
-            # Check for IP in headers (common for reverse proxies)
-            if request.headers.getlist("X-Forwarded-For"):
-                return request.headers.getlist("X-Forwarded-For")[0]
-            elif request.headers.getlist("X-Real-IP"):
-                return request.headers.getlist("X-Real-IP")[0]
-            else:
-                return request.remote_addr
 
         client_ip = get_client_ip()
 
@@ -174,17 +165,6 @@ class DatabaseSessionInterface(SessionInterface):
 
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = getattr(session, "session_id", None)
-
-        # Get client IP address using stored request
-        def get_client_ip():
-            from flask import request
-
-            if request.headers.getlist("X-Forwarded-For"):
-                return request.headers.getlist("X-Forwarded-For")[0]
-            elif request.headers.getlist("X-Real-IP"):
-                return request.headers.getlist("X-Real-IP")[0]
-            else:
-                return request.remote_addr
 
         client_ip = get_client_ip()
 

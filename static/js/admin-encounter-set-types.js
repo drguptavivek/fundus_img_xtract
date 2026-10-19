@@ -509,7 +509,7 @@
   function createFieldCard(scope, field, expanded) {
     const data = field || {};
     const card = document.createElement('div');
-    card.className = 'card bg-white border border-2 border-light-subtle shadow-sm';
+    card.className = 'card bg-body border border-2 border-light-subtle shadow-sm';
     card.dataset.estField = scope;
     card.dataset.estFieldDefinitionId = data.field_definition_id || '';
     card.dataset.estExpanded = expanded ? '1' : '0';

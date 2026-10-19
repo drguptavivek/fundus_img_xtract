@@ -45,7 +45,7 @@
             <li>Grade Submissions: every saved grading role and selected class features.</li>
             <li>Final Grades: persisted consensus grade and method.</li>
           </ul>
-          <p class="small text-muted mt-3 mb-0">Image exports are limited to 250 matched EncounterSets per request. Narrow the capture date range if the preview exceeds the limit.</p>
+          <p class="small text-muted mt-3 mb-0">Image exports are limited to 250 matched EncounterSets per request; narrow the capture date range to enable them. The grading workbook has no EncounterSet limit.</p>
         </div>
       </section>
       <section class="card shadow-sm mt-4" aria-labelledby="recent-exports-heading">
@@ -90,7 +90,7 @@
     const item = body.data;
     preview.className = `alert ${item.image_export_allowed ? 'alert-light' : 'alert-warning'} border mb-0`;
     preview.textContent = `${item.encounter_count} EncounterSets · ${item.image_count} images · ${item.task_count} tasks` +
-      (item.image_export_allowed ? '' : ` · image export exceeds the ${item.image_export_limit} EncounterSet limit`);
+      (item.image_export_allowed ? '' : ` · image export is limited to ${item.image_export_limit} EncounterSets; the grading workbook can still be downloaded`);
     imageButton.disabled = !item.image_export_allowed;
   }
 

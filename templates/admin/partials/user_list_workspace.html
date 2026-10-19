@@ -39,7 +39,7 @@
                  hx-target="#admin-users-workspace"
                  hx-swap="outerHTML"
                  hx-push-url="{{ url_for('admin.user_detail', user_id=u.id) }}">
-              <div class="card-header bg-white py-2">
+              <div class="card-header bg-body py-2">
                 <div class="d-flex justify-content-between align-items-start">
                   <div>
                     <h6 class="mb-0 text-truncate">{{ u.username }}</h6>
@@ -110,7 +110,7 @@
                 </div>
                 {% endif %}
               </div>
-              <div class="card-footer bg-white py-2">
+              <div class="card-footer bg-body py-2">
                 <div class="d-flex justify-content-between align-items-center">
                   <div class="small text-muted">
                     {% if u.created_at %}

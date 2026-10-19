@@ -430,6 +430,8 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "verified_status": encounter.encounter_verified_status or "pending",
         "referral_suggestion": encounter.referral_suggestion,
         "positive_diseases": list(encounter.referral_positive_diseases_json or []),
+        "verification_edit": None if no_pii or encounter.encounter_verified_status == "verified"
+        else _verification_edit_context(db, encounter),
         # Free text typed by the verifier may carry identifiers, so it is withheld from the no-PII browser.
         "verifier_observation": None if no_pii else _verifier_observation(metadata),
         "metadata_patient": {} if no_pii else metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {},
@@ -451,6 +453,21 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "source_attachment_ids": source_attachment_ids,
         "ocr_pending_count": sum(1 for attachment in attachment_rows if attachment.get("ocr_is_pending")),
         "attachments": attachment_rows,
+    }
+
+
+def _verification_edit_context(db: Session, encounter: PatientEncounters) -> dict[str, Any]:
+    """What the browser needs to edit verifier fields in place; saved through the verify metadata route."""
+    # Lazy: verify_encounter_set.routes imports this module.
+    from verify_encounter_set.routes import _encounter_set_verification_profile
+
+    profile = _encounter_set_verification_profile(db, encounter)
+    return {
+        "positive_disease_options": profile["positive_disease_options"],
+        # With a profile-defined fundus_field the verify page owns the centering control.
+        "centering_editable": not any(
+            field["key"] == "fundus_field" for field in profile["editable_fields_by_scope"]["image"]
+        ),
     }
 
 
@@ -586,13 +603,16 @@ def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
     return {
         "id": image.id,
         "uuid": image.uuid,
+        "is_reviewed": bool(image.is_reviewed),
+        "is_not_gradable": bool(image.is_not_gradable),
         "position": image.spatial_position,
         "position_label": str(gaze_position) if _has_value(gaze_position) else f"Position {image.spatial_position}",
         "filename": image.original_filename,
         "thumbnail_filename": image.thumbnail_filename,
         "camera_name": image.camera.name if image.camera else None,
         "laterality": _metadata_lookup(metadata, "laterality"),
-        "field": _metadata_lookup(metadata, "fundus_field", "field"),
+        "field": _metadata_lookup(metadata, "fundus_field", "field", "focus"),
+        "focus": _metadata_lookup(metadata, "focus"),
         "quality": _metadata_lookup(metadata, "remidio_image_quality", "quality"),
         "device_type": _metadata_lookup(metadata, "image_device_type", "device_type"),
         "image_variant": _metadata_lookup(metadata, "image_variant"),

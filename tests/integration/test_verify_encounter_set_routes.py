@@ -920,7 +920,7 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"Laterality" in response.data
     assert b"Referral Needed / Image Positive" in response.data
     assert response.data.count(b"col-12 col-sm-3 col-lg-2") == 2
-    assert b"col-12 col-sm-6 col-lg-8" in response.data
+    assert b"col-12 col-lg-4" in response.data  # verifier observation column
     assert b"Patient Age" not in response.data
     assert b"Clinical Note" not in response.data
     assert b"Verified" in response.data

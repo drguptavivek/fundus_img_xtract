@@ -1,4 +1,5 @@
 {% from "remidio_api_uploads/_wai_pills.html" import refer_pill, wai_pills %}
+{% from "_forms.html" import csrf_field %}
 <div class="row g-3" data-encounter-browser-url="{{ browser_url }}">
   <div class="col-12">
     <div class="card shadow-sm">
@@ -169,11 +170,25 @@
           {% for attachment in detail.attachments %}{% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}{% set pdfs.count = pdfs.count + 1 %}{% endif %}{% endfor %}
           {% set pdf_count = pdfs.count %}
           {% if detail.images or pdf_count %}
-          <button type="button" class="btn btn-sm btn-outline-success"
+          <button type="button" class="btn btn-sm btn-secondary"
                   onclick="openPswpGallery('encounter-set-media-gallery-{{ detail.id }}', 0); return false;"
                   title="Step through every image, then every PDF report, in one viewer">
             Review all ({{ detail.images | length }} image{{ '' if detail.images | length == 1 else 's' }} + {{ pdf_count }} PDF{{ '' if pdf_count == 1 else 's' }})
           </button>
+          {% endif %}
+          {% if detail.verified_status != 'verified' %}
+          {% set pending_review = detail.images | rejectattr('is_reviewed') | rejectattr('is_not_gradable') | map(attribute='uuid') | list %}
+          <button type="button" class="btn btn-sm btn-success"
+                  data-one-click-verify
+                  data-finalize-url="{{ url_for('verify_encounter_set.finalize_verification', uuid=detail.uuid) }}"
+                  data-mark-reviewed-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid='__IMAGE__') }}"
+                  data-verify-page-url="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}"
+                  data-image-uuids="{{ pending_review | tojson | forceescape }}"
+                  data-confirm="Mark {{ pending_review | length }} unreviewed image(s) as reviewed and verify this EncounterSet as it stands?"
+                  title="Mark every image reviewed and verify this EncounterSet in one step (same checks as the Verify page)">
+            Verify in one click
+          </button>
+          <span class="small w-100 text-end" data-one-click-verify-status role="status"></span>
           {% endif %}
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">
             {{ 'View Verification' if detail.verified_status == 'verified' else 'Verify' }}
@@ -209,6 +224,46 @@
             {% endif %}
           {% endfor %}
         </div>
+        {% if detail.verification_edit %}
+        {% set edit = detail.verification_edit %}
+        <form class="row g-3 mb-3 pb-3 border-bottom" data-verification-edit-form
+              action="{{ url_for('verify_encounter_set.update_metadata', uuid=detail.uuid) }}" method="post">
+          {{ csrf_field() }}
+          <div class="col-12 col-lg-5">
+            <label class="form-label" for="browse_verifier_observation">EncounterSet verifier observation</label>
+            <input type="hidden" name="__present__metadata__encounter__verifier_observation" value="1">
+            <textarea class="form-control" id="browse_verifier_observation" name="metadata__encounter__verifier_observation"
+                      rows="2" maxlength="2000" placeholder="Observed feature(s) or comment">{{ detail.verifier_observation.text if detail.verifier_observation else '' }}</textarea>
+            {% if detail.verifier_observation and detail.verifier_observation.by %}<div class="form-text">Last noted by {{ detail.verifier_observation.by }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-4 col-lg-2">
+            <label class="form-label" for="browse_referral_suggestion">Referral Suggestion</label>
+            <input type="hidden" name="__present__metadata__encounter__referral_suggestion" value="1">
+            <select class="form-select" id="browse_referral_suggestion" name="metadata__encounter__referral_suggestion">
+              {% for value, label in [('missing', 'Missing'), ('yes', 'Yes'), ('no', 'No')] %}
+              <option value="{{ value }}" {% if detail.referral_suggestion == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-8 col-lg-5">
+            <fieldset>
+              <legend class="form-label mb-1 fs-6">Positive Diseases</legend>
+              <input type="hidden" name="__present__metadata__encounter__referral_positive_diseases" value="1">
+              {% for option in edit.positive_disease_options %}
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="metadata__encounter__referral_positive_diseases"
+                       id="browse_pos_{{ option.disease_id }}" value="{{ option.name }}" {% if option.selected %}checked{% endif %}>
+                <label class="form-check-label" for="browse_pos_{{ option.disease_id }}">{{ option.name }}</label>
+              </div>
+              {% else %}<span class="text-muted small">No grading or referral diseases are configured for this project.</span>{% endfor %}
+            </fieldset>
+          </div>
+          <div class="col-12 d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-primary" type="submit">Save verifier fields</button>
+            <span class="small text-muted" data-verification-edit-status role="status"></span>
+          </div>
+        </form>
+        {% else %}
         <div class="row g-3 mb-3 pb-3 border-bottom" data-verification-summary>
           <div class="col-12 col-md-3">
             <div class="small text-muted">Referral Suggestion</div>
@@ -228,6 +283,7 @@
             {% else %}<span class="text-muted">None recorded</span>{% endif %}
           </div>
         </div>
+        {% endif %}
         <div class="row g-3 mb-3">
           <div class="col-12 col-md-4">
             <div class="small text-muted">Lab</div>
@@ -291,6 +347,17 @@
                     </div>
                   </div>
                 </a>
+                  {% if detail.verification_edit and detail.verification_edit.centering_editable %}
+                  <select class="form-select form-select-sm mt-1" data-centering-select
+                          data-save-url="{{ url_for('verify_encounter_set.update_metadata', uuid=detail.uuid) }}"
+                          data-field-name="metadata__image__{{ image.id }}__focus"
+                          data-original-value="{{ (image.focus or image.field or '') | lower }}"
+                          aria-label="Centering for {{ image.position_label }}">
+                    {% for value, label in [('', 'Centering: -'), ('macula', 'Macula'), ('disc', 'Disc'), ('other', 'Other')] %}
+                    <option value="{{ value }}" {% if (image.focus or image.field or '') | lower == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  {% endif %}
               </div>
               {% endfor %}
             </div>

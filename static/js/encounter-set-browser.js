@@ -335,6 +335,100 @@
     runProjectPendingOcr(button);
   });
 
+  // One-click verify: mark every unreviewed image reviewed, then finalize through the same routes the Verify page uses.
+  async function oneClickVerify(button) {
+    const status = document.querySelector('[data-one-click-verify-status]');
+    const say = function (message, isError) {
+      if (!status) return;
+      status.textContent = message;
+      status.className = 'small w-100 text-end ' + (isError ? 'text-danger' : 'text-muted');
+    };
+    const post = function (url, body) {
+      return fetch(url, {
+        method: 'POST',
+        headers: Object.assign({'X-CSRFToken': csrfToken(), 'X-EncounterSet-Async': '1'},
+          body ? {'Content-Type': 'application/x-www-form-urlencoded'} : {}),
+        body: body || undefined,
+        credentials: 'same-origin',
+      });
+    };
+    const fail = function (message) {
+      say(message + ' Open the Verify page to fix it.', true);
+      button.disabled = false;
+    };
+    if (!window.confirm(button.dataset.confirm || 'Verify this EncounterSet?')) return;
+    button.disabled = true;
+    const uuids = JSON.parse(button.dataset.imageUuids || '[]');
+    try {
+      for (let i = 0; i < uuids.length; i += 1) {
+        say('Marking images reviewed ' + (i + 1) + '/' + uuids.length + '…', false);
+        const response = await post(button.dataset.markReviewedUrl.replace('__IMAGE__', uuids[i]));
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok || data.success === false) return fail(data.message || 'An image could not be marked reviewed.');
+      }
+      say('Verifying…', false);
+      const response = await post(button.dataset.finalizeUrl, new URLSearchParams({after: 'stay'}).toString());
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok || data.success === false) return fail(data.message || 'Verification was rejected.');
+      window.location.reload();
+    } catch (error) {
+      fail('Verification failed: ' + (error && error.message ? error.message : 'network error') + '.');
+    }
+  }
+
+  document.addEventListener('click', function (event) {
+    const button = event.target.closest('[data-one-click-verify]');
+    if (!button) return;
+    event.preventDefault();
+    oneClickVerify(button);
+  });
+
+  // Save verifier fields / image centering through the Verify page's metadata route (it only touches posted fields).
+  function postMetadata(url, formData) {
+    return fetch(url, {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrfToken(), 'X-EncounterSet-Async': '1'},
+      body: formData,
+      credentials: 'same-origin',
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok || data.success === false) throw new Error(data.message || 'Save failed');
+        return data;
+      });
+    });
+  }
+
+  document.addEventListener('submit', function (event) {
+    const form = event.target.closest('[data-verification-edit-form]');
+    if (!form) return;
+    event.preventDefault();
+    const status = form.querySelector('[data-verification-edit-status]');
+    if (status) { status.textContent = 'Saving…'; status.className = 'small text-muted'; }
+    postMetadata(form.action, new FormData(form)).then(function () {
+      if (status) { status.textContent = 'Saved.'; status.className = 'small text-success'; }
+      window.setTimeout(function () { window.location.reload(); }, 600);
+    }).catch(function (error) {
+      if (status) { status.textContent = error.message; status.className = 'small text-danger'; }
+    });
+  });
+
+  document.addEventListener('change', function (event) {
+    const select = event.target.closest('[data-centering-select]');
+    if (!select) return;
+    const body = new FormData();
+    body.append('__present__' + select.dataset.fieldName, '1');
+    body.append(select.dataset.fieldName, select.value);
+    select.disabled = true;
+    postMetadata(select.dataset.saveUrl, body).then(function () {
+      select.dataset.originalValue = select.value;
+      select.classList.add('is-valid');
+    }).catch(function (error) {
+      select.value = select.dataset.originalValue || '';
+      select.classList.add('is-invalid');
+      window.alert(error.message);
+    }).finally(function () { select.disabled = false; });
+  });
+
   // Land on the EncounterSet header (title, status, referral pill), not on whatever the browser restored.
   function scrollToEncounterTop() {
     const top = document.querySelector('[data-encounter-detail-top]');

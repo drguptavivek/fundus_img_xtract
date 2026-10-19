@@ -148,7 +148,7 @@
 
   <div class="col-12 col-xl-8">
     {% if detail %}
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-3" id="encounter-detail-top" data-encounter-detail-top>
       <div class="card-header d-flex flex-column flex-lg-row justify-content-between gap-2">
         <div>
           <div class="fw-semibold">{{ detail.name or '-' }}</div>
@@ -208,6 +208,25 @@
              title="{{ attachment.report_type or 'PDF' }}{% if attachment.metadata_caption %} | {{ attachment.metadata_caption }}{% endif %}"></a>
             {% endif %}
           {% endfor %}
+        </div>
+        <div class="row g-3 mb-3 pb-3 border-bottom" data-verification-summary>
+          <div class="col-12 col-md-3">
+            <div class="small text-muted">Referral Suggestion</div>
+            <div>{% if detail.referral_suggestion == 'yes' %}{{ refer_pill(detail.referral_suggestion) }}{% else %}<span class="text-muted">{{ 'No referral advised' if detail.referral_suggestion == 'no' else 'Not recorded' }}</span>{% endif %}</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="small text-muted">Positive Diseases</div>
+            <div>
+              {% for disease in detail.positive_diseases %}<span class="badge text-bg-danger me-1">{{ disease }}</span>{% else %}<span class="text-muted">None recorded</span>{% endfor %}
+            </div>
+          </div>
+          <div class="col-12 col-md-5">
+            <div class="small text-muted">EncounterSet verifier observation</div>
+            {% if detail.verifier_observation %}
+            <div>{{ detail.verifier_observation.text }}</div>
+            {% if detail.verifier_observation.by %}<div class="form-text">Noted by {{ detail.verifier_observation.by }}</div>{% endif %}
+            {% else %}<span class="text-muted">None recorded</span>{% endif %}
+          </div>
         </div>
         <div class="row g-3 mb-3">
           <div class="col-12 col-md-4">

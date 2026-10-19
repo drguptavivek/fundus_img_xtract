@@ -29,3 +29,13 @@ def test_encounter_set_browser_falls_back_to_numeric_position():
     )
 
     assert _encounter_set_image_row(image)["position_label"] == "Position 4"
+
+
+def test_verifier_observation_is_read_from_top_level_verification_metadata():
+    from remidio_api_integration.service import _verifier_observation
+
+    assert _verifier_observation({}) is None
+    assert _verifier_observation({"verification": {"observation_by": "dr"}}) is None
+    assert _verifier_observation(
+        {"verification": {"observation": "disc pallor", "observation_by": "dr"}}
+    ) == {"text": "disc pallor", "by": "dr"}

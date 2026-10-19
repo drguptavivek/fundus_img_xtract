@@ -335,11 +335,24 @@
     runProjectPendingOcr(button);
   });
 
+  // Land on the EncounterSet header (title, status, referral pill), not on whatever the browser restored.
+  function scrollToEncounterTop() {
+    const top = document.querySelector('[data-encounter-detail-top]');
+    if (!top) return;
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () { top.scrollIntoView({ block: 'start' }); });
+    });
+  }
+
   document.addEventListener('htmx:afterSwap', function (event) {
     if (!event.detail || !event.detail.target || event.detail.target.id !== 'encounter-set-browser-workspace') return;
     updateBrowserHistory('push');
     refreshProjectPendingOcrButton();
+    scrollToEncounterTop();
   });
+
+  if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  scrollToEncounterTop();
 
   updateBrowserHistory('replace');
   refreshProjectPendingOcrButton();

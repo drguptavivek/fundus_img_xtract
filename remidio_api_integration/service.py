@@ -429,6 +429,9 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "lab_unit_name": encounter.lab_unit.name if encounter.lab_unit else None,
         "verified_status": encounter.encounter_verified_status or "pending",
         "referral_suggestion": encounter.referral_suggestion,
+        "positive_diseases": list(encounter.referral_positive_diseases_json or []),
+        # Free text typed by the verifier may carry identifiers, so it is withheld from the no-PII browser.
+        "verifier_observation": None if no_pii else _verifier_observation(metadata),
         "metadata_patient": {} if no_pii else metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {},
         "metadata_encounter": {} if no_pii else encounter_metadata,
         "metadata_other": {
@@ -449,6 +452,13 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "ocr_pending_count": sum(1 for attachment in attachment_rows if attachment.get("ocr_is_pending")),
         "attachments": attachment_rows,
     }
+
+
+def _verifier_observation(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    verification = metadata.get("verification") if isinstance(metadata.get("verification"), dict) else {}
+    if not verification.get("observation"):
+        return None
+    return {"text": verification["observation"], "by": verification.get("observation_by")}
 
 
 def _encounter_set_export_metadata(

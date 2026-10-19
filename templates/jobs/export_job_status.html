@@ -168,6 +168,14 @@
           link.rel = 'noopener';
           link.className = 'text-decoration-none';
           li.appendChild(link);
+          const bytes = (data.export_file_sizes || {})[fname];
+          if (typeof bytes === 'number') {
+            const size = document.createElement('span');
+            size.className = 'badge text-bg-light border';
+            size.textContent = bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB'
+              : bytes >= 1024 ? (bytes / 1024).toFixed(1) + ' KB' : bytes + ' B';
+            li.appendChild(size);
+          }
           exportList.appendChild(li);
         });
       }

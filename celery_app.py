@@ -13,6 +13,7 @@ from celery import Celery
 from celery.schedules import crontab, schedule as celery_schedule
 
 from utils.celery_queue_config import (
+    infer_celery_queue,
     CELERY_TASK_DEFAULT_EXCHANGE,
     CELERY_TASK_DEFAULT_QUEUE,
     CELERY_TASK_DEFAULT_ROUTING_KEY,
@@ -58,6 +59,18 @@ def _times_to_crontab(times: list[str]) -> list[crontab]:
     return schedules
 
 
+class _PiiDetectionThrottle:
+    """Space out every task routed to the pii_detection queue (a worker runs them back to back otherwise)."""
+
+    def __init__(self, rate_limit: str):
+        self.rate_limit = rate_limit
+
+    def annotate(self, task):
+        if infer_celery_queue(task.name) == "pii_detection":
+            return {"rate_limit": self.rate_limit}
+        return None
+
+
 def make_celery_app() -> Celery:
     load_environment()
 
@@ -88,6 +101,11 @@ def make_celery_app() -> Celery:
         enable_utc=True,
         task_routes=CELERY_TASK_ROUTES,
     )
+
+    # "24/m" = one PII/metadata task every ~2.5 s per worker; empty disables the throttle.
+    pii_rate_limit = os.getenv("PII_DETECTION_RATE_LIMIT", "24/m").strip()
+    if pii_rate_limit:
+        app.conf.task_annotations = (_PiiDetectionThrottle(pii_rate_limit),)
 
     app.autodiscover_tasks(["celery_tasks"], related_name="tasks")
 
@@ -139,10 +157,10 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute=0, hour="2"),
         }
 
-        # Image listing v2 MVs - refresh every 30 minutes
-        beat_schedule["mvw-image-listing-v2-refresh-30min"] = {
+        # Image listing v2 MVs - refresh hourly (a refresh takes ~5 min of DB CPU)
+        beat_schedule["mvw-image-listing-v2-refresh-60min"] = {
             "task": "celery_tasks.tasks.mv_tasks.refresh_image_listing_v2_task",
-            "schedule": crontab(minute="0,30", hour="*"),
+            "schedule": crontab(minute=15, hour="*"),
         }
 
         beat_schedule["remidio-api-prospective-sync-hourly"] = {

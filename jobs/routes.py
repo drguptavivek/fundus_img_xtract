@@ -160,13 +160,13 @@ def job_status_json(job_token: str):
         if job.upload_type in ("discrepancy_export", "dataset_export", "project_export"):
             # Writers create the file before filling it; offering it early hands out empty downloads.
             payload["export_files"] = _list_export_files(job.token) if job.status == "done" else []
+            payload["export_file_sizes"] = _export_file_sizes(job.token, payload["export_files"])
             if job.upload_type == "project_export":
                 payload["download_base"] = url_for(
                     "fundus_api.download_project_export",
                     project_id=job.project_id,
                     job_token=job.token,
-                    filename="",
-                    _external=True,
+                    filename=""
                 )
             else:
                 download_endpoint = (
@@ -174,7 +174,7 @@ def job_status_json(job_token: str):
                     if job.upload_type == "discrepancy_export"
                     else "analytics.dataset_export_download"
                 )
-                payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
+                payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="")
         if job.upload_type == "dataset_export":
             dataset_export = db.query(DatasetExport).filter(DatasetExport.job_id == job.id).first()
             if dataset_export and dataset_export.dataset:
@@ -378,6 +378,17 @@ def upload_processing(job_id):
         if not job or not _current_user_can_see(job, allowed_lab_units):
             abort(404)
     return render_template("jobs/jobs_processing.html", job_id=job_id)
+
+
+def _export_file_sizes(job_token: str, names: list[str]) -> dict[str, int]:
+    export_dir = (EXPORT_DIR / job_token).resolve()
+    sizes: dict[str, int] = {}
+    for name in names:
+        try:
+            sizes[name] = (export_dir / name).stat().st_size
+        except OSError:
+            continue
+    return sizes
 
 
 def _list_export_files(job_token: str) -> list[str]:

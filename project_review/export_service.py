@@ -350,17 +350,18 @@ def _wai_tables(db, project_id: int, labs, encounters) -> dict[str, list[dict]]:
     are scrubbed exactly as they are in the package.
     """
     from project_export import ExportScope
-    from project_export import stage_ai, tables
+    from project_export import stage_ai, stage_grading, tables
 
     scope = ExportScope(project_id, frozenset(labs))
     ctx = tables.BuildContext(db, scope, encounters, tables.collect_media(db, scope, encounters))
-    return _wai_sheet_rows(stage_ai.build(ctx))
+    ai_grades = [g for g in stage_grading.build(ctx)["grades"] if g["role_slot"] == "ai"]
+    return _wai_sheet_rows(stage_ai.build(ctx), ai_grades)
 
 
 _WAI_BULKY = frozenset({"request_manifest", "response", "config_snapshot", "remote_key", "raw_output"})
 
 
-def _wai_sheet_rows(ai: dict[str, list[dict]]) -> dict[str, list[dict]]:
+def _wai_sheet_rows(ai: dict[str, list[dict]], ai_grades: list[dict] | None = None) -> dict[str, list[dict]]:
     """Encounter-level sheet (one row per run, DR/DME roll-up) and image-level sheet (one row per image x target).
 
     Raw provider payloads stay in the DuckDB package; they are too large for a worksheet.
@@ -397,14 +398,42 @@ def _wai_sheet_rows(ai: dict[str, list[dict]]) -> dict[str, list[dict]]:
                 **base,
                 **{k: _xlsx_value(target.get(k)) for k in ("target_key", "raw_label", "raw_score", "mapped_grade", "derivation_reason")},
             })
-    # Single-image (task-level) runs have no per-image result rows; keep them visible rather than dropping them.
+    # Single-image models (glaucoma) keep their result as an AI grade on the image task, not as per-image
+    # result rows. Grades already shown through an encounter-level target are not repeated.
+    shown = {t["grade_id"] for t in ai["ai_target_results"] if t.get("grade_id") is not None}
+    grades_by_task: dict[str, list[dict]] = {}
+    for grade in ai_grades or []:
+        if grade["grade_id"] not in shown:
+            grades_by_task.setdefault(grade["task_uuid"], []).append(grade)
+
+    def grade_row(grade: dict, run: dict | None) -> dict[str, Any]:
+        return {
+            "run_id": run["run_id"] if run else None,
+            "encounter_uuid": grade["encounter_uuid"], "image_uuid": grade["image_uuid"],
+            "ai_model": grade["ai_model"], "ai_model_version": grade["ai_model_version"],
+            "run_status": run["status"] if run else None, "error_code": run["error_code"] if run else None,
+            "target_key": grade["disease"], "raw_label": grade["ai_predicted_class_name"],
+            "raw_score": grade["ai_probability"], "mapped_grade": grade["grade_name"],
+            "derivation_reason": "ai_grade", "ai_review_status": grade["ai_review_status"],
+        }
+
+    used: set[str] = set()
     for run in ai["ai_runs"]:
-        if run["run_scope"] == "task":
+        if run["run_scope"] != "task":
+            continue
+        grades = grades_by_task.get(run["task_uuid"], [])
+        used.add(run["task_uuid"])
+        if grades:
+            image_rows.extend(grade_row(grade, run) for grade in grades)
+        else:  # no result yet (queued/failed): keep the run visible
             image_rows.append({
                 "run_id": run["run_id"], "encounter_uuid": run["encounter_uuid"], "image_uuid": run["image_uuid"],
                 "ai_model": run["ai_model"], "ai_model_version": run["ai_model_version"],
                 "run_status": run["status"], "error_code": run["error_code"],
             })
+    for task_uuid, grades in grades_by_task.items():
+        if task_uuid not in used:  # AI grade with no stored run (e.g. imported or backfilled)
+            image_rows.extend(grade_row(grade, None) for grade in grades)
     return {"WAI Encounter Results": encounter_rows, "WAI Image Results": image_rows}
 
 

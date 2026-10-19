@@ -152,12 +152,17 @@ def test_project_workbook_adds_wai_sheets_only_when_tables_supplied(tmp_path):
              "grade_id": 2},
         ],
     }
+    ai_grades = [{
+        "grade_id": 7, "task_uuid": "t", "encounter_uuid": "enc-uuid", "image_uuid": "img-uuid",
+        "disease": "Glaucoma", "grade_name": "Suspect", "ai_model": "Glaucoma", "ai_model_version": "2",
+        "ai_probability": 0.83, "ai_predicted_class_name": "GON", "ai_review_status": "ok",
+    }]
     plain = tmp_path / "plain.xlsx"
     _write_workbook(plain, [encounter], [image], [])
     assert "WAI Encounter Results" not in pd.read_excel(plain, sheet_name=None)
 
     path = tmp_path / "wai.xlsx"
-    _write_workbook(path, [encounter], [image], [], wai_tables=export_service._wai_sheet_rows(ai))
+    _write_workbook(path, [encounter], [image], [], wai_tables=export_service._wai_sheet_rows(ai, ai_grades))
     sheets = pd.read_excel(path, sheet_name=None)
     enc = sheets["WAI Encounter Results"]
     assert list(enc["run_id"]) == ["run-1"]
@@ -167,4 +172,6 @@ def test_project_workbook_adds_wai_sheets_only_when_tables_supplied(tmp_path):
     img = sheets["WAI Image Results"]
     assert list(img["target_key"].iloc[:2]) == ["dr", "dme"]
     assert img.iloc[0]["mapped_grade"] == "Mild NPDR" and "raw_output" not in img.columns
-    assert img.iloc[2]["ai_model"] == "Glaucoma" and img.iloc[2]["run_status"] == "failed"
+    glaucoma = img.iloc[2]
+    assert glaucoma["ai_model"] == "Glaucoma" and glaucoma["run_status"] == "failed"
+    assert glaucoma["mapped_grade"] == "Suspect" and glaucoma["raw_score"] == 0.83 and glaucoma["raw_label"] == "GON"

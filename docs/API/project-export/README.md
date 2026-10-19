@@ -70,8 +70,9 @@ When the project has remote inference (Wadhwani AI) configured, the same
 workbook also contains `WAI Encounter Results` (one row per encounter run:
 model, status, errors, submitted image count and a DR/DME positive roll-up)
 and `WAI Image Results` (one row per image and target: detected eye,
-similarity, quality, raw label/score, mapped grade; single-image runs appear
-with their status). They are built from the DuckDB package's `remote_ai`
+similarity, quality, raw label/score, mapped grade; single-image models such as
+glaucoma appear with their AI grade: predicted class as `raw_label`, probability
+as `raw_score`, grade as `mapped_grade`, plus run status and AI review status). They are built from the DuckDB package's `remote_ai`
 stage (`project_export/stage_ai.py`), without an identifiers grant, so patient
 ids and file names are scrubbed. Raw provider payloads and remote keys stay in
 the DuckDB package only. Projects without remote inference get no WAI sheets.

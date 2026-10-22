@@ -30,7 +30,7 @@ from utils.image_processing import has_default_quality_75_tables, strip_exif_dat
 from utils.log_sanitize import sanitize_log_value
 
 from .client import RemidioClient
-from .errors import RemidioIntegrationError
+from .errors import RemidioIntegrationError, RemidioRemoteError
 from .service import _secrets
 from .validation import extract_exam_payloads, normalize_date, require_list_data
 
@@ -39,6 +39,8 @@ LOGGER = logging.getLogger(__name__)
 HEADER_BYTES = 4096
 DEFAULT_BATCH_IMAGES = 50
 PAUSE_BETWEEN_API_CALLS_SECONDS = float(os.getenv("REMIDIO_REPULL_PAUSE_SECONDS", "2.5"))
+# Remidio's login token lasts a few minutes; a batch outlives it, so tokens are renewed on this age.
+TOKEN_MAX_AGE_SECONDS = 240
 PAUSE_BETWEEN_DOWNLOADS_SECONDS = float(os.getenv("REMIDIO_REPULL_DOWNLOAD_PAUSE_SECONDS", "1.0"))
 # A random gap between encounters (not a fixed beat) keeps the load on the provider irregular.
 ENCOUNTER_PAUSE_RANGE_SECONDS = (
@@ -68,6 +70,7 @@ class RepullSummary:
     not_returned_by_source: int = 0
     source_is_quality_75: int = 0
     failed: int = 0
+    failed_days: int = 0  # site-days skipped after errors: re-run without ``before`` to retry them
     errors: list[str] = field(default_factory=list)
     next_before: str | None = None  # exam date cursor: pass back as ``before`` for the next batch
     done: bool = False
@@ -91,12 +94,13 @@ def repull_batch(
     if dry_run or not groups:
         return summary
 
-    clients: dict[int, RemidioClient] = {}
+    clients: dict = {}
     for (connection_id, site, exam_day), candidates in groups.items():
         try:
             fresh = _fresh_image_urls(clients, connection_id, site, exam_day)
         except Exception as exc:  # noqa: BLE001 - one site/day failing must not stop the batch
             summary.failed += len(candidates)
+            summary.failed_days += 1
             summary.errors.append(f"{site} {exam_day}: {sanitize_log_value(exc)}"[:300])
             summary.next_before = exam_day.isoformat()
             continue
@@ -107,7 +111,7 @@ def repull_batch(
             if pause and previous_encounter is not None and candidate.encounter_id != previous_encounter:
                 time.sleep(random.uniform(*ENCOUNTER_PAUSE_RANGE_SECONDS))  # between encounters, on top of the per-download pause
             previous_encounter = candidate.encounter_id
-            _repair_one(clients[connection_id], candidate, fresh.get(candidate.remidio_image_id), summary)
+            _repair_one(clients[connection_id][0], candidate, fresh.get(candidate.remidio_image_id), summary)
             if pause:
                 time.sleep(PAUSE_BETWEEN_DOWNLOADS_SECONDS)
         summary.next_before = exam_day.isoformat()
@@ -158,16 +162,33 @@ def _damaged_groups(*, limit_images: int, before: date | None, summary: RepullSu
     return groups
 
 
-def _fresh_image_urls(clients: dict[int, RemidioClient], connection_id: int, site: str, exam_day: date) -> dict[str, str]:
-    """image id -> freshly signed download URL for every image Remidio reports on that site/day."""
+def _fresh_image_urls(clients: dict, connection_id: int, site: str, exam_day: date) -> dict[str, str]:
+    """image id -> freshly signed download URL for every image Remidio reports on that site/day.
+
+    ``clients`` maps connection id -> (client, time its tokens were issued). Tokens are renewed when old,
+    and once more if Remidio still answers that they expired.
+    """
     with get_db_session() as db:
         if connection_id not in clients:
-            clients[connection_id] = RemidioClient(_secrets(db.get(RemidioConnection, connection_id)))
+            clients[connection_id] = [RemidioClient(_secrets(db.get(RemidioConnection, connection_id))), time.monotonic()]
+    entry = clients[connection_id]
+    if time.monotonic() - entry[1] > TOKEN_MAX_AGE_SECONDS:
+        entry[0].reset_session_tokens()
+        entry[1] = time.monotonic()
     # Exam timestamps are stored in UTC while Remidio buckets by local day: ask for the day either side.
     start, end = (normalize_date((exam_day + timedelta(days=offset)).isoformat()) for offset in (-1, 1))
-    body = clients[connection_id].get_exams_by_date(
-        start_date=start, end_date=end, site_custom_identifier=site, include_file_paths=True,
-    )
+
+    def fetch():
+        return entry[0].get_exams_by_date(
+            start_date=start, end_date=end, site_custom_identifier=site, include_file_paths=True,
+        )
+
+    try:
+        body = fetch()
+    except RemidioRemoteError:
+        entry[0].reset_session_tokens()  # expired or rejected token: log in again and retry once
+        entry[1] = time.monotonic()
+        body = fetch()
     payloads = extract_exam_payloads(require_list_data(body), site_custom_identifier=site, pull_source="getExamsByDate")
     return {
         image.remidio_image_id: image.remidio_path

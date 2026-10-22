@@ -146,9 +146,56 @@ def test_a_pause_separates_encounters(tmp_path, monkeypatch):
         candidate.path.write_bytes(_photo(75))
     groups = {(1, "SITE", date(2026, 9, 1)): candidates}
     monkeypatch.setattr(image_repull, "_damaged_groups", lambda **_k: groups)
-    monkeypatch.setattr(image_repull, "_fresh_image_urls", lambda clients, *_a: clients.setdefault(1, FakeClient(_photo(95))) and {})
+    monkeypatch.setattr(image_repull, "_fresh_image_urls", lambda clients, *_a: clients.setdefault(1, [FakeClient(_photo(95)), 0.0]) and {})
 
     summary = image_repull.repull_batch(limit_images=10)
     gaps = [value for value in sleeps if value not in (1.0, 2.5)]
     assert len(gaps) == 1 and 3.0 <= gaps[0] <= 8.0  # only between encounter 7 and encounter 9
     assert summary.not_returned_by_source == 3
+
+
+class ExpiringTokenClient:
+    """Rejects the first call like Remidio does with an expired token, then works after a fresh login."""
+
+    def __init__(self):
+        self.calls = 0
+        self.resets = 0
+
+    def reset_session_tokens(self):
+        self.resets += 1
+
+    def get_exams_by_date(self, **_kwargs):
+        self.calls += 1
+        if self.resets == 0:
+            raise image_repull.RemidioRemoteError("The Client Auth Token supplied was expired")
+        return {"data": []}
+
+
+def test_expired_token_is_renewed_and_the_day_is_retried(monkeypatch):
+    @contextmanager
+    def no_db():
+        yield None
+
+    monkeypatch.setattr(image_repull, "get_db_session", no_db)
+    monkeypatch.setattr(image_repull, "require_list_data", lambda body: body["data"])
+    monkeypatch.setattr(image_repull, "extract_exam_payloads", lambda *_a, **_k: [])
+    client = ExpiringTokenClient()
+    clients = {1: [client, image_repull.time.monotonic()]}
+
+    assert image_repull._fresh_image_urls(clients, 1, "SITE", date(2026, 9, 1)) == {}
+    assert client.calls == 2 and client.resets == 1
+
+
+def test_old_tokens_are_renewed_before_the_call(monkeypatch):
+    @contextmanager
+    def no_db():
+        yield None
+
+    monkeypatch.setattr(image_repull, "get_db_session", no_db)
+    monkeypatch.setattr(image_repull, "require_list_data", lambda body: body["data"])
+    monkeypatch.setattr(image_repull, "extract_exam_payloads", lambda *_a, **_k: [])
+    client = ExpiringTokenClient()
+    client.resets = 1  # healthy once renewed
+    stale = image_repull.time.monotonic() - image_repull.TOKEN_MAX_AGE_SECONDS - 1
+    image_repull._fresh_image_urls({1: [client, stale]}, 1, "SITE", date(2026, 9, 1))
+    assert client.resets == 2 and client.calls == 1

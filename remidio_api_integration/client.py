@@ -29,6 +29,11 @@ class RemidioClient:
         self._bearer_token: str | None = None
         self._client_auth_token: str | None = None
 
+    def reset_session_tokens(self) -> None:
+        """Forget the cached login and client-auth tokens so the next call logs in again."""
+        self._bearer_token = None
+        self._client_auth_token = None
+
     def login(self) -> str:
         body = self._request(
             "POST",

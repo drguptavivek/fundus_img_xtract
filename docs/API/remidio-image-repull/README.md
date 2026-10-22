@@ -32,6 +32,11 @@ Task result (see `celery-general-worker` logs / result backend): `groups`, `cand
 `already_ok`, `missing_file`, `not_returned_by_source`, `source_is_quality_75`, `failed`, `errors`,
 `next_before`, `done`. Re-running is safe: images already restored no longer match the signature.
 
+**`failed` / `failed_days` above 0 means the chain skipped some site-days after an error** (for example an
+expired Remidio token; tokens are now renewed automatically and the day retried once). `done: true` then
+only means the date range was walked: re-run **without** `before` to retry what was skipped. Confirm with
+the file scan that no quality-75 images remain.
+
 ```bash
 curl -X POST https://HOST/api/admin/remidio/image-repull \
   -H 'Content-Type: application/json' -H "X-CSRFToken: $TOKEN" --cookie "$SESSION" \

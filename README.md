@@ -246,6 +246,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Discrepancy Review API](docs/API/discrepancy-review/README.md) - Project-aware task filters, saved review evidence, permission-scoped study CSV queues, idempotent submissions, and MV-independent Save & Next ordering
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping
+- [IITK Image Re-pull](docs/API/iitk-image-repull/README.md) - Admin task that restores full-fidelity IITK images damaged by the old lossy strip (no DB writes)
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Frozen package identity, complete-set submissions, 12-hour revision waiting, and disease-scope arbitration
 - [EncounterSet Task Creation](docs/04-Grade/encounter_set_task_creation.md) - Verification-time creation rules for EncounterSet grading packages and image/encounter tasks
 - [Project Annotation Policy and GPU Grading Workbench](docs/16-NewFeature/imageMarking/06-project-annotation-policy.md) - Project-resolved tools, task-level grade/class/annotation lifecycle, normalized annotations, and full-resolution segmentation masks

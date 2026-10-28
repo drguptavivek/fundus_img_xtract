@@ -82,6 +82,8 @@ Logs in with stored email/password, calls `getAuthToken`, and updates token time
 
 Gateway GET requests use bounded exponential-backoff recovery for authentication and transient upstream failures. A rejected/expired token clears both cached session tokens before retrying. HTTP 429 and 5xx responses are retried at most three times after the initial request, with delays of 1, 2, and 4 seconds; permanent failures remain visible in the project Remidio error log.
 
+Successful project-sync creation responses include `data.status_url`, linking to the project Remidio Sync page where active jobs are refreshed every five seconds.
+
 ### Sync Sites
 
 `POST /api/remidio/connections/{connection_id}/sync-sites`

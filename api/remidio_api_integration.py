@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from flask import jsonify, request
+from flask import jsonify, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
@@ -583,6 +583,9 @@ def _sync_remidio_api_project_from_payload(project_id: int, payload: dict):
             )
         if data["items_created"] > 0:
             service.enqueue_project_sync_job(data["job_id"], user_id=current_user.id)
+        data["status_url"] = url_for(
+            "remidio_api_uploads.remidio_api_sync", project_id=project_id
+        )
         return jsonify({"success": True, "data": data, "message": "Remidio API project sync queued."}), 202
     except RemidioIntegrationError as exc:
         return _error_response(exc)

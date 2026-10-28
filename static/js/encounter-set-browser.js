@@ -400,9 +400,23 @@
       const message = payload.message + (data.job_id ? ' Job ' + data.job_id + '.' : '');
       modalStatus.textContent = message;
       modalStatus.className = 'small mt-2 text-success';
+      if (data.status_url) {
+        modalStatus.appendChild(document.createTextNode(' '));
+        const modalLink = document.createElement('a');
+        modalLink.href = data.status_url;
+        modalLink.textContent = 'View live results';
+        modalStatus.appendChild(modalLink);
+      }
       if (pageStatus) {
         pageStatus.textContent = message;
         pageStatus.className = 'small text-success';
+        if (data.status_url) {
+          pageStatus.appendChild(document.createTextNode(' '));
+          const pageLink = document.createElement('a');
+          pageLink.href = data.status_url;
+          pageLink.textContent = 'View live results';
+          pageStatus.appendChild(pageLink);
+        }
       }
       window.setTimeout(function () {
         const modal = window.bootstrap && window.bootstrap.Modal.getInstance(document.getElementById('fetchMissingRemidioModal'));

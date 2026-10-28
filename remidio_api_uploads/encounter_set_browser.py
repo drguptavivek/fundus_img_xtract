@@ -117,6 +117,14 @@ def _browser_context(*, no_pii: bool = False) -> dict:
             encounter_id=encounter_id,
             no_pii=no_pii,
         )
+        from authz.project_access import can_sync_remidio
+
+        selected_project_id = context.get("selected_project_id")
+        context["can_verify_all_with_wai"] = bool(
+            not no_pii
+            and selected_project_id
+            and can_sync_remidio(db, current_user, project_id=selected_project_id)
+        )
     if not context.get("projects"):
         abort(403)
     context["browser_url"] = _browser_url(context, no_pii=no_pii)

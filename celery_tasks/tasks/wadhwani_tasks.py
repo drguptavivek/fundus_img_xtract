@@ -23,6 +23,59 @@ WADHWANI_FINAL_RETRY_PASSES = 2
 WADHWANI_FINAL_RETRY_ITEM_GAP_SECONDS = 2
 
 
+@celery_app.task(name="celery_tasks.tasks.wadhwani_tasks.run_project_wai_backfill_task", bind=True, acks_late=True)
+def run_project_wai_backfill_task(
+    self,
+    job_token: str,
+    project_id: int,
+    user_id: int | None = None,
+    username: str | None = None,
+    remote_addr: str | None = None,
+) -> None:
+    """Dispatch every configured, still-eligible WAI workflow for a project."""
+    from remote_inference.encounter_service import enqueue_automatic_encounters
+    from remote_inference.project_backfill_service import ITEM_KEY, project_encounter_ids
+    from services.encounter_set_ai_inference import enqueue_wadhwani_for_encounter_ids
+
+    db_set_job_status(job_token, "processing")
+    db_set_item_state(job_token, ITEM_KEY, "processing", json.dumps({"message": "Scanning project EncounterSets."}))
+    try:
+        encounter_ids = project_encounter_ids(project_id)
+        dr_result = {"madhunetra_encounters_queued": 0, "madhunetra_job_tokens": []}
+        glaucoma_result = {"wadhwani_tasks_queued": 0, "wadhwani_job_tokens": []}
+        for offset in range(0, len(encounter_ids), 500):
+            chunk = encounter_ids[offset:offset + 500]
+            chunk_dr = enqueue_automatic_encounters(chunk, user_id=user_id)
+            dr_result["madhunetra_encounters_queued"] += chunk_dr["madhunetra_encounters_queued"]
+            dr_result["madhunetra_job_tokens"].extend(chunk_dr["madhunetra_job_tokens"])
+            chunk_glaucoma = enqueue_wadhwani_for_encounter_ids(
+                chunk,
+                user_id=user_id,
+                username=username,
+                remote_addr=remote_addr,
+                include_all_trigger_timings=True,
+            )
+            glaucoma_result["wadhwani_tasks_queued"] += chunk_glaucoma["wadhwani_tasks_queued"]
+            glaucoma_result["wadhwani_job_tokens"].extend(chunk_glaucoma["wadhwani_job_tokens"])
+        detail = {
+            "message": "Configured WAI workflows dispatched.",
+            "encounters_scanned": len(encounter_ids),
+            **dr_result,
+            **glaucoma_result,
+        }
+        db_set_item_state(job_token, ITEM_KEY, "ok", json.dumps(detail))
+        db_set_job_status(job_token, "done")
+    except Exception:
+        logger.exception("Project WAI dispatcher failed job=%s", sanitize_log_value(job_token))
+        db_set_item_state(
+            job_token,
+            ITEM_KEY,
+            "error",
+            json.dumps({"message": "Project WAI dispatcher failed."}),
+        )
+        db_set_job_status(job_token, "error", error="Project WAI dispatcher failed.")
+
+
 def _process_wadhwani_item(job_token: str, task_id: int, user_id: int | None) -> bool:
     item_key = f"task:{task_id}"
     db_set_item_state(job_token, item_key, "processing", json.dumps({"message": "Submitting to Wadhwani"}))

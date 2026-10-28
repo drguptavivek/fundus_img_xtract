@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Project
-from remote_inference import automated_service, encounter_service, job_service, manual_service
+from remote_inference import automated_service, encounter_service, job_service, manual_service, project_backfill_service
 from remote_inference.dr_dme import ALLOWED_PAGE_SIZES, CandidateFilters, list_candidates as list_dr_dme_candidates
 from upload_profiles.service import get_user_lab_unit_ids, manager_lab_unit_ids
 
@@ -290,6 +290,19 @@ def create_encounter_remote_inference_job():
         return jsonify(success=False, error="project_id and integer encounter_ids are required."), 400
     result = encounter_service.create_manual_job(
         encounter_ids=encounter_ids,
+        project_id=project_id,
+        user=current_user,
+        remote_addr=request.remote_addr,
+    )
+    payload = dict(result.payload or {})
+    return jsonify(success=result.success, message=result.message, **payload), result.status_code
+
+
+@api_bp.route("/remote-inference/projects/<int:project_id>/verify-all", methods=["POST"])
+@roles_required("data_manager")
+def create_project_wai_backfill_job(project_id: int):
+    """Create an async project-wide job for all configured WAI workflows."""
+    result = project_backfill_service.create_project_backfill_job(
         project_id=project_id,
         user=current_user,
         remote_addr=request.remote_addr,

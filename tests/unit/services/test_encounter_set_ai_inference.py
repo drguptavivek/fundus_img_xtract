@@ -194,6 +194,33 @@ def test_non_disc_remidio_image_does_not_satisfy_glaucoma_wadhwani_policy(db_ses
     assert create_wadhwani_task_ids_for_encounter(db_session, encounter) == []
 
 
+def test_project_backfill_includes_configured_after_verification_rule(db_session, core_test_data):
+    project, profile, _ai_model = _remote_policy_project(
+        db_session,
+        core_test_data,
+        core_test_data["glaucoma"],
+        trigger_timing="after_verification",
+        encounter_eligibility="always",
+        image_selection="disc_focused_images",
+    )
+    encounter, _image = _encounter_with_image(
+        db_session,
+        core_test_data,
+        profile,
+        project_id=project.id,
+        metadata={"image_segment": "disc centered"},
+    )
+
+    assert create_wadhwani_task_ids_for_encounter(db_session, encounter) == []
+    assert len(
+        create_wadhwani_task_ids_for_encounter(
+            db_session,
+            encounter,
+            include_all_trigger_timings=True,
+        )
+    ) == 1
+
+
 def test_disc_image_evidence_queues_only_disc_focused_images(db_session, core_test_data):
     profile, _ai_model = _encounter_set_wadhwani_profile(db_session, core_test_data["glaucoma"])
     encounter, disc_image = _encounter_with_image(

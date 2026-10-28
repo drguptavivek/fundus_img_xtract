@@ -335,6 +335,35 @@
     runProjectPendingOcr(button);
   });
 
+  document.addEventListener('click', async function (event) {
+    const button = event.target.closest('[data-project-wai-verify-all]');
+    if (!button) return;
+    event.preventDefault();
+    if (!window.confirm(button.dataset.confirm || 'Create the project WAI job?')) return;
+    const status = document.querySelector('[data-project-wai-verify-status]');
+    button.disabled = true;
+    if (status) status.textContent = 'Creating job…';
+    try {
+      const response = await fetch(button.dataset.url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Accept': 'application/json', 'X-CSRFToken': csrfToken()},
+      });
+      const payload = await response.json().catch(function () { return {}; });
+      if (!response.ok || payload.success === false) throw new Error(payload.message || 'Could not create WAI job.');
+      if (status) {
+        status.textContent = payload.message + (payload.job_token ? ' Job ' + payload.job_token + '.' : '');
+        status.className = 'small text-success';
+      }
+    } catch (error) {
+      button.disabled = false;
+      if (status) {
+        status.textContent = error && error.message ? error.message : 'Could not create WAI job.';
+        status.className = 'small text-danger';
+      }
+    }
+  });
+
   // One-click verify: mark every unreviewed image reviewed, then finalize through the same routes the Verify page uses.
   async function oneClickVerify(button) {
     const status = document.querySelector('[data-one-click-verify-status]');

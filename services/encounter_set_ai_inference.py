@@ -33,13 +33,19 @@ def create_wadhwani_task_ids_for_encounter(
     encounter: PatientEncounters,
     *,
     trigger_timing: str | None = None,
+    include_all_trigger_timings: bool = False,
 ) -> list[int]:
     """Create/reuse Glaucoma image tasks for configured EncounterSet Wadhwani inference."""
     if not encounter.upload_profile_id and not encounter.project_id:
         return []
     applicable_workflows: list[ProjectAutomatedRemoteInferenceRule] = []
     workflow_disease_scopes: dict[int, str] = {}
-    project_rules = _active_project_rules(db, encounter, trigger_timing)
+    project_rules = _active_project_rules(
+        db,
+        encounter,
+        trigger_timing,
+        include_all_trigger_timings=include_all_trigger_timings,
+    )
     if project_rules:
         for row in project_rules:
             scope = _remote_rule_task_scope(db, encounter, row)
@@ -157,6 +163,7 @@ def enqueue_wadhwani_for_encounter_ids(
     user_id: int | None = None,
     username: str | None = None,
     remote_addr: str | None = None,
+    include_all_trigger_timings: bool = False,
 ) -> dict[str, Any]:
     queued = 0
     job_tokens: list[str] = []
@@ -172,7 +179,12 @@ def enqueue_wadhwani_for_encounter_ids(
         )
         rows = []
         for encounter in encounters:
-            task_ids = create_wadhwani_task_ids_for_encounter(db, encounter, trigger_timing=trigger_timing)
+            task_ids = create_wadhwani_task_ids_for_encounter(
+                db,
+                encounter,
+                trigger_timing=trigger_timing,
+                include_all_trigger_timings=include_all_trigger_timings,
+            )
             if task_ids:
                 rows.append((encounter.id, encounter.lab_unit_id, encounter.project_id, encounter.upload_profile_id, task_ids))
         db.flush()
@@ -238,6 +250,8 @@ def _active_project_rules(
     db,
     encounter: PatientEncounters,
     trigger_timing: str | None,
+    *,
+    include_all_trigger_timings: bool = False,
 ) -> list[ProjectAutomatedRemoteInferenceRule]:
     if not encounter.project_id:
         return []
@@ -253,7 +267,9 @@ def _active_project_rules(
         )
         .order_by(ProjectAutomatedRemoteInferenceRule.display_order, ProjectAutomatedRemoteInferenceRule.id)
     )
-    if trigger_timing:
+    if include_all_trigger_timings:
+        pass
+    elif trigger_timing:
         query = query.filter(ProjectAutomatedRemoteInferenceRule.trigger_timing == trigger_timing)
     else:
         query = query.filter(ProjectAutomatedRemoteInferenceRule.trigger_timing == "on_image_received")

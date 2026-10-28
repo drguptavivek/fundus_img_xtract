@@ -111,6 +111,42 @@ def test_create_dr_dme_encounter_job_api_uses_encounter_contract(client, login_u
     assert captured["encounter_ids"] == [11, 12]
 
 
+def test_data_manager_can_create_project_wai_backfill_job(client, login_user, monkeypatch):
+    login_user("test_manager", "Test@2026")
+    captured = {}
+
+    def create_job(**kwargs):
+        captured.update(kwargs)
+        captured["username"] = kwargs["user"].username
+        return MutationResult(
+            True,
+            "Project WAI verification job created.",
+            payload={"job_token": "project-job"},
+            status_code=202,
+        )
+
+    monkeypatch.setattr(routes.project_backfill_service, "create_project_backfill_job", create_job)
+    response = client.post("/api/remote-inference/projects/2/verify-all")
+
+    assert response.status_code == 202
+    assert response.get_json()["job_token"] == "project-job"
+    assert captured["project_id"] == 2
+    assert captured["username"] == "test_manager"
+
+
+def test_non_data_manager_cannot_create_project_wai_backfill_job(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    monkeypatch.setattr(
+        routes.project_backfill_service,
+        "create_project_backfill_job",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("service must not be called")),
+    )
+
+    response = client.post("/api/remote-inference/projects/2/verify-all")
+
+    assert response.status_code == 403
+
+
 def test_dr_dme_candidate_api_exposes_filters_images_and_pagination(client, login_user, monkeypatch):
     login_user("test_admin", "Test@2026")
     captured = {}

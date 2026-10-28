@@ -26,6 +26,7 @@ from models import (
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remidio_api_integration.models import RemidioApiRoutingProfile
+from remidio_api_integration.routing import routed_encounter_counts_by_binding
 from upload_profiles.models import ProjectUploadProfile
 from utils.log_sanitize import sanitize_log_value
 from zip_processor import cleanup_processed_zip_intake_files
@@ -218,8 +219,13 @@ def _routing_context(db) -> dict[str, Any]:
         for mapping in project_profiles
         if mapping.profile and mapping.profile.active and mapping.profile.automated_remidio_populated
     ]
+    routed_encounter_counts = routed_encounter_counts_by_binding(
+        db,
+        binding_ids=[binding.id for profile in routing_profiles for binding in profile.routes],
+    )
     return {
         "routing_profiles": routing_profiles,
+        "routed_encounter_counts": routed_encounter_counts,
         "projects": db.execute(select(Project).where(Project.active.is_(True)).order_by(Project.title)).scalars().all(),
         "connections": (
             db.execute(select(RemidioConnection).where(RemidioConnection.active.is_(True)).order_by(RemidioConnection.name))

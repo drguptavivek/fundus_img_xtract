@@ -135,6 +135,8 @@
                 <span class="text-muted">→</span>
                 <span>{{ route.project_profile.profile.name if route.project_profile and route.project_profile.profile else '-' }}</span>
                 <span class="text-muted">· {{ route.lab_unit.name if route.lab_unit else '-' }} · {{ route.camera.name if route.camera else '-' }}</span>
+                {% set routed_count = routed_encounter_counts.get(route.id, 0) %}
+                <span class="badge rounded-pill text-bg-light border" title="EncounterSets routed through this selection">{{ routed_count }} routed</span>
               </div>
               {% endfor %}
             </div>

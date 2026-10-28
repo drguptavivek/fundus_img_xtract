@@ -15,6 +15,7 @@ from remidio_api_integration.errors import RemidioConfigError, RemidioRemoteErro
 from remidio_api_integration.models import RemidioApiExamEncounter, RemidioApiSourceRule
 from remidio_api_integration.routing import (
     delete_routing_profile_route,
+    list_routing_profiles,
     set_routing_profile_route_active,
     upsert_routing_profile,
     upsert_routing_profile_route,
@@ -366,6 +367,13 @@ def test_delete_route_with_linked_encounter_deactivates_instead(db_session, core
         )
     )
     db_session.flush()
+
+    profile_data = next(
+        item
+        for item in list_routing_profiles(db_session, project_id=project.id)
+        if item["id"] == routing_profile.id
+    )
+    assert profile_data["routes"][0]["routed_encounter_count"] == 1
 
     result = delete_routing_profile_route(db_session, route.id)
     db_session.refresh(route)

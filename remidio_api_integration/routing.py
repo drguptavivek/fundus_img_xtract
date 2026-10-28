@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -65,7 +65,33 @@ def list_routing_profiles(db: Session, *, project_id: int | None = None) -> list
     if project_id is not None:
         query = query.filter(RemidioApiRoutingProfile.project_id == project_id)
     rows = query.order_by(RemidioApiRoutingProfile.active.desc(), RemidioApiRoutingProfile.name).all()
-    return [_routing_profile_summary(row) for row in rows]
+    routed_counts = routed_encounter_counts_by_binding(
+        db,
+        binding_ids=[binding.id for row in rows for binding in row.routes],
+    )
+    return [_routing_profile_summary(row, routed_counts=routed_counts) for row in rows]
+
+
+def routed_encounter_counts_by_binding(
+    db: Session,
+    *,
+    binding_ids: list[int] | None = None,
+) -> dict[int, int]:
+    """Count routed EncounterSets from their persisted API binding lineage."""
+    if binding_ids == []:
+        return {}
+    query = db.query(
+        RemidioApiExamEncounter.remidio_api_binding_id,
+        func.count(RemidioApiExamEncounter.id),
+    )
+    if binding_ids is not None:
+        query = query.filter(RemidioApiExamEncounter.remidio_api_binding_id.in_(binding_ids))
+    return {
+        binding_id: count
+        for binding_id, count in query.group_by(
+            RemidioApiExamEncounter.remidio_api_binding_id
+        ).all()
+    }
 
 
 def upsert_routing_profile(db: Session, payload: dict[str, Any]) -> RemidioApiRoutingProfile:
@@ -658,10 +684,21 @@ def _source_rule_summary(rule: RemidioApiSourceRule) -> dict[str, Any]:
     }
 
 
-def _routing_profile_summary(profile: RemidioApiRoutingProfile) -> dict[str, Any]:
+def _routing_profile_summary(
+    profile: RemidioApiRoutingProfile,
+    *,
+    routed_counts: dict[int, int] | None = None,
+) -> dict[str, Any]:
     project = profile.project
+    routed_counts = routed_counts or {}
     routes = sorted(
-        [_binding_summary(binding) for binding in profile.routes],
+        [
+            _binding_summary(
+                binding,
+                routed_encounter_count=routed_counts.get(binding.id, 0),
+            )
+            for binding in profile.routes
+        ],
         key=lambda item: (
             not item["active"],
             item.get("site_custom_identifier") or "",
@@ -684,12 +721,16 @@ def _routing_profile_summary(profile: RemidioApiRoutingProfile) -> dict[str, Any
     }
 
 
-def _binding_summary(binding: ProjectUploadProfileRemidioApiBinding) -> dict[str, Any]:
+def _binding_summary(
+    binding: ProjectUploadProfileRemidioApiBinding,
+    *,
+    routed_encounter_count: int | None = None,
+) -> dict[str, Any]:
     project_profile = binding.project_profile
     profile = project_profile.profile if project_profile else None
     project = project_profile.project if project_profile else None
     source_rule = binding.source_rule
-    return {
+    summary = {
         "id": binding.id,
         "routing_profile_id": binding.routing_profile_id,
         "routing_profile_name": binding.routing_profile.name if binding.routing_profile else None,
@@ -717,6 +758,9 @@ def _binding_summary(binding: ProjectUploadProfileRemidioApiBinding) -> dict[str
         "created_at": _iso(binding.created_at),
         "updated_at": _iso(binding.updated_at),
     }
+    if routed_encounter_count is not None:
+        summary["routed_encounter_count"] = routed_encounter_count
+    return summary
 
 
 def _site_identifier(exam: RemidioExam) -> str | None:

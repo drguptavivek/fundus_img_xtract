@@ -201,7 +201,7 @@ Binding validation requires:
 
 `GET /api/remidio/api-routing-profiles?project_id=1`
 
-Returns project-owned routing profiles and their route rows. A routing profile is the user-facing rule set; existing source rules and bindings remain the underlying storage model.
+Returns project-owned routing profiles and their route rows. A routing profile is the user-facing rule set; existing source rules and bindings remain the underlying storage model. Each route row includes `routed_encounter_count`, the number of persisted `remidio_api_exam_encounters` linked to that exact binding. This is an EncounterSet count, not an image or grading-task count.
 
 ### Create Or Update API Routing Profile
 

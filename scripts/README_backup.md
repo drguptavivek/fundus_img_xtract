@@ -37,6 +37,9 @@ uv run scripts/backup_db.py
 3. Creates a timestamped app-code tar.gz archive
 4. Excludes local runtime data from the app archive, including `backups/`, `files/`, `logs/`, `tmp/`, `.venv/`, `.git/`, `__pycache__/`, and `REMIDIO_Samples/`
 5. Stores the archives and checksum file in `~/backups`
+6. Reports elapsed time and output size every 15 seconds during long-running phases
+
+Pressing `Ctrl+C` cancels the backup and removes partial database or app archive files.
 
 **Output:**
 - Database archive named: `backup_YYYYMMDD_HHMMSS_db.tar.gz`

@@ -24,6 +24,9 @@ import os
 import subprocess
 import tarfile
 import sys
+import threading
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
@@ -40,6 +43,43 @@ APP_BACKUP_EXCLUDED_ROOTS = frozenset(
     }
 )
 APP_BACKUP_EXCLUDED_DIR_NAMES = frozenset({"__pycache__"})
+PROGRESS_INTERVAL_SECONDS = 15
+
+
+def format_file_size(size_bytes):
+    """Return a compact, human-readable file size."""
+    size = float(size_bytes)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if size < 1024 or unit == "TiB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+@contextmanager
+def report_progress(label, output_path=None, interval=PROGRESS_INTERVAL_SECONDS):
+    """Print periodic progress while a long-running backup phase is active."""
+    stopped = threading.Event()
+    started_at = time.monotonic()
+
+    def reporter():
+        while not stopped.wait(interval):
+            elapsed = int(time.monotonic() - started_at)
+            size_note = ""
+            if output_path is not None:
+                try:
+                    size_note = f", output {format_file_size(output_path.stat().st_size)}"
+                except FileNotFoundError:
+                    size_note = ", output pending"
+            print(f"  {label}: still running ({elapsed}s{size_note})", flush=True)
+
+    thread = threading.Thread(target=reporter, name="backup-progress", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        thread.join()
+
 
 def compute_md5(file_path):
     """Compute md5 hash for a file."""
@@ -84,22 +124,31 @@ def create_postgresql_backup(backup_dir, timestamp):
     try:
         print("Creating SQL dump using Docker Compose db service...")
         with open(sql_path, 'w') as f:
-            subprocess.run([
-                "docker", "compose", "exec", "-T", "db",
-                "bash", "-lc",
-                'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"'
-            ], stdout=f, check=True)
+            with report_progress("SQL dump", sql_path):
+                subprocess.run([
+                    "docker", "compose", "exec", "-T", "db",
+                    "bash", "-lc",
+                    'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"'
+                ], stdout=f, check=True)
         
         print(f"SQL dump created: {sql_filename}")
         print(f"Creating compressed archive: {tar_filename}...")
-        with tarfile.open(tar_path, "w:gz") as tar:
-            tar.add(sql_path, arcname=sql_filename)
+        with report_progress("Database archive", tar_path):
+            with tarfile.open(tar_path, "w:gz") as tar:
+                tar.add(sql_path, arcname=sql_filename)
         os.remove(sql_path)
         verify_gzip(tar_path)
         
         print(f"Backup completed successfully: {tar_filename}")
         return tar_path
         
+    except KeyboardInterrupt:
+        print("\nBackup interrupted; removing partial database files.")
+        if sql_path.exists():
+            os.remove(sql_path)
+        if tar_path.exists():
+            os.remove(tar_path)
+        raise
     except subprocess.CalledProcessError as e:
         print(f"Error creating PostgreSQL dump: {e}")
         if sql_path.exists():
@@ -130,11 +179,17 @@ def create_app_backup(backup_dir, timestamp):
 
     try:
         print(f"Creating app backup archive: {tar_filename}...")
-        with tarfile.open(tar_path, "w:gz") as tar:
-            tar.add(repo_root, arcname=repo_root.name, filter=tar_filter)
+        with report_progress("App archive", tar_path):
+            with tarfile.open(tar_path, "w:gz") as tar:
+                tar.add(repo_root, arcname=repo_root.name, filter=tar_filter)
         verify_gzip(tar_path)
         print(f"App backup completed successfully: {tar_filename}")
         return tar_path
+    except KeyboardInterrupt:
+        print("\nBackup interrupted; removing partial app archive.")
+        if tar_path.exists():
+            os.remove(tar_path)
+        raise
     except Exception as e:
         print(f"Error during app backup: {e}")
         if tar_path.exists():

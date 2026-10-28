@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 
 from db_transaction_manager import get_db_session
 from encounter_sets.models import EncounterSetAttachment
-from models import BASE_DIR, EncounterSetImage, PatientEncounters
+from models import BASE_DIR, PatientEncounters
 from remidio_api_integration import service as remidio_service
 
 from . import bp
@@ -146,30 +146,30 @@ def _browser_context(*, no_pii: bool = False) -> dict:
         else:
             context["remidio_fetch_start_date"] = ""
             context["remidio_fetch_end_date"] = ""
-        pending_patient_ids = [
-            row["id"]
-            for row in context.get("patients", [])
-            if row.get("verified_status") not in {"verified", "excluded"}
-        ]
-        image_uuids_by_encounter: dict[int, list[str]] = {
-            encounter_id: [] for encounter_id in pending_patient_ids
-        }
-        if pending_patient_ids:
-            for encounter_id, image_uuid in (
-                db.query(EncounterSetImage.patient_encounter_id, EncounterSetImage.uuid)
-                .filter(EncounterSetImage.patient_encounter_id.in_(pending_patient_ids))
-                .order_by(EncounterSetImage.patient_encounter_id, EncounterSetImage.spatial_position)
-                .all()
-            ):
-                image_uuids_by_encounter[encounter_id].append(image_uuid)
-        context["bulk_verification_rows"] = [
-            {
-                "encounter_uuid": row["uuid"],
-                "image_uuids": image_uuids_by_encounter.get(row["id"], []),
-            }
-            for row in context.get("patients", [])
-            if row["id"] in image_uuids_by_encounter
-        ]
+        if context["can_run_project_data_actions"] and selected_date:
+            context["bulk_verification_date_rows"] = remidio_service.encounter_set_bulk_verification_rows(
+                db,
+                user=current_user,
+                project_id=selected_project_id,
+                start_date=selected_date,
+                end_date=selected_date,
+            )
+        else:
+            context["bulk_verification_date_rows"] = []
+        if context["can_run_project_data_actions"] and selected_month:
+            month_start = datetime.strptime(selected_month, "%Y-%m").date().replace(day=1)
+            month_end = month_start.replace(
+                day=calendar.monthrange(month_start.year, month_start.month)[1]
+            )
+            context["bulk_verification_month_rows"] = remidio_service.encounter_set_bulk_verification_rows(
+                db,
+                user=current_user,
+                project_id=selected_project_id,
+                start_date=month_start,
+                end_date=month_end,
+            )
+        else:
+            context["bulk_verification_month_rows"] = []
     if not context.get("projects"):
         abort(403)
     context["browser_url"] = _browser_url(context, no_pii=no_pii)

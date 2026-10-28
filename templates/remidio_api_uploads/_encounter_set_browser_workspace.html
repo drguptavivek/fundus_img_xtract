@@ -86,7 +86,8 @@
           {% endfor %}
         </div>
         {% if selected_project_id %}
-        <div class="d-flex flex-column gap-2 flex-shrink-0">
+        <div class="d-flex flex-column gap-1 flex-shrink-0">
+        <div class="d-flex align-items-center gap-2">
         <div class="btn-group btn-group-sm" role="group" aria-label="Export EncounterSets as Excel">
           {% if selected_month %}
           <a class="btn btn-outline-success"
@@ -104,44 +105,73 @@
           </a>
         </div>
         {% if can_run_project_data_actions %}
-        {% if selected_date %}
-        <button class="btn btn-sm btn-success"
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                  aria-label="EncounterSet project actions"
+                  title="Actions">
+            <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+            <span class="visually-hidden">Actions</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+          {% if selected_date %}
+          <li><button class="dropdown-item"
                 type="button"
                 data-date-verify-all
-                data-rows='{{ bulk_verification_rows | tojson }}'
+                data-rows='{{ bulk_verification_date_rows | tojson }}'
                 data-mark-reviewed-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid='__IMAGE__') }}"
                 data-finalize-url="{{ url_for('verify_encounter_set.finalize_verification', uuid='__ENCOUNTER__') }}"
                 data-confirm="Verify every pending EncounterSet and all its images on {{ selected_date.strftime('%d %b %Y') }}? This does not run WAI inference."
-                {% if not bulk_verification_rows %}disabled{% endif %}>
+                {% if not bulk_verification_date_rows %}disabled{% endif %}>
           <i class="bi bi-check2-all" aria-hidden="true"></i>
-          <span>Verify all</span>
-        </button>
-        <div class="small text-muted" data-date-verify-all-status>
-          {{ bulk_verification_rows | length }} pending EncounterSet{{ '' if bulk_verification_rows | length == 1 else 's' }} on this date.
-        </div>
-        {% endif %}
-        {% if can_fetch_missing_remidio %}
-        <button class="btn btn-sm btn-outline-primary"
+          <span class="ms-2">Verify all date</span>
+          <span class="badge text-bg-light float-end">{{ bulk_verification_date_rows | length }}</span>
+        </button></li>
+          <li><button class="dropdown-item"
+                type="button"
+                data-date-verify-all
+                data-rows='{{ bulk_verification_month_rows | tojson }}'
+                data-mark-reviewed-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid='__IMAGE__') }}"
+                data-finalize-url="{{ url_for('verify_encounter_set.finalize_verification', uuid='__ENCOUNTER__') }}"
+                data-confirm="Verify every pending EncounterSet and all its images in {{ selected_date.strftime('%B %Y') }}? This does not run WAI inference."
+                {% if not bulk_verification_month_rows %}disabled{% endif %}>
+          <i class="bi bi-calendar2-check" aria-hidden="true"></i>
+          <span class="ms-2">Verify all month</span>
+          <span class="badge text-bg-light float-end">{{ bulk_verification_month_rows | length }}</span>
+        </button></li>
+          {% endif %}
+          {% if can_fetch_missing_remidio %}
+          <li><button class="dropdown-item"
                 type="button"
                 data-bs-toggle="modal"
                 data-bs-target="#fetchMissingRemidioModal">
           <i class="bi bi-cloud-download" aria-hidden="true"></i>
-          <span>Fetch missing Remidio</span>
-        </button>
-        <div class="small text-muted" data-remidio-fetch-status>
-          Choose a date range to create a Remidio recovery job.
-          <a href="{{ url_for('remidio_api_uploads.remidio_api_errors', project_id=selected_project_id) }}">Error log</a>
-        </div>
-        {% endif %}
-        <button class="btn btn-sm btn-primary"
+          <span class="ms-2">Fetch missing Remidio</span>
+        </button></li>
+          {% endif %}
+          <li><button class="dropdown-item"
                 type="button"
                 data-project-wai-verify-all
                 data-url="{{ url_for('fundus_api.create_project_wai_backfill_job', project_id=selected_project_id) }}"
                 data-confirm="Create a background job to run every configured, eligible DR/DME and glaucoma WAI inference for this entire project?">
           <i class="bi bi-cpu" aria-hidden="true"></i>
-          <span>Run WAI inference</span>
-        </button>
-        <div class="small text-muted" data-project-wai-verify-status>Uses the project’s configured WAI workflows.</div>
+          <span class="ms-2">Run WAI inference</span>
+        </button></li>
+          {% if can_fetch_missing_remidio %}
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{{ url_for('remidio_api_uploads.remidio_api_errors', project_id=selected_project_id) }}"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span class="ms-2">Remidio error log</span></a></li>
+          {% endif %}
+          </ul>
+        </div>
+        {% endif %}
+        </div>
+        {% if can_run_project_data_actions %}
+        <div class="small text-muted d-none"
+             data-date-verify-all-status
+             data-remidio-fetch-status
+             data-project-wai-verify-status></div>
         {% endif %}
         </div>
         {% endif %}

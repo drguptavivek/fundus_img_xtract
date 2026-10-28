@@ -470,7 +470,7 @@
         );
         verified += 1;
       } catch (error) {
-        failures.push('EncounterSet ' + (rowIndex + 1) + ': ' + (error.message || 'failed'));
+        failures.push('EncounterSet ' + (row.encounter_id || (rowIndex + 1)) + ': ' + (error.message || 'failed'));
       }
     }
     if (status) {

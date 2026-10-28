@@ -306,6 +306,54 @@ def _encounter_set_browser_dates(db: Session, user, project_id: int, *, no_pii: 
     ]
 
 
+def encounter_set_bulk_verification_rows(
+    db: Session,
+    *,
+    user: Any,
+    project_id: int,
+    start_date: date,
+    end_date: date,
+) -> list[dict[str, Any]]:
+    """Return authorized pending EncounterSets and image UUIDs for bulk verification."""
+    query = (
+        db.query(PatientEncounters)
+        .options(selectinload(PatientEncounters.encounter_set_images))
+        .filter(
+            PatientEncounters.project_id == project_id,
+            PatientEncounters.is_set_based.is_(True),
+            PatientEncounters.capture_date_dt >= start_date,
+            PatientEncounters.capture_date_dt <= end_date,
+            or_(
+                PatientEncounters.encounter_verified_status.is_(None),
+                PatientEncounters.encounter_verified_status.notin_(("verified", "excluded")),
+            ),
+        )
+        .order_by(
+            PatientEncounters.capture_date_dt,
+            PatientEncounters.name,
+            PatientEncounters.patient_id,
+            PatientEncounters.id,
+        )
+    )
+    rows = _apply_encounter_set_browser_scope(
+        query, PatientEncounters, user, no_pii=False
+    ).all()
+    return [
+        {
+            "encounter_id": encounter.id,
+            "encounter_uuid": encounter.uuid,
+            "image_uuids": [
+                image.uuid
+                for image in sorted(
+                    encounter.encounter_set_images or [],
+                    key=lambda image: (image.spatial_position, image.id),
+                )
+            ],
+        }
+        for encounter in rows
+    ]
+
+
 def _encounter_set_browser_months(dates: list[dict[str, Any]]) -> list[dict[str, str]]:
     counts: dict[str, int] = {}
     labels: dict[str, str] = {}

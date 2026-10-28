@@ -302,6 +302,8 @@
                                 If Remidio glaucoma report
                               {% elif scheme.auto_create_policy == 'positive_plus_negative_controls' %}
                                 Positive + controls 1:{{ scheme.negative_controls_per_positive or 0 }}
+                              {% elif scheme.auto_create_policy == 'wai_or_remidio_positive_plus_negative_controls' %}
+                                WAI or Remidio positive + controls 1:{{ scheme.negative_controls_per_positive or 0 }}
                               {% else %}
                                 Always
                               {% endif %}{% if not loop.last %}; {% endif %}

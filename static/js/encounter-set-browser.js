@@ -436,23 +436,37 @@
     if (!window.confirm(button.dataset.confirm || 'Verify all EncounterSets on this date?')) return;
     const status = document.querySelector('[data-date-verify-all-status]');
     const rows = JSON.parse(button.dataset.rows || '[]');
+    const wait = function (milliseconds) {
+      return new Promise(function (resolve) { window.setTimeout(resolve, milliseconds); });
+    };
     const post = async function (url, body) {
-      const response = await fetch(url, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: Object.assign(
-          {
-            'Accept': 'application/json',
-            'X-CSRFToken': csrfToken(),
-            'X-EncounterSet-Async': '1',
-            'X-EncounterSet-Bulk-Verify': '1'
-          },
-          body ? {'Content-Type': 'application/x-www-form-urlencoded'} : {}
-        ),
-        body: body || undefined,
-      });
-      const payload = await response.json().catch(function () { return {}; });
-      if (!response.ok || payload.success === false) throw new Error(payload.message || 'Verification was rejected.');
+      for (let retry = 0; retry <= 3; retry += 1) {
+        const response = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: Object.assign(
+            {
+              'Accept': 'application/json',
+              'X-CSRFToken': csrfToken(),
+              'X-EncounterSet-Async': '1',
+              'X-EncounterSet-Bulk-Verify': '1'
+            },
+            body ? {'Content-Type': 'application/x-www-form-urlencoded'} : {}
+          ),
+          body: body || undefined,
+        });
+        const payload = await response.json().catch(function () { return {}; });
+        if (response.status === 429 && retry < 3) {
+          const retryAfterSeconds = Number(response.headers.get('Retry-After') || 0);
+          await wait(Math.max(60000, retryAfterSeconds * 1000));
+          continue;
+        }
+        if (!response.ok || payload.success === false) throw new Error(payload.message || 'Verification was rejected.');
+        // Leave ample headroom below the application-wide 400/minute bucket;
+        // other page polling and asset requests share the same user identity.
+        await wait(650);
+        return;
+      }
     };
     button.disabled = true;
     let verified = 0;

@@ -1302,10 +1302,17 @@ def finalize_verification(uuid):
             )
 
         if encounter.referral_suggestion == "yes":
+            positive_disease_values = list(encounter.referral_positive_diseases_json or [])
+            if not positive_disease_values:
+                positive_disease_options = list_project_positive_disease_options(
+                    db, project_id=encounter.project_id
+                )
+                if len(positive_disease_options) == 1:
+                    positive_disease_values = [positive_disease_options[0].name]
             canonical_diseases, invalid_diseases = canonicalize_project_positive_diseases(
                 db,
                 project_id=encounter.project_id,
-                values=list(encounter.referral_positive_diseases_json or []),
+                values=positive_disease_values,
             )
             if invalid_diseases or not canonical_diseases:
                 return _verification_validation_response(
@@ -1506,7 +1513,7 @@ def _create_verified_encounter_set_tasks(
         sampling_scheme_ids = {
             disease_id
             for disease_id, policy in package_config["image_scheme_policies"].items()
-            if policy == "positive_plus_negative_controls"
+            if policy in {"positive_plus_negative_controls", "wai_or_remidio_positive_plus_negative_controls"}
         }
         # Check every sampling-gated disease's own positivity independently - a linked
         # child (for example DME) must be able to trigger task creation on its own, not
@@ -1639,7 +1646,7 @@ def _image_scheme_policy_applies(policy: str, evidence: set[str]) -> bool:
         return "amd" in evidence
     if policy == "remidio_glaucoma_report_present":
         return "glaucoma" in evidence
-    if policy == "positive_plus_negative_controls":
+    if policy in {"positive_plus_negative_controls", "wai_or_remidio_positive_plus_negative_controls"}:
         return False
     return False
 
@@ -1816,6 +1823,9 @@ def _eligible_encounter_set_images(db, encounter: PatientEncounters) -> list[Enc
 
 
 def _encounter_is_positive_for_disease(db, encounter: PatientEncounters, disease_id: int) -> bool:
+    wai_positive_ids = (encounter.metadata_json or {}).get("wai_positive_disease_ids") or []
+    if disease_id in {int(value) for value in wai_positive_ids if str(value).isdigit()}:
+        return True
     if encounter.referral_suggestion != "yes":
         return False
     positive_diseases = encounter.referral_positive_diseases_json or []
@@ -2189,6 +2199,8 @@ def _get_or_create_package_task(
         unscoped.encounter_set_scope_id = scope.id
         unscoped.grading_target_level = target_level
         unscoped.task_source = source
+        if unscoped.state == "ai_pending":
+            unscoped.state = "pending"
         if unscoped.source_upload_profile_id is None:
             unscoped.source_upload_profile_id = encounter.upload_profile_id
         return False

@@ -58,6 +58,7 @@ def create_wadhwani_task_ids_for_encounter(
         return []
 
     task_ids: list[int] = []
+    wai_gated_disease_ids = _wai_gated_disease_ids(db, encounter)
     for image in sorted(encounter.encounter_set_images or [], key=lambda item: (item.spatial_position, item.id)):
         if (
             image.asset_kind != "clinical_image"
@@ -87,7 +88,7 @@ def create_wadhwani_task_ids_for_encounter(
                     disease_id=disease_id,
                     lab_unit_id=encounter.lab_unit_id,
                     source_upload_profile_id=encounter.upload_profile_id,
-                    state="pending",
+                    state="ai_pending" if disease_id in wai_gated_disease_ids else "pending",
                     grading_target_level="image",
                     task_source="encounter_set_ai_inference",
                 )
@@ -95,6 +96,33 @@ def create_wadhwani_task_ids_for_encounter(
                 db.flush()
             task_ids.append(task.id)
     return queueable_wadhwani_task_ids(db, task_ids, applicable_workflows)
+
+
+def _wai_gated_disease_ids(db, encounter: PatientEncounters) -> set[int]:
+    """Return diseases whose AI tasks must stay hidden until positive."""
+    if not encounter.upload_profile_id:
+        return set()
+    from upload_profiles.models import (
+        UploadProfileEncounterSetType,
+        UploadProfileEncounterSetTypeGradingPackage,
+        UploadProfileEncounterSetTypePackageImageScheme,
+    )
+
+    return {
+        row[0]
+        for row in db.query(UploadProfileEncounterSetTypePackageImageScheme.disease_id)
+        .join(UploadProfileEncounterSetTypeGradingPackage)
+        .join(UploadProfileEncounterSetType)
+        .filter(
+            UploadProfileEncounterSetType.upload_profile_id == encounter.upload_profile_id,
+            UploadProfileEncounterSetType.active.is_(True),
+            UploadProfileEncounterSetTypeGradingPackage.active.is_(True),
+            UploadProfileEncounterSetTypePackageImageScheme.active.is_(True),
+            UploadProfileEncounterSetTypePackageImageScheme.auto_create_policy
+            == "wai_or_remidio_positive_plus_negative_controls",
+        )
+        .all()
+    }
 
 
 def queueable_wadhwani_task_ids(db, task_ids: list[int], workflows: list[ProjectAutomatedRemoteInferenceRule]) -> list[int]:

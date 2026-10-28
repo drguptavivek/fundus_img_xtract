@@ -1648,7 +1648,7 @@ class GradingTask(Base):
             postgresql_where=text('encounter_set_package_id IS NULL'),
         ),
         CheckConstraint(
-            "state IN ('pending','resident_done','resident2_done','arbitration','final')",
+            "state IN ('ai_pending','pending','resident_done','resident2_done','arbitration','final')",
             name='ck_task_state_valid'
         ),
         CheckConstraint(

@@ -662,7 +662,7 @@
       const value = controlPackage?.image_scheme_negative_controls_per_positive[String(input.dataset.schemeId)];
       input.value = value ?? 3;
       const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(input.dataset.schemeId) + '"]');
-      if (policy?.value === 'positive_plus_negative_controls' && (parseInt(input.value || '0', 10) || 0) <= 0) {
+      if (isPositiveControlPolicy(policy?.value) && (parseInt(input.value || '0', 10) || 0) <= 0) {
         input.value = '3';
       }
     });
@@ -813,7 +813,7 @@
       const control = row.querySelector('[data-upload-profile-negative-controls][data-scheme-id="' + CSS.escape(choice.id) + '"]');
       const policyValue = policy ? policy.value : 'always';
       policies[choice.id] = policyValue;
-      controls[choice.id] = policyValue === 'positive_plus_negative_controls'
+      controls[choice.id] = isPositiveControlPolicy(policyValue)
         ? Math.max(1, Math.min(10, parseInt(control?.value || '0', 10) || 0))
         : 0;
       const metadataRule = imageMetadataRuleValue(row, choice.id);
@@ -935,7 +935,7 @@
         }
       }
       if (controls) {
-        const showControls = enabled && policy && policy.value === 'positive_plus_negative_controls';
+        const showControls = enabled && policy && isPositiveControlPolicy(policy.value);
         controls.disabled = !showControls;
         controlsWrap?.classList.toggle('opacity-50', !showControls);
       }
@@ -948,7 +948,7 @@
   }
 
   function seedNegativeControlRatio(policySelect) {
-    if (!policySelect || policySelect.value !== 'positive_plus_negative_controls') {
+    if (!policySelect || !isPositiveControlPolicy(policySelect.value)) {
       return;
     }
     const imageRow = policySelect.closest('[data-upload-profile-est-image-row]');
@@ -960,6 +960,11 @@
     if (current <= 0) {
       controls.value = '3';
     }
+  }
+
+  function isPositiveControlPolicy(value) {
+    return value === 'positive_plus_negative_controls'
+      || value === 'wai_or_remidio_positive_plus_negative_controls';
   }
 
   function syncPackageCardsToFields(form) {

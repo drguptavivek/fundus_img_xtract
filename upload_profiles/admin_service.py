@@ -110,6 +110,7 @@ IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
     "remidio_amd_report_present",
     "remidio_glaucoma_report_present",
     "positive_plus_negative_controls",
+    "wai_or_remidio_positive_plus_negative_controls",
 }
 
 ENCOUNTER_SET_GRADING_MODES = {"unified", "disease_specific"}
@@ -970,11 +971,11 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             invalid_sampling_ratios = [
                 disease_id
                 for disease_id, policy in (package.image_scheme_auto_create_policies or {}).items()
-                if policy == "positive_plus_negative_controls"
+                if policy in {"positive_plus_negative_controls", "wai_or_remidio_positive_plus_negative_controls"}
                 and not (1 <= (package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) <= 10)
             ]
             if invalid_sampling_ratios:
-                return f"Positive + sampled negative controls requires a 1 to 10 control ratio in package {package.name}."
+                return f"Positive-gated sampled negative controls requires a 1 to 10 control ratio in package {package.name}."
             invalid_ratios = [
                 disease_id
                 for disease_id, value in (package.image_scheme_negative_controls_per_positive or {}).items()

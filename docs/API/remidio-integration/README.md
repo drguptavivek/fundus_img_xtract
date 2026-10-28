@@ -457,3 +457,13 @@ site routed to the project, since a patient exists at only one and the endpoint 
 Exposed to field staff as `POST /api/mobile/v1/field/projects/{id}/patients/refetch`
 (see `docs/API/mobile/field.md`). Prefer it over a window re-sync when a specific
 patient's data looks wrong: one upstream call instead of a day's scan.
+# Scheduled self-healing
+
+Active Remidio-routed projects are reconciled automatically through the same
+idempotent project-sync pipeline used by manual recovery. An hourly prospective
+pull covers yesterday and today. A daily 01:35 UTC job re-pulls the inclusive
+rolling eight-day window, and a Sunday 02:05 UTC audit re-pulls the inclusive
+rolling 30-day window. Existing exams, images, reports, inference runs, and
+grading tasks are reused; missing assets and downstream processing are queued.
+Every run creates ordinary project-sync jobs and items, so results and persistent
+route errors appear in the Remidio sync dashboard and error log.

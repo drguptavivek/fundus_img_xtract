@@ -168,6 +168,16 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute=5, hour="*"),
         }
 
+        beat_schedule["remidio-api-self-heal-daily"] = {
+            "task": "celery_tasks.tasks.remidio_tasks.queue_remidio_api_daily_self_heal_task",
+            "schedule": crontab(minute=35, hour="1"),
+        }
+
+        beat_schedule["remidio-api-audit-weekly"] = {
+            "task": "celery_tasks.tasks.remidio_tasks.queue_remidio_api_weekly_audit_task",
+            "schedule": crontab(minute=5, hour="2", day_of_week="0"),
+        }
+
         # Cleanup old package scans - daily at 4 AM UTC
         beat_schedule["package-update-cleanup-daily"] = {
             "task": "celery_tasks.tasks.package_update_tasks.cleanup_old_package_scans_task",

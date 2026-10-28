@@ -1441,12 +1441,46 @@ def test_verify_encounter_set_rejects_positive_disease_outside_project_options(
 
 
 def test_verify_encounter_set_finalize_requires_project_positive_disease(
-    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
 ):
     user = UserFactory.create_by_role(
         db_session,
         "optometrist",
         username="verify_finalize_positive_disease_required",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    _grant_project_verify(db_session, encounter_set_data, user)
+    auth_client = auth_client_factory(user)
+    encounter_set_data['encounter'].referral_suggestion = "yes"
+    encounter_set_data['encounter'].referral_positive_diseases_json = []
+    encounter_set_data['image'].is_reviewed = True
+    second_disease = db_session.merge(core_test_data["dr"])
+    db_session.add(ProjectReferralDisease(
+        project_id=encounter_set_data["project"].id,
+        disease_id=second_disease.id,
+        active=True,
+    ))
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert "select at least one positive disease" in response.json["message"]
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].encounter_verified_status != "verified"
+
+
+def test_verify_encounter_set_finalize_auto_selects_only_project_disease(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="verify_finalize_auto_single_disease",
         lab_units=[encounter_set_data['lab_unit']],
     )
     _grant_project_verify(db_session, encounter_set_data, user)
@@ -1461,11 +1495,15 @@ def test_verify_encounter_set_finalize_requires_project_positive_disease(
         headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
     )
 
-    assert response.status_code == 409
-    assert response.json["success"] is False
-    assert "select at least one positive disease" in response.json["message"]
+    assert response.status_code == 200, response.get_json()
     db_session.refresh(encounter_set_data['encounter'])
-    assert encounter_set_data['encounter'].encounter_verified_status != "verified"
+    assert encounter_set_data['encounter'].encounter_verified_status == "verified"
+    assert encounter_set_data['encounter'].referral_positive_diseases_json == ["Glaucoma"]
+    glaucoma = db_session.query(Disease).filter(Disease.name == "Glaucoma").one()
+    assert db_session.query(GradingTask).filter(
+        GradingTask.encounter_set_image_id == encounter_set_data['image'].id,
+        GradingTask.disease_id == glaucoma.id,
+    ).count() == 1
 
 
 def test_verify_encounter_set_finalize_async_blocked(client, auth_client_factory, encounter_set_data, db_session, csrf_token):

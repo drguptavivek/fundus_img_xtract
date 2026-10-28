@@ -99,6 +99,7 @@ def run_task_inference(
             task = _load_task(db, task_id)
             existing_grade = _get_existing_ai_grade(db, task.id, ai_model_id)
             if existing_grade is not None:
+                _reconcile_positive_gated_task(db, task, existing_grade)
                 return _result_from_grade(task.id, ai_model_id, existing_grade, "Existing AI grade already present for linked Wadhwani model.")
 
             cached_run = _get_latest_successful_run(db, task.id, ai_model_id)
@@ -112,6 +113,7 @@ def run_task_inference(
                     execute_payload=cached_run.execute_response_json,
                 )
                 db.flush()
+                _reconcile_positive_gated_task(db, task, grade)
                 return WadhwaniInferenceResult(
                     task_id=task.id,
                     ai_model_id=ai_model_id,
@@ -202,6 +204,7 @@ def run_task_inference(
             run.execute_response_json = execute_payload
             run.finished_at = utcnow()
             db.flush()
+            _reconcile_positive_gated_task(db, task, grade)
 
             result_row = _extract_result_row(execute_payload)
             return WadhwaniInferenceResult(
@@ -724,6 +727,33 @@ def _restore_grade_from_cached_run(db, *, task: GradingTask, integration: AIMode
     existing.ai_model_version = integration.ai_model.version if integration.ai_model else None
     db.flush()
     return existing
+
+
+def _reconcile_positive_gated_task(db, task: GradingTask, grade: Grade) -> None:
+    """Promote a provisional WAI task only when its AI grade is positive."""
+    if task.state != "ai_pending" or grade.grade_name.strip().lower() != "glaucoma":
+        return
+    image = task.encounter_set_image
+    encounter = image.patient_encounter if image is not None else None
+    if encounter is None:
+        return
+    metadata = dict(encounter.metadata_json or {})
+    positive_ids = {int(value) for value in metadata.get("wai_positive_disease_ids") or [] if str(value).isdigit()}
+    positive_ids.add(task.disease_id)
+    metadata["wai_positive_disease_ids"] = sorted(positive_ids)
+    encounter.metadata_json = metadata
+    db.flush()
+
+    # Image-received inference commonly completes before data-manager verification.
+    # Persist the positive evidence now; finalization will create the package tasks.
+    if encounter.encounter_verified_status != "verified":
+        return
+
+    # Delayed import avoids the verification blueprint's inference import cycle.
+    # This is the same idempotent package/task builder used at verification time.
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    _create_verified_encounter_set_tasks(db, encounter)
 
 
 def _extract_result_row(execute_payload: dict[str, Any]) -> dict[str, Any]:

@@ -374,11 +374,11 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
     __table_args__ = (
         UniqueConstraint("package_id", "disease_id", name="uq_up_est_pkg_image_scheme"),
         CheckConstraint(
-            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present','positive_plus_negative_controls')",
+            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present','positive_plus_negative_controls','wai_or_remidio_positive_plus_negative_controls')",
             name="ck_up_est_pkg_image_auto_create_policy",
         ),
         CheckConstraint(
-            "((auto_create_policy = 'positive_plus_negative_controls' AND negative_controls_per_positive >= 1 AND negative_controls_per_positive <= 10) OR (auto_create_policy <> 'positive_plus_negative_controls' AND negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 10))",
+            "((auto_create_policy IN ('positive_plus_negative_controls','wai_or_remidio_positive_plus_negative_controls') AND negative_controls_per_positive >= 1 AND negative_controls_per_positive <= 10) OR (auto_create_policy NOT IN ('positive_plus_negative_controls','wai_or_remidio_positive_plus_negative_controls') AND negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 10))",
             name="ck_up_est_pkg_image_negative_controls_per_positive",
         ),
         CheckConstraint(

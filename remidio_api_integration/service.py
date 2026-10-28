@@ -80,6 +80,8 @@ REMIDIO_API_SYNC_TASK_NAME = "celery_tasks.tasks.remidio_tasks.run_remidio_api_r
 REMIDIO_API_SYNC_ITEM_SOURCE = "remidio_api_routing_profile"
 REMIDIO_API_PROJECT_SYNC_TASK_NAME = "celery_tasks.tasks.remidio_tasks.run_remidio_api_project_sync_task"
 REMIDIO_API_PROJECT_PROSPECTIVE_TASK_NAME = "celery_tasks.tasks.remidio_tasks.queue_remidio_api_prospective_project_syncs_task"
+REMIDIO_API_DAILY_SELF_HEAL_TASK_NAME = "celery_tasks.tasks.remidio_tasks.queue_remidio_api_daily_self_heal_task"
+REMIDIO_API_WEEKLY_AUDIT_TASK_NAME = "celery_tasks.tasks.remidio_tasks.queue_remidio_api_weekly_audit_task"
 REMIDIO_API_PROJECT_SYNC_ITEM_SOURCE = "remidio_api_project_sync"
 REMIDIO_API_PROJECT_SYNC_UPLOAD_TYPE = "remidio api project sync"
 LOGGER = logging.getLogger("remidio_api_integration.service")
@@ -1553,6 +1555,61 @@ def create_prospective_project_sync_jobs() -> dict[str, Any]:
         if item["items_created"] > 0:
             enqueue_project_sync_job(item["job_id"])
     return {"projects_seen": len(queued) + len(errors), "queued": queued, "errors": errors}
+
+
+def _self_healing_window(today: date, *, days: int) -> tuple[date, date]:
+    """Return an inclusive rolling window ending today."""
+    bounded_days = max(1, min(int(days), 90))
+    return today - timedelta(days=bounded_days - 1), today
+
+
+def create_self_healing_project_sync_jobs(*, days: int, mode: str) -> dict[str, Any]:
+    """Queue idempotent recovery pulls for every actively routed project."""
+    start_date, end_date = _self_healing_window(utcnow().date(), days=days)
+    payload = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "mode": mode,
+        "limit": 100,
+        "dry_run": False,
+    }
+    queued: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    with get_db_session() as db:
+        project_ids = _eligible_project_ids_for_auto_sync(db)
+        for project_id in project_ids:
+            try:
+                queued.append(
+                    create_project_sync_job(
+                        db,
+                        project_id=project_id,
+                        payload=payload,
+                        skip_active_duplicates=True,
+                        system_principal=True,
+                    )
+                )
+            except RemidioConfigError as exc:
+                errors.append({"project_id": project_id, "error": str(sanitize_log_value(exc))})
+        db.commit()
+    for item in queued:
+        if item["items_created"] > 0:
+            enqueue_project_sync_job(item["job_id"])
+    return {
+        "mode": mode,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "projects_seen": len(queued) + len(errors),
+        "queued": queued,
+        "errors": errors,
+    }
+
+
+def create_daily_self_healing_project_sync_jobs() -> dict[str, Any]:
+    return create_self_healing_project_sync_jobs(days=8, mode="self_heal_daily_8_day")
+
+
+def create_weekly_audit_project_sync_jobs() -> dict[str, Any]:
+    return create_self_healing_project_sync_jobs(days=30, mode="self_heal_weekly_30_day")
 
 
 def enqueue_project_sync_job(job_id: int, *, user_id: int | None = None, hospital_id: int | None = None) -> None:

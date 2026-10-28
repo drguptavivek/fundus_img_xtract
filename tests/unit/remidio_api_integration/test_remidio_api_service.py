@@ -1,9 +1,45 @@
 import pytest
+from datetime import date
 
 from remidio_api_integration.errors import RemidioConfigError
 from remidio_api_integration import service
 from remidio_api_integration.service import upsert_routing_rule
 from models import RemidioConnection
+
+
+def test_self_healing_window_is_inclusive_and_bounded():
+    today = date(2026, 10, 28)
+
+    assert service._self_healing_window(today, days=8) == (date(2026, 10, 21), today)
+    assert service._self_healing_window(today, days=30) == (date(2026, 9, 29), today)
+    assert service._self_healing_window(today, days=0) == (today, today)
+    assert service._self_healing_window(today, days=500) == (date(2026, 7, 31), today)
+
+
+def test_daily_self_healing_uses_rolling_eight_day_mode(monkeypatch):
+    captured = {}
+
+    def fake_create(*, days, mode):
+        captured.update(days=days, mode=mode)
+        return {"queued": []}
+
+    monkeypatch.setattr(service, "create_self_healing_project_sync_jobs", fake_create)
+
+    assert service.create_daily_self_healing_project_sync_jobs() == {"queued": []}
+    assert captured == {"days": 8, "mode": "self_heal_daily_8_day"}
+
+
+def test_weekly_self_healing_uses_rolling_thirty_day_mode(monkeypatch):
+    captured = {}
+
+    def fake_create(*, days, mode):
+        captured.update(days=days, mode=mode)
+        return {"queued": []}
+
+    monkeypatch.setattr(service, "create_self_healing_project_sync_jobs", fake_create)
+
+    assert service.create_weekly_audit_project_sync_jobs() == {"queued": []}
+    assert captured == {"days": 30, "mode": "self_heal_weekly_30_day"}
 
 
 def test_remidio_post_processing_dispatches_every_workflow(monkeypatch):

@@ -526,6 +526,9 @@
                             <option value="remidio_glaucoma_report_present">If Remidio glaucoma report detected</option>
                             {% endif %}
                             <option value="positive_plus_negative_controls">Positive + sampled negative controls</option>
+                            {% if remidio_ocr_linkage == "glaucoma" %}
+                            <option value="wai_or_remidio_positive_plus_negative_controls">WAI or Remidio positive + sampled controls</option>
+                            {% endif %}
                             <option value="always" selected>Always</option>
                           </select>
                         </td>

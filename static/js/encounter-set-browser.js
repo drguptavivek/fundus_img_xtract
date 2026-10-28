@@ -364,6 +364,109 @@
     }
   });
 
+  document.addEventListener('submit', async function (event) {
+    const form = event.target.closest('[data-fetch-missing-remidio-form]');
+    if (!form) return;
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const modalStatus = form.querySelector('[data-fetch-missing-remidio-modal-status]');
+    const pageStatus = document.querySelector('[data-remidio-fetch-status]');
+    const startDate = form.elements.start_date.value;
+    const endDate = form.elements.end_date.value;
+    if (endDate < startDate) {
+      modalStatus.textContent = 'End date must be on or after start date.';
+      modalStatus.className = 'small mt-2 text-danger';
+      return;
+    }
+    submit.disabled = true;
+    modalStatus.textContent = 'Creating recovery job…';
+    modalStatus.className = 'small mt-2 text-muted';
+    try {
+      const response = await fetch(form.dataset.url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken()},
+        body: JSON.stringify({
+          start_date: startDate,
+          end_date: endDate,
+          mode: 'historical_manual',
+          dry_run: false,
+          limit: 200,
+        }),
+      });
+      const payload = await response.json().catch(function () { return {}; });
+      if (!response.ok || payload.success === false) throw new Error(payload.error || payload.message || 'Could not create recovery job.');
+      const data = payload.data || {};
+      const message = payload.message + (data.job_id ? ' Job ' + data.job_id + '.' : '');
+      modalStatus.textContent = message;
+      modalStatus.className = 'small mt-2 text-success';
+      if (pageStatus) {
+        pageStatus.textContent = message;
+        pageStatus.className = 'small text-success';
+      }
+      window.setTimeout(function () {
+        const modal = window.bootstrap && window.bootstrap.Modal.getInstance(document.getElementById('fetchMissingRemidioModal'));
+        if (modal) modal.hide();
+      }, 800);
+    } catch (error) {
+      submit.disabled = false;
+      modalStatus.textContent = error.message || 'Could not create recovery job.';
+      modalStatus.className = 'small mt-2 text-danger';
+    }
+  });
+
+  document.addEventListener('click', async function (event) {
+    const button = event.target.closest('[data-date-verify-all]');
+    if (!button) return;
+    event.preventDefault();
+    if (!window.confirm(button.dataset.confirm || 'Verify all EncounterSets on this date?')) return;
+    const status = document.querySelector('[data-date-verify-all-status]');
+    const rows = JSON.parse(button.dataset.rows || '[]');
+    const post = async function (url, body) {
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: Object.assign(
+          {
+            'Accept': 'application/json',
+            'X-CSRFToken': csrfToken(),
+            'X-EncounterSet-Async': '1',
+            'X-EncounterSet-Bulk-Verify': '1'
+          },
+          body ? {'Content-Type': 'application/x-www-form-urlencoded'} : {}
+        ),
+        body: body || undefined,
+      });
+      const payload = await response.json().catch(function () { return {}; });
+      if (!response.ok || payload.success === false) throw new Error(payload.message || 'Verification was rejected.');
+    };
+    button.disabled = true;
+    let verified = 0;
+    const failures = [];
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      try {
+        if (status) status.textContent = 'Reviewing EncounterSet ' + (rowIndex + 1) + '/' + rows.length + '…';
+        for (const imageUuid of row.image_uuids) {
+          await post(button.dataset.markReviewedUrl.replace('__IMAGE__', imageUuid));
+        }
+        await post(
+          button.dataset.finalizeUrl.replace('__ENCOUNTER__', row.encounter_uuid),
+          new URLSearchParams({after: 'stay', skip_inference: '1'}).toString()
+        );
+        verified += 1;
+      } catch (error) {
+        failures.push('EncounterSet ' + (rowIndex + 1) + ': ' + (error.message || 'failed'));
+      }
+    }
+    if (status) {
+      status.textContent = verified + ' verified' + (failures.length ? '; ' + failures.length + ' require attention. ' + failures[0] : '.');
+      status.className = 'small ' + (failures.length ? 'text-warning' : 'text-success');
+    }
+    if (!failures.length) window.location.reload();
+    else button.disabled = false;
+  });
+
   // One-click verify: mark every unreviewed image reviewed, then finalize through the same routes the Verify page uses.
   async function oneClickVerify(button) {
     const status = document.querySelector('[data-one-click-verify-status]');

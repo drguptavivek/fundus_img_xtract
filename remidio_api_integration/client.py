@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -19,6 +19,8 @@ from .validation import require_token, sanitize_for_storage
 
 LOGGER = logging.getLogger("remidio_api_integration.client")
 MAX_LOG_BODY_CHARS = 1200
+GATEWAY_MAX_RETRIES = 3
+GATEWAY_BACKOFF_BASE_SECONDS = 1.0
 
 
 class RemidioClient:
@@ -55,10 +57,10 @@ class RemidioClient:
         return self._client_auth_token
 
     def get_sites(self) -> dict[str, Any]:
-        return self._request("GET", "/api/gateway/getSites", headers=self._gateway_headers())
+        return self._gateway_get("/api/gateway/getSites")
 
     def get_queue_item(self) -> dict[str, Any]:
-        return self._request("GET", "/api/gateway/getQueueItem", headers=self._gateway_headers())
+        return self._gateway_get("/api/gateway/getQueueItem")
 
     def get_exams_by_date(
         self,
@@ -75,7 +77,7 @@ class RemidioClient:
             f"{quote(site_custom_identifier, safe='')}"
         )
         params = {"includeFilePaths": "true"} if include_file_paths else None
-        return self._request("GET", path, headers=self._gateway_headers(include_bearer=True), params=params)
+        return self._gateway_get(path, include_bearer=True, params=params)
 
     def get_patient_with_last_exam(self, *, site_identifier: str, mrn: str) -> dict[str, Any]:
         path = (
@@ -83,7 +85,44 @@ class RemidioClient:
             f"{quote(site_identifier, safe='')}/"
             f"{quote(mrn, safe='')}"
         )
-        return self._request("GET", path, headers=self._gateway_headers(include_bearer=True))
+        return self._gateway_get(path, include_bearer=True)
+
+    def _gateway_get(
+        self,
+        path: str,
+        *,
+        include_bearer: bool = False,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Retry bounded auth/transient failures with exponential backoff."""
+        for retry_number in range(0, GATEWAY_MAX_RETRIES + 1):
+            try:
+                return self._request(
+                    "GET",
+                    path,
+                    headers=self._gateway_headers(include_bearer=include_bearer),
+                    params=params,
+                )
+            except RemidioRemoteError as exc:
+                status = exc.remote_status_code
+                auth_rejection = status == 401 or "token" in str(exc).casefold()
+                transient = status == 429 or (status is not None and status >= 500)
+                if not auth_rejection and not transient:
+                    raise
+                if auth_rejection:
+                    self.reset_session_tokens()
+                if retry_number >= GATEWAY_MAX_RETRIES:
+                    raise
+                delay = GATEWAY_BACKOFF_BASE_SECONDS * (2 ** retry_number)
+                LOGGER.info(
+                    "Remidio gateway retry attempt=%s delay_seconds=%s auth_refresh=%s path=%s",
+                    retry_number + 1,
+                    delay,
+                    auth_rejection,
+                    sanitize_log_value(path, max_len=500),
+                )
+                sleep(delay)
+        raise AssertionError("unreachable")
 
     def download_file(
         self,

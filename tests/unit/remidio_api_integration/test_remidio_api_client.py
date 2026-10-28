@@ -38,6 +38,16 @@ class FailingDownloadSession(FakeSession):
         raise requests.ConnectionError(f"Max retries exceeded with url: {url}", nested)
 
 
+class SequenceSession(FakeSession):
+    def __init__(self, responses):
+        super().__init__()
+        self.responses = list(responses)
+
+    def request(self, method, url, **kwargs):
+        self.calls.append({"method": method, "url": url, "kwargs": kwargs})
+        return self.responses.pop(0)
+
+
 def _secrets() -> RemidioSecrets:
     return RemidioSecrets(
         base_url="https://remidio.example.test",
@@ -67,6 +77,63 @@ def test_get_exams_by_date_can_request_signed_file_paths():
     assert call["kwargs"]["params"] == {"includeFilePaths": "true"}
     assert call["kwargs"]["headers"]["clientAuthToken"] == "gateway-token"
     assert call["kwargs"]["headers"]["Authorization"] == "Bearer bearer-token"
+
+
+def test_get_exams_by_date_refreshes_expired_tokens_and_retries_once(monkeypatch):
+    delays = []
+    monkeypatch.setattr("remidio_api_integration.client.sleep", delays.append)
+    expired = FakeResponse(
+        status_code=401,
+        body={"status": {"statusCode": "UNAUTHORIZED", "message": "The Client Auth Token supplied was expired"}},
+    )
+    login = FakeResponse(body={"status": {"statusCode": "OK"}, "data": {"token": "fresh-bearer"}})
+    gateway_auth = FakeResponse(body={"status": {"statusCode": "OK"}, "data": {"token": "fresh-client-auth"}})
+    success = FakeResponse(body={"status": {"statusCode": "OK"}, "data": []})
+    session = SequenceSession([expired, login, gateway_auth, success])
+    client = RemidioClient(_secrets(), session=session)
+    client._client_auth_token = "expired-client-auth"
+    client._bearer_token = "old-bearer"
+
+    result = client.get_exams_by_date(
+        start_date="27-10-2026",
+        end_date="28-10-2026",
+        site_custom_identifier="comoph_4394",
+        include_file_paths=True,
+    )
+
+    assert result["data"] == []
+    assert [call["url"].split("remidio.example.test")[-1] for call in session.calls] == [
+        "/api/gateway/getExamsByDate/27-10-2026/28-10-2026/comoph_4394",
+        "/api/user/loginUser",
+        "/api/gateway/getAuthToken",
+        "/api/gateway/getExamsByDate/27-10-2026/28-10-2026/comoph_4394",
+    ]
+    assert session.calls[-1]["kwargs"]["headers"]["clientAuthToken"] == "fresh-client-auth"
+    assert session.calls[-1]["kwargs"]["headers"]["Authorization"] == "Bearer fresh-bearer"
+    assert delays == [1.0]
+
+
+def test_get_exams_by_date_uses_exponential_backoff_for_transient_errors(monkeypatch):
+    delays = []
+    monkeypatch.setattr("remidio_api_integration.client.sleep", delays.append)
+    session = SequenceSession([
+        FakeResponse(status_code=503, body={"status": {"statusCode": "DOWN", "message": "Unavailable"}}),
+        FakeResponse(status_code=429, body={"status": {"statusCode": "BUSY", "message": "Slow down"}}),
+        FakeResponse(body={"status": {"statusCode": "OK"}, "data": []}),
+    ])
+    client = RemidioClient(_secrets(), session=session)
+    client._client_auth_token = "client-auth"
+    client._bearer_token = "bearer"
+
+    result = client.get_exams_by_date(
+        start_date="27-10-2026",
+        end_date="28-10-2026",
+        site_custom_identifier="comoph_4394",
+    )
+
+    assert result["data"] == []
+    assert delays == [1.0, 2.0]
+    assert len(session.calls) == 3
 
 
 def test_request_error_snapshot_redacts_signed_urls_and_tokens():

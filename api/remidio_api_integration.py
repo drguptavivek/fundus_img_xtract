@@ -558,6 +558,19 @@ def sync_selected_remidio_api_project():
     return _sync_remidio_api_project_from_payload(project_id, payload)
 
 
+@api_bp.route("/remidio/projects/<int:project_id>/errors", methods=["GET"])
+@login_required
+def get_remidio_api_project_errors(project_id: int):
+    try:
+        with transaction_scope() as db:
+            rows = service.list_project_sync_error_log(
+                db, project_id=project_id, user=current_user
+            )
+        return jsonify({"success": True, "data": {"project_id": project_id, "errors": rows}})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
 def _sync_remidio_api_project_from_payload(project_id: int, payload: dict):
     try:
         with transaction_scope() as db:

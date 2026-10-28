@@ -9,7 +9,10 @@
       <h1 class="h3 mb-1">Remidio API Sync</h1>
       <p class="text-muted mb-0">Run and monitor project-wise Remidio API EncounterSet ingestion.</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
+    <div class="d-flex gap-2">
+      {% if selected_project_id %}<a class="btn btn-outline-danger" href="{{ url_for('remidio_api_uploads.remidio_api_errors', project_id=selected_project_id) }}">Error log</a>{% endif %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
+    </div>
   </div>
 
   <div id="remidio-api-sync-workspace">

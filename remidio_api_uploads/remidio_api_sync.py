@@ -36,6 +36,26 @@ def remidio_api_sync_workspace():
     return render_template("remidio_api_uploads/_remidio_api_sync_workspace.html", **_with_sync_dates(context))
 
 
+@bp.route("/admin/remidio/error-log", methods=["GET"])
+@login_required
+def remidio_api_errors():
+    project_id = _optional_int(request.args.get("project_id"))
+    with get_db_session() as db:
+        context = remidio_service.list_project_sync_dashboard(db, project_id=project_id, user=current_user)
+        if not context["projects"]:
+            abort(403)
+        selected_project_id = context["selected_project_id"]
+        errors = remidio_service.list_project_sync_error_log(
+            db, project_id=selected_project_id, user=current_user
+        )
+    return render_template(
+        "remidio_api_uploads/remidio_api_errors.html",
+        projects=context["projects"],
+        selected_project_id=selected_project_id,
+        errors=errors,
+    )
+
+
 def _optional_int(value: str | None) -> int | None:
     if value in {None, ""}:
         return None

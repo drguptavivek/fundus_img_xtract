@@ -103,14 +103,43 @@
             <span>Export all months</span>
           </a>
         </div>
-        {% if can_verify_all_with_wai %}
+        {% if can_run_project_data_actions %}
+        {% if selected_date %}
+        <button class="btn btn-sm btn-success"
+                type="button"
+                data-date-verify-all
+                data-rows='{{ bulk_verification_rows | tojson }}'
+                data-mark-reviewed-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid='__IMAGE__') }}"
+                data-finalize-url="{{ url_for('verify_encounter_set.finalize_verification', uuid='__ENCOUNTER__') }}"
+                data-confirm="Verify every pending EncounterSet and all its images on {{ selected_date.strftime('%d %b %Y') }}? This does not run WAI inference."
+                {% if not bulk_verification_rows %}disabled{% endif %}>
+          <i class="bi bi-check2-all" aria-hidden="true"></i>
+          <span>Verify all</span>
+        </button>
+        <div class="small text-muted" data-date-verify-all-status>
+          {{ bulk_verification_rows | length }} pending EncounterSet{{ '' if bulk_verification_rows | length == 1 else 's' }} on this date.
+        </div>
+        {% endif %}
+        {% if can_fetch_missing_remidio %}
+        <button class="btn btn-sm btn-outline-primary"
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target="#fetchMissingRemidioModal">
+          <i class="bi bi-cloud-download" aria-hidden="true"></i>
+          <span>Fetch missing Remidio</span>
+        </button>
+        <div class="small text-muted" data-remidio-fetch-status>
+          Choose a date range to create a Remidio recovery job.
+          <a href="{{ url_for('remidio_api_uploads.remidio_api_errors', project_id=selected_project_id) }}">Error log</a>
+        </div>
+        {% endif %}
         <button class="btn btn-sm btn-primary"
                 type="button"
                 data-project-wai-verify-all
                 data-url="{{ url_for('fundus_api.create_project_wai_backfill_job', project_id=selected_project_id) }}"
                 data-confirm="Create a background job to run every configured, eligible DR/DME and glaucoma WAI inference for this entire project?">
           <i class="bi bi-cpu" aria-hidden="true"></i>
-          <span>Verify all with WAI</span>
+          <span>Run WAI inference</span>
         </button>
         <div class="small text-muted" data-project-wai-verify-status>Uses the project’s configured WAI workflows.</div>
         {% endif %}
@@ -119,6 +148,42 @@
       </div>
     </div>
   </div>
+
+  {% if can_fetch_missing_remidio %}
+  <div class="modal fade" id="fetchMissingRemidioModal" tabindex="-1" aria-labelledby="fetchMissingRemidioModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form data-fetch-missing-remidio-form
+              data-url="{{ url_for('fundus_api.sync_remidio_api_project', project_id=selected_project_id) }}">
+          {{ csrf_field() }}
+          <div class="modal-header">
+            <h2 class="modal-title fs-5" id="fetchMissingRemidioModalLabel">Fetch missing Remidio records</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted">Re-fetch all configured Remidio routes for this project. Existing records are handled idempotently.</p>
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label" for="remidio-fetch-start-date">Start date</label>
+                <input class="form-control" id="remidio-fetch-start-date" name="start_date" type="date" value="{{ remidio_fetch_start_date }}" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="remidio-fetch-end-date">End date</label>
+                <input class="form-control" id="remidio-fetch-end-date" name="end_date" type="date" value="{{ remidio_fetch_end_date }}" required>
+              </div>
+            </div>
+            <div class="alert alert-warning mt-3 mb-0">This creates a live recovery job and may download exams and images that are not present locally.</div>
+            <div class="small mt-2" data-fetch-missing-remidio-modal-status></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create recovery job</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="col-12 col-xl-4">
     <div class="card shadow-sm h-100">

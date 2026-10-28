@@ -1351,18 +1351,26 @@ def finalize_verification(uuid):
             ))
 
         created_tasks = _create_verified_encounter_set_tasks(db, encounter)
-        wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(db, encounter, trigger_timing="after_verification")
-        if wadhwani_task_ids:
-            _enqueue_wadhwani_after_commit(
-                tuple(wadhwani_task_ids),
-                user_id=current_user.id,
-                username=current_user.username,
-                remote_addr=request.remote_addr,
-                lab_unit_id=encounter.lab_unit_id,
-                project_id=encounter.project_id,
-                upload_profile_id=encounter.upload_profile_id,
+        bulk_verification_without_inference = (
+            request.form.get("skip_inference") == "1"
+            and request.headers.get("X-EncounterSet-Bulk-Verify") == "1"
+            and current_user.has_role("data_manager")
+        )
+        if not bulk_verification_without_inference:
+            wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(
+                db, encounter, trigger_timing="after_verification"
             )
-        _enqueue_madhunetra_after_commit(encounter.id, user_id=current_user.id)
+            if wadhwani_task_ids:
+                _enqueue_wadhwani_after_commit(
+                    tuple(wadhwani_task_ids),
+                    user_id=current_user.id,
+                    username=current_user.username,
+                    remote_addr=request.remote_addr,
+                    lab_unit_id=encounter.lab_unit_id,
+                    project_id=encounter.project_id,
+                    upload_profile_id=encounter.upload_profile_id,
+                )
+            _enqueue_madhunetra_after_commit(encounter.id, user_id=current_user.id)
         close_url = _encounter_set_browser_url(encounter)
         next_uuid = _next_pending_encounter_uuid(db, encounter=encounter)
 

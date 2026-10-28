@@ -2555,6 +2555,77 @@ def _recent_project_sync_jobs(db: Session, project_id: int) -> list[dict[str, An
     return [_project_sync_job_summary(row) for row in rows]
 
 
+def list_project_sync_error_log(
+    db: Session, *, project_id: int, user: Any, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Return sanitized route/item failures for one authorized Remidio project."""
+    from authz.project_access import can_sync_remidio
+
+    if not can_sync_remidio(db, user, project_id=project_id):
+        raise RemidioConfigError("You cannot view Remidio errors for this project.")
+    jobs = (
+        db.query(Job)
+        .options(selectinload(Job.items), selectinload(Job.project))
+        .filter(
+            Job.upload_type == REMIDIO_API_PROJECT_SYNC_UPLOAD_TYPE,
+            Job.project_id == project_id,
+        )
+        .order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(100)
+        .all()
+    )
+    rows: list[dict[str, Any]] = []
+    for job in jobs:
+        summary = _project_sync_job_summary(job)
+        for group in summary["route_groups"]:
+            ingest = group["ingest_summary"]
+            if (
+                group["status"] == "completed"
+                and not group["error"]
+                and not ingest["route_errors"]
+                and not ingest["download_errors"]
+            ):
+                continue
+            rows.append({
+                "job_id": job.id,
+                "job_status": job.status,
+                "created_at": _iso(job.created_at),
+                "requested_by": job.uploader_username,
+                "window": group["window"],
+                "routing_profile_id": group["routing_profile_id"],
+                "site_custom_identifier": group["site_custom_identifier"],
+                "route_ids": group["route_ids"],
+                "status": group["status"],
+                "remote_status_code": group["remote_status_code"],
+                "error": sanitize_log_value(group["error"], max_len=500),
+                "route_errors": ingest["route_errors"],
+                "download_errors": ingest["download_errors"],
+            })
+            if len(rows) >= limit:
+                return rows
+        for item in summary["items"]:
+            if item["route_groups"] or not item["error"]:
+                continue
+            rows.append({
+                "job_id": job.id,
+                "job_status": job.status,
+                "created_at": _iso(job.created_at),
+                "requested_by": job.uploader_username,
+                "window": f"{item['start_date'] or '-'} -> {item['end_date'] or '-'}",
+                "routing_profile_id": item["routing_profile_id"],
+                "site_custom_identifier": None,
+                "route_ids": item["route_ids"],
+                "status": item["state"],
+                "remote_status_code": None,
+                "error": sanitize_log_value(item["error"], max_len=500),
+                "route_errors": 0,
+                "download_errors": 0,
+            })
+            if len(rows) >= limit:
+                return rows
+    return rows
+
+
 def _project_sync_job_summary(job: Job) -> dict[str, Any]:
     items = sorted(job.items or [], key=lambda item: item.id)
     first_payload = _job_item_payload(items[0]) if items else {}

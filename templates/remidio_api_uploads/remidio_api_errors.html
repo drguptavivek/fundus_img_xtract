@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Remidio Error Log{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4">
+    <div><h1 class="h3 mb-1">Remidio Error Log</h1><p class="text-muted mb-0">Sanitized route and download failures from project sync jobs.</p></div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.remidio_api_sync', project_id=selected_project_id) }}">Back to Remidio Sync</a>
+  </div>
+  <form class="card card-body shadow-sm mb-3" method="get">
+    <label class="form-label" for="remidio-errors-project">Project</label>
+    <select class="form-select" id="remidio-errors-project" name="project_id" onchange="this.form.submit()">
+      {% for project in projects %}<option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>{{ project.title }}{% if project.code %} · {{ project.code }}{% endif %}</option>{% endfor %}
+    </select>
+  </form>
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between"><span>Errors</span><span class="badge text-bg-danger">{{ errors|length }}</span></div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Time</th><th>Job</th><th>Window</th><th>Site / routes</th><th>Status</th><th>Error</th></tr></thead>
+        <tbody>
+          {% for row in errors %}
+          <tr>
+            <td class="text-nowrap">{{ row.created_at or '-' }}</td>
+            <td>#{{ row.job_id }}<div class="small text-muted">{{ row.job_status }}</div></td>
+            <td class="text-nowrap">{{ row.window }}</td>
+            <td>{{ row.site_custom_identifier or '-' }}<div class="small text-muted">Routes {{ row.route_ids|join(', ') if row.route_ids else '-' }}</div></td>
+            <td><span class="badge text-bg-danger">{{ row.status }}</span>{% if row.remote_status_code %}<div class="small">HTTP {{ row.remote_status_code }}</div>{% endif %}</td>
+            <td class="text-break">{{ row.error or 'Route errors: ' ~ row.route_errors ~ '; download errors: ' ~ row.download_errors }}</td>
+          </tr>
+          {% else %}<tr><td colspan="6" class="text-center text-muted py-4">No recorded Remidio sync errors for this project.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

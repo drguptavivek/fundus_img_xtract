@@ -882,6 +882,57 @@ def test_pending_encounter_set_marks_browser_date_with_warning_dot(
 
     assert response.status_code == 200
     assert b"data-date-has-unverified" in response.data
+
+
+def test_data_manager_browser_separates_verify_wai_and_remidio_actions(
+    encounter_set_data, db_session, auth_client_factory, monkeypatch
+):
+    project = encounter_set_data["project"]
+    user = UserFactory.create_admin(db_session, username=f"browser_actions_{uuid.uuid4().hex[:8]}")
+    monkeypatch.setattr("authz.project_access.can_sync_remidio", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "remidio_api_integration.service.list_project_sync_dashboard",
+        lambda _db, *, project_id, user: {
+            "projects": [{"id": project_id, "title": project.title, "code": project.code}],
+            "selected_project_id": project_id,
+        },
+    )
+    monkeypatch.setattr(
+        "remidio_api_integration.service.list_project_sync_error_log",
+        lambda _db, *, project_id, user: [{
+            "job_id": 44115,
+            "job_status": "partial_error",
+            "created_at": "2026-10-28T12:30:17+00:00",
+            "window": "2026-10-27 -> 2026-10-28",
+            "site_custom_identifier": "comoph_4832",
+            "route_ids": [26],
+            "status": "failed",
+            "remote_status_code": 503,
+            "error": "Upstream unavailable",
+            "route_errors": 1,
+            "download_errors": 0,
+        }],
+    )
+    client = auth_client_factory(user)
+
+    response = client.get(
+        f"/uploads/encountersets/browse?project_id={project.id}&month=2023-10&date=2023-10-27"
+    )
+
+    assert response.status_code == 200
+    assert b">Verify all<" in response.data
+    assert b">Run WAI inference<" in response.data
+    assert b">Fetch missing Remidio<" in response.data
+    assert b'id="fetchMissingRemidioModal"' in response.data
+    assert b'name="start_date" type="date" value="2023-10-01"' in response.data
+    assert b'name="end_date" type="date" value="2023-10-31"' in response.data
+    assert b"This does not run WAI inference." in response.data
+
+    error_response = client.get(f"/admin/remidio/error-log?project_id={project.id}")
+    assert error_response.status_code == 200
+    assert b"Remidio Error Log" in error_response.data
+    assert b"44115" in error_response.data
+    assert b"Upstream unavailable" in error_response.data
     assert b"1 EncounterSet not verified or excluded" in response.data
 
 

@@ -204,6 +204,9 @@ services:
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${CELERY_OCR_CONCURRENCY:-1}
+      --pool=prefork
+      --max-tasks-per-child=${CELERY_OCR_MAX_TASKS_PER_CHILD:-50}
+      --max-memory-per-child=${CELERY_OCR_MAX_MEMORY_PER_CHILD_KB:-800000}
       -Q zip_ocr,pii_detection,pdf_processing,metadata
     restart: on-failure:5
 
@@ -239,6 +242,9 @@ services:
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${CELERY_GENERAL_CONCURRENCY:-3}
+      --pool=prefork
+      --max-tasks-per-child=${CELERY_GENERAL_MAX_TASKS_PER_CHILD:-200}
+      --max-memory-per-child=${CELERY_GENERAL_MAX_MEMORY_PER_CHILD_KB:-300000}
       --prefetch-multiplier=1
       -Ofair
       -Q wadhwani,thumbnails,exports,maintenance,s3_sync,default

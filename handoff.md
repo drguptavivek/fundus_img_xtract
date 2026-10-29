@@ -1,8 +1,11 @@
 # Fresh-session handoff
 
-## Latest session (2026-10-17) — DuckDB project export (bead `fundus_img_xtract-6k5f`)
+## DuckDB project export — checked 2026-10-29
 
-State: built and tested, **uncommitted**, not deployed. Plan/decisions/gotchas live in the bead notes.
+State: committed on 2026-10-17 (`a879d821`, dependency `9c9d7b5d`) and present on main and
+`upstream/main`. Later commits extended the export. DuckDB 1.5.5 imports in both the running web and general
+worker containers. A live download has not been checked in this session. The old bead `fundus_img_xtract-6k5f`
+was not found in the current Beads database.
 
 - **Module** `project_export/` (deep; call only `export_package`, `export_workbook`, `export_options`,
   `export_package_for_scope`). `schema.py` is the single table contract and generates the `data_dictionary`;
@@ -21,17 +24,16 @@ State: built and tested, **uncommitted**, not deployed. Plan/decisions/gotchas l
 - **Test**: `docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run --with duckdb==1.5.5 python -m pytest tests/unit/project_export tests/unit/project_sync tests/unit/scripts/test_project_sync_client.py -q`
   (`python -m pytest`, not `pytest`; `test-db` must be up). Real-data parity and an identifier-leak probe were run for
   ICMR-VG, GLAU_SCR_APP and no-project.
-- **Gotchas**: `duckdb` is not in the images yet (endpoints 503, sync ships workbook only) until the venv-builder is
-  rebuilt; web restart runs `alembic upgrade head` on the live DB (get a go-ahead); keep `duckdb` imports lazy
-  (`api/__init__.py` imports all routes at start-up).
-- **Next**: 1) commit/push (one commit or split: export / sync+OCR / docs); 2) rebuild images + restart web and celery,
-  smoke-test; 3) fix `fundus_img_xtract-57l8` (hourly Remidio sync fails every run: unwrap `request` in
-  `_reauthorize_project_sync_job`); 4) background build for very large projects; 5) DuckDB 2.x bump; 6) structured
-  verification tags, mask `hospital_UHID`/`remidio_patient_id` in the old workbook, optional `local_admin` access.
-- Also uncommitted from earlier today: `/api/sync/v1/encounters` + sidecars now carry encounter metadata and OCR
-  reports (`project_sync/inventory.py`), the sync client's `payload_json`/`remedio_results.csv`, and OCR columns in the
-  server workbook (`project_review/export_service.py`). Live routing was changed by the user on the web UI
-  (MOHFW route for `retina_lab_01`); the local DB is a dev replica of the live DB.
+- **Check manually**: log in as an admin, open `/admin/project-export` (Admin > Integrations > Project Data Export),
+  choose a project, leave identifiers unchecked for the initial check, and click Download DuckDB. Confirm the
+  password if prompted. For no-project data select hospitals and/or lab units. Open the downloaded file with DuckDB
+  and inspect `manifest`, `guide`, `data_dictionary`, and counts such as `SELECT count(*) FROM encounters` and
+  `SELECT count(*) FROM images`. Compare counts and scope against the source before relying on the export.
+  Identifier inclusion is opt-in; files contain data references, not the images or PDFs themselves.
+- **Operational notes**: direct downloads build synchronously, require admin and recent password confirmation, are
+  audited and rate limited. Sync exports build in the worker and are limited to grant scope. Missing DuckDB produces
+  a 503 for direct downloads and omits the sync DuckDB file. Keep imports lazy. Do not restart web without user
+  approval; a restart runs live migrations. Background export for very large projects remains a possible improvement.
 
 ---
 ## Latest session (2026-09-30) — passkey fix, worker/pidfile fixes, browse-page WAI pills

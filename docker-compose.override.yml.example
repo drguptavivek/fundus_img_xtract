@@ -61,7 +61,6 @@ services:
       - --concurrency=1
       - -Q
       - zip_ocr,pii_detection,pdf_processing
-      - --pool=solo
     environment:
       CELERY_TASKS_PROFILE: "ocr"
 
@@ -82,7 +81,6 @@ services:
       - --concurrency=2
       - -Q
       - thumbnails,metadata,exports,maintenance,s3_sync,default
-      - --pool=solo
     environment:
       CELERY_TASKS_PROFILE: "general"
 

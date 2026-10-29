@@ -83,6 +83,92 @@ def test_account_passkeys_page_needs_confirm_password(app, db_session, ophthalmo
     assert "Add a passkey" in page.get_data(as_text=True)
 
 
+def test_web_reauth_passkey_is_shown_only_for_enrolled_users(app, db_session, ophthalmologist_user, monkeypatch):
+    client = create_authenticated_client(app, ophthalmologist_user, db_session)
+    monkeypatch.setattr("passkeys.service.list_passkeys", lambda *args, **kwargs: [])
+    assert b'id="reauth-passkey"' not in client.get("/confirm-password").data
+    monkeypatch.setattr("passkeys.service.list_passkeys", lambda *args, **kwargs: [object()])
+    assert b'id="reauth-passkey"' in client.get("/confirm-password").data
+
+
+def test_web_reauth_passkey_binds_challenge_to_session_and_safely_redirects(app, db_session, ophthalmologist_user, monkeypatch):
+    client = create_authenticated_client(app, ophthalmologist_user, db_session)
+    headers = {"X-CSRFToken": _csrf(client, "/account/profile")}
+    monkeypatch.setattr("passkeys.service.begin_assertion", lambda db, user: {"challenge_id": "correct", "options": {}})
+    calls = []
+    monkeypatch.setattr("passkeys.service.complete_assertion", lambda db, **kwargs: calls.append(kwargs["user"].id))
+    options = client.post("/api/auth/reauth/passkey/options", json={}, headers=headers)
+    assert options.status_code == 200
+    mismatch = client.post("/api/auth/reauth/passkey/verify", json={"challenge_id": "wrong", "credential": {}}, headers=headers)
+    assert mismatch.status_code == 400
+    assert not calls
+    with client.session_transaction() as sess:
+        assert "last_sudo_time" not in sess
+
+    options_response = client.post("/api/auth/reauth/passkey/options", json={}, headers=headers)
+    assert options_response.status_code == 200, options_response.get_data(as_text=True)
+    result = client.post("/api/auth/reauth/passkey/verify", json={"challenge_id": "correct", "credential": {"id": "credential"}, "next": "https://evil.example/"}, headers=headers)
+    assert result.status_code == 200
+    assert result.get_json()["redirect_url"] != "https://evil.example/"
+    assert calls == [ophthalmologist_user.id]
+    with client.session_transaction() as sess:
+        assert sess["last_sudo_time"] >= int(time.time()) - 10
+    assert client.post("/api/auth/reauth/passkey/verify", json={"challenge_id": "correct", "credential": {}}, headers=headers).status_code == 400
+
+
+def test_web_reauth_rejects_failed_assertion_without_refreshing_session(app, db_session, ophthalmologist_user, monkeypatch):
+    from passkeys.service import PasskeyError
+    client = create_authenticated_client(app, ophthalmologist_user, db_session)
+    headers = {"X-CSRFToken": _csrf(client, "/account/profile")}
+    monkeypatch.setattr("passkeys.service.begin_assertion", lambda db, user: {"challenge_id": "correct", "options": {}})
+    def fail(*args, **kwargs):
+        raise PasskeyError("Invalid assertion", code="assertion_failed", status_code=401)
+    monkeypatch.setattr("passkeys.service.complete_assertion", fail)
+    client.post("/api/auth/reauth/passkey/options", json={}, headers=headers)
+    response = client.post("/api/auth/reauth/passkey/verify", json={"challenge_id": "correct", "credential": {}}, headers=headers)
+    assert response.status_code == 401
+    with client.session_transaction() as sess:
+        assert "last_sudo_time" not in sess
+
+
+def test_web_reauth_requires_csrf_and_session_challenge(app, db_session, ophthalmologist_user, monkeypatch):
+    client = create_authenticated_client(app, ophthalmologist_user, db_session)
+    other_session = create_authenticated_client(app, ophthalmologist_user, db_session)
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+    monkeypatch.setattr("passkeys.service.begin_assertion", lambda db, user: {"challenge_id": "correct", "options": {}})
+    assert client.post("/api/auth/reauth/passkey/options", json={}).status_code == 400
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", False)
+    options_response = client.post("/api/auth/reauth/passkey/options", json={})
+    assert options_response.status_code == 200, options_response.get_data(as_text=True)
+    response = other_session.post("/api/auth/reauth/passkey/verify", json={"challenge_id": "correct", "credential": {}})
+    assert response.status_code == 400
+    with other_session.session_transaction() as sess:
+        assert "last_sudo_time" not in sess
+
+
+def test_web_reauth_real_challenge_rejects_invalid_credential(app, db_session, ophthalmologist_user):
+    from fido2 import cbor
+    from passkeys.models import MobilePasskey
+
+    db_session.add(MobilePasskey(
+        user_id=ophthalmologist_user.id,
+        credential_id="dGVzdC1jcmVkZW50aWFs",
+        public_key=cbor.encode({1: 2, 3: -7, -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}),
+        sign_count=0,
+        aaguid="AAAAAAAAAAAAAAAAAAAAAA",
+    ))
+    db_session.commit()
+    client = create_authenticated_client(app, ophthalmologist_user, db_session)
+    headers = {"X-CSRFToken": _csrf(client, "/account/profile")}
+    options = client.post("/api/auth/reauth/passkey/options", json={}, headers=headers)
+    assert options.status_code == 200
+    assert options.json["options"]["userVerification"] == "required"
+    response = client.post("/api/auth/reauth/passkey/verify", json={"challenge_id": options.json["challenge_id"], "credential": {"id": "invalid"}}, headers=headers)
+    assert response.status_code == 401
+    with client.session_transaction() as sess:
+        assert "last_sudo_time" not in sess
+
+
 def test_account_register_options_need_recent_sudo_then_return_webauthn_json(app, db_session, ophthalmologist_user):
     client = create_authenticated_client(app, ophthalmologist_user, db_session)
     headers = {"X-CSRFToken": _csrf(client, "/account/profile")}

@@ -27,10 +27,10 @@
             </div>
 
             <p class="text-secondary small mb-4">
-                You are performing a sensitive operation. For your protection, please re-enter your password to proceed.
+                You are performing a sensitive operation. Confirm your identity with {% if has_passkey %}your passkey or {% endif %}your password to proceed.
             </p>
             {% if request.args.get('role_change') == '1' %}
-            <div class="alert alert-warning" role="status">No role changes have been saved. After confirming your password, select the roles and save again.</div>
+            <div class="alert alert-warning" role="status">No role changes have been saved. After confirming your identity, select the roles and save again.</div>
             {% endif %}
 
             <form method="POST" action="{{ return_url }}" id="reauth-form" class="needs-validation" novalidate>
@@ -49,6 +49,15 @@
                 </div>
 
                 <div class="d-grid gap-3">
+                    {% if has_passkey %}
+                    <button type="button" class="btn btn-outline-primary btn-lg d-none" id="reauth-passkey"
+                            data-options-url="{{ url_for('fundus_api.web_reauth_passkey_options') }}"
+                            data-verify-url="{{ url_for('fundus_api.web_reauth_passkey_verify') }}"
+                            data-next="{{ next_url }}">
+                        <i class="bi bi-fingerprint me-1" aria-hidden="true"></i>Use passkey
+                    </button>
+                    <div class="alert alert-danger small d-none mb-0" id="reauth-passkey-error" role="alert"></div>
+                    {% endif %}
                     <button type="submit" class="btn btn-primary btn-lg fw-bold py-3 shadow-sm reauth-submit">
                         <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                         Authorize and Proceed
@@ -181,6 +190,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+{% if has_passkey %}<script src="{{ url_for('static', filename='js/webauthn.js', v=config.get('ASSETS_VERSION','') ~ '-webauthn-v3') }}"></script>{% endif %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const passwordInput = document.getElementById('confirm_password');
@@ -190,6 +200,40 @@
         const submitBtn = form.querySelector('.reauth-submit');
         const spinner = submitBtn.querySelector('.spinner-border');
         const countdownEl = document.getElementById('countdown');
+        const passkeyBtn = document.getElementById('reauth-passkey');
+        const passkeyError = document.getElementById('reauth-passkey-error');
+
+        if (passkeyBtn && window.WebAuthnJSON && window.WebAuthnJSON.supported()) {
+            passkeyBtn.classList.remove('d-none');
+            passkeyBtn.addEventListener('click', async function () {
+                passkeyBtn.disabled = true;
+                passkeyError.classList.add('d-none');
+                const post = async function (url, data) {
+                    const response = await fetch(url, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+                        body: JSON.stringify(data)
+                    });
+                    const result = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(result.message || 'Passkey confirmation failed.');
+                    return result;
+                };
+                try {
+                    const ceremony = await post(passkeyBtn.dataset.optionsUrl, {});
+                    const credential = await window.WebAuthnJSON.get(ceremony.options);
+                    const result = await post(passkeyBtn.dataset.verifyUrl, {challenge_id: ceremony.challenge_id, credential: credential, next: passkeyBtn.dataset.next});
+                    window.location.assign(result.redirect_url);
+                    setTimeout(function () {
+                        form.classList.add('d-none');
+                        document.getElementById('reauth-done').classList.remove('d-none');
+                    }, 3000);
+                } catch (error) {
+                    passkeyError.textContent = error.message || 'Passkey confirmation failed.';
+                    passkeyError.classList.remove('d-none');
+                    passkeyBtn.disabled = false;
+                }
+            });
+        }
 
         // Back goes to the page that started the operation (same origin only).
         try {

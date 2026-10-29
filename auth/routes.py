@@ -1043,9 +1043,15 @@ def confirm_password():
         if len(parts) > 1:
             operation_name = parts[-1].replace('-', ' ').title()
 
+    from passkeys import service as passkey_service
+    with get_db_session() as db:
+        has_passkey = bool(passkey_service.list_passkeys(db, user_id=int(current_user.id)))
+
     return render_template(
         "admin/reauth_confirm.html",
         operation_name=operation_name,
         return_url=url_for('auth.confirm_password', next=next_url),
+        next_url=next_url,
+        has_passkey=has_passkey,
         current_user=current_user
     )

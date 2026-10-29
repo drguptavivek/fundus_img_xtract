@@ -233,6 +233,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Upload Metadata Field Definitions API](docs/API/upload-metadata/README.md) - Standalone metadata field masters reusable across upload workflows
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
 - [Admin User Impersonation API](docs/API/admin/user-impersonation.md) - Audited, CSRF-protected temporary user sessions for system administrators
+- [Web Passkey Reauthentication API](docs/API/web-reauthentication/README.md) - Session-bound passkey confirmation for sensitive web actions
 - [MadhuNetrAI DR-DME Encounter APIs](docs/API/madhunetra-dr-dme/README.md) - Encrypted provider configuration, project controls, eligible EncounterSet candidates, and encounter-scoped manual jobs
 - [WAI DR-DME AI Model User Guide](docs/user-guide/wai-dr-dme-model-management.md) - Admin endpoint/token configuration, project enablement, manual execution, rotation, and troubleshooting
 - [Consolidated Grading Workbench Module Plan](docs/15-DEVELOPMENT/grading_workbench_consolidation_plan.md) - Plan to fold ordinary and EncounterSet package grading into one session, lease, annotation, submission, history, and next-work module

@@ -159,6 +159,10 @@ that exact scope.
 
 Session-authenticated mutations require CSRF. HTMX uses the shared JSON API form
 handler. Validation failures return `400`; an out-of-scope actor receives `403`.
+Changes involving `pii_exporter` require recent password confirmation. An HTMX
+request without it receives `HX-Redirect` to the confirmation page; no role
+changes are saved, and the user must retry the change after confirming. Other
+requests receive a redirect to password confirmation.
 
 ## Remove one grant
 

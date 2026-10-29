@@ -1,6 +1,7 @@
 import time
 
 from models import Project, Role, User
+from data_authorization.models import ProjectRoleGrant
 from project_configuration.models import ProjectLabUnit
 
 
@@ -149,6 +150,17 @@ def test_pii_grant_and_revoke_require_recent_reauthentication(
         stale = client.post(f"/api/projects/{project.id}/role-grants", json=payload)
         assert stale.status_code == 302
         assert "/confirm-password" in stale.headers["Location"]
+
+        htmx_stale = client.post(
+            f"/api/projects/{project.id}/role-grants",
+            data={"user_id": str(target.id), "scope_key": "project", "role_names": "pii_exporter"},
+            headers={"HX-Request": "true", "Referer": f"http://localhost/admin/upload-projects?project_id={project.id}"},
+        )
+        assert htmx_stale.status_code == 200
+        assert htmx_stale.get_json()["success"] is False
+        assert "/confirm-password" in htmx_stale.headers["HX-Redirect"]
+        assert "upload-projects" in htmx_stale.headers["HX-Redirect"]
+        assert db_session.query(ProjectRoleGrant).filter_by(project_id=project.id, user_id=target.id).count() == 0
 
         with client.session_transaction() as session:
             session["last_sudo_time"] = int(time.time())

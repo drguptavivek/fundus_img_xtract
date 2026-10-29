@@ -30,6 +30,8 @@ The masked export requires the `data_exporter` or `pii_exporter` project role (o
 
 Both endpoints are `GET` downloads and do not require a CSRF token. Responses use `Cache-Control: no-store`.
 
+An authorization failure returns HTTP 403 with a JSON `error` explaining the required export role or lab access. For a lab-scoped project grant, supply `lab_unit_id` for the permitted lab. Identifier-bearing exports without a project require administrator access.
+
 ## Workbook contract
 
 The workbook contains one `EncounterSet EMR Data` sheet and one row per matching EncounterSet, ordered by capture date and encounter ID. It includes:

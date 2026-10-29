@@ -29,6 +29,9 @@
             <p class="text-secondary small mb-4">
                 You are performing a sensitive operation. For your protection, please re-enter your password to proceed.
             </p>
+            {% if request.args.get('role_change') == '1' %}
+            <div class="alert alert-warning" role="status">No role changes have been saved. After confirming your password, select the roles and save again.</div>
+            {% endif %}
 
             <form method="POST" action="{{ return_url }}" id="reauth-form" class="needs-validation" novalidate>
                 {{ csrf_field() }}

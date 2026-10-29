@@ -12,6 +12,8 @@ Creates a parent background job that scans every set-based encounter in the proj
 
 The caller must have the `data_manager` role through a project-wide active grant for the requested project. Lab-only grants and access to another project are rejected. Browser requests require the normal `X-CSRFToken` header.
 
+The parent job is `processing` while it scans and dispatches, `done` when dispatch finishes, and `error` when the dispatcher encounters an exception. A `done` parent indicates dispatch completed; the individual inference jobs can still be queued or running.
+
 Success (`202`):
 
 ```json

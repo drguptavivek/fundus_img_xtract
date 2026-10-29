@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from flask import jsonify, request
+from flask import flash, jsonify, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
@@ -19,6 +19,7 @@ from data_authorization.service import (
 from db_transaction_manager import transaction_scope
 from data_authorization.models import ProjectRoleGrant
 from models import Role
+from utils.security_middleware import is_safe_url
 
 from . import api_bp
 
@@ -105,6 +106,19 @@ def _grant_is_pii(db, *, project_id: int, grant_id: int) -> bool:
     ).first() is not None
 
 
+def _pii_reauthentication_response(project_id: int):
+    response = require_recent_reauthentication()
+    if response is None or request.headers.get("HX-Request", "").lower() != "true":
+        return response
+    return_url = request.referrer
+    if not return_url or not is_safe_url(return_url):
+        return_url = url_for("admin.upload_projects_admin", project_id=project_id)
+    flash("Confirm your password, then retry your role change. No changes have been saved yet.", "warning")
+    result = jsonify({"success": False, "error": "Password confirmation is required; retry the role change afterward."})
+    result.headers["HX-Redirect"] = url_for("auth.confirm_password", next=return_url, role_change="1")
+    return result
+
+
 @api_bp.route("/projects/<int:project_id>/role-grants", methods=["GET", "POST", "PUT"])
 @login_required
 def project_role_grants(project_id: int):
@@ -136,7 +150,7 @@ def project_role_grants(project_id: int):
                         ),
                     )
                     if touches_pii:
-                        reauth_response = require_recent_reauthentication()
+                        reauth_response = _pii_reauthentication_response(project_id)
                         if reauth_response is not None:
                             return reauth_response
                     updated = replace_project_role_grants(
@@ -153,7 +167,7 @@ def project_role_grants(project_id: int):
                 else:
                     grant_input = _grant_input(project_id)
                     if grant_input.role_name == "pii_exporter":
-                        reauth_response = require_recent_reauthentication()
+                        reauth_response = _pii_reauthentication_response(project_id)
                         if reauth_response is not None:
                             return reauth_response
                     updated = upsert_project_role_grant(
@@ -190,7 +204,7 @@ def remove_project_role_grant(project_id: int, grant_id: int):
     try:
         with transaction_scope() as db:
             if _grant_is_pii(db, project_id=project_id, grant_id=grant_id):
-                reauth_response = require_recent_reauthentication()
+                reauth_response = _pii_reauthentication_response(project_id)
                 if reauth_response is not None:
                     return reauth_response
             removed = deactivate_project_role_grant(

@@ -31,15 +31,21 @@ def run_project_wai_backfill_task(
     user_id: int | None = None,
     username: str | None = None,
     remote_addr: str | None = None,
+    hospital_id: int | None = None,
 ) -> None:
     """Dispatch every configured, still-eligible WAI workflow for a project."""
-    from remote_inference.encounter_service import enqueue_automatic_encounters
-    from remote_inference.project_backfill_service import ITEM_KEY, project_encounter_ids
-    from services.encounter_set_ai_inference import enqueue_wadhwani_for_encounter_ids
+    from remote_inference.project_backfill_service import ITEM_KEY
 
-    db_set_job_status(job_token, "processing")
-    db_set_item_state(job_token, ITEM_KEY, "processing", json.dumps({"message": "Scanning project EncounterSets."}))
+    # The common task dispatcher includes hospital_id for all tasks. This job
+    # is project-wide; the value must not narrow its authorized project scope.
+    _ = hospital_id
     try:
+        from remote_inference.encounter_service import enqueue_automatic_encounters
+        from remote_inference.project_backfill_service import project_encounter_ids
+        from services.encounter_set_ai_inference import enqueue_wadhwani_for_encounter_ids
+
+        db_set_job_status(job_token, "processing")
+        db_set_item_state(job_token, ITEM_KEY, "processing", json.dumps({"message": "Scanning project EncounterSets."}))
         encounter_ids = project_encounter_ids(project_id)
         dr_result = {"madhunetra_encounters_queued": 0, "madhunetra_job_tokens": []}
         glaucoma_result = {"wadhwani_tasks_queued": 0, "wadhwani_job_tokens": []}

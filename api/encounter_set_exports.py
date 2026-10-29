@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from flask import current_app, jsonify, request, send_file
 from flask_login import current_user, login_required
 from auth.decorators import reauth_required
+from authz.exceptions import AuthorizationDenied
 
 from db_transaction_manager import get_db_session
 from encounter_sets.export_service import (
@@ -26,6 +27,21 @@ def _optional_positive_int(name: str) -> int | None:
     if not raw.isdigit() or int(raw) < 1:
         raise EncounterSetExportValidationError(f"{name} must be a positive integer")
     return int(raw)
+
+
+def _export_denied(exc: AuthorizationDenied, *, pii: bool):
+    if exc.reason == "classical_pii_export_requires_admin":
+        message = "Identifier-bearing exports without a project require an administrator."
+    elif exc.reason == "export_lab_unit_unauthorized":
+        message = "You do not have export access to the selected lab unit. Ask an administrator to review your access."
+    else:
+        roles = "pii_exporter" if pii else "data_exporter or pii_exporter"
+        message = (
+            f"You need the {roles} role for this project and lab scope, or administrator access. "
+            "Ask an administrator to review your access. If your export role is limited to a lab unit, "
+            "include its lab_unit_id in the request."
+        )
+    return jsonify({"error": message}), 403
 
 
 @api_bp.route("/encounter-sets/export.xlsx", methods=["GET"])
@@ -54,6 +70,8 @@ def export_encounter_sets():
             )
     except EncounterSetExportValidationError as exc:
         return jsonify({"error": str(exc)}), 400
+    except AuthorizationDenied as exc:
+        return _export_denied(exc, pii=False)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     response = send_file(
@@ -92,6 +110,8 @@ def export_encounter_sets_pii():
             )
     except EncounterSetExportValidationError as exc:
         return jsonify({"error": str(exc)}), 400
+    except AuthorizationDenied as exc:
+        return _export_denied(exc, pii=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     response = send_file(
         io.BytesIO(content),

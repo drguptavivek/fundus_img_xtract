@@ -4,6 +4,29 @@
   const TERMINAL_STATUSES = new Set(['completed', 'completed_no_reports_detected', 'failed']);
   const pollers = new WeakMap();
   let projectPoller = null;
+  let bulkVerificationRunning = false;
+
+  window.addEventListener('beforeunload', function (event) {
+    if (!bulkVerificationRunning) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  function verificationToast(message, hasFailures) {
+    const container = document.getElementById('flash-toasts');
+    if (!container || !window.bootstrap || !window.bootstrap.Toast) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast text-bg-' + (hasFailures ? 'warning' : 'success') + ' border-0 shadow-sm';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = message;
+    toast.appendChild(body);
+    container.appendChild(toast);
+    toast.addEventListener('hidden.bs.toast', function () { toast.remove(); });
+    window.bootstrap.Toast.getOrCreateInstance(toast, {delay: 5000}).show();
+  }
 
   function csrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -433,6 +456,7 @@
     const button = event.target.closest('[data-date-verify-all]');
     if (!button) return;
     event.preventDefault();
+    if (bulkVerificationRunning) return;
     if (!window.confirm(button.dataset.confirm || 'Verify all EncounterSets on this date?')) return;
     const status = document.querySelector('[data-date-verify-all-status]');
     const rows = JSON.parse(button.dataset.rows || '[]');
@@ -458,6 +482,7 @@
         const payload = await response.json().catch(function () { return {}; });
         if (response.status === 429 && retry < 3) {
           const retryAfterSeconds = Number(response.headers.get('Retry-After') || 0);
+          if (status) status.textContent = 'Rate limit reached. Waiting before retrying; keep this page open…';
           await wait(Math.max(60000, retryAfterSeconds * 1000));
           continue;
         }
@@ -468,13 +493,20 @@
         return;
       }
     };
-    button.disabled = true;
+    bulkVerificationRunning = true;
+    document.querySelectorAll('[data-date-verify-all]').forEach(function (item) { item.disabled = true; });
+    if (status) {
+      status.className = 'small text-primary';
+      status.textContent = 'Starting verification of ' + rows.length + ' EncounterSets. Keep this page open.';
+    }
     let verified = 0;
     const failures = [];
+    let dateVerified = 0;
+    let dateFailed = 0;
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
       const row = rows[rowIndex];
       try {
-        if (status) status.textContent = 'Reviewing EncounterSet ' + (rowIndex + 1) + '/' + rows.length + '…';
+        if (status) status.textContent = 'Date ' + row.capture_date + ': processing EncounterSet ' + (rowIndex + 1) + '/' + rows.length + ' (' + verified + ' verified, ' + failures.length + ' need attention). Keep this page open.';
         for (const imageUuid of row.image_uuids) {
           await post(button.dataset.markReviewedUrl.replace('__IMAGE__', imageUuid));
         }
@@ -483,16 +515,23 @@
           new URLSearchParams({after: 'stay', skip_inference: '1'}).toString()
         );
         verified += 1;
+        dateVerified += 1;
       } catch (error) {
         failures.push('EncounterSet ' + (row.encounter_id || (rowIndex + 1)) + ': ' + (error.message || 'failed'));
+        dateFailed += 1;
+      }
+      if (rowIndex === rows.length - 1 || rows[rowIndex + 1].capture_date !== row.capture_date) {
+        verificationToast(row.capture_date + ': ' + dateVerified + ' verified' + (dateFailed ? ', ' + dateFailed + ' need attention.' : ' completed.'), dateFailed > 0);
+        dateVerified = 0;
+        dateFailed = 0;
       }
     }
+    bulkVerificationRunning = false;
     if (status) {
-      status.textContent = verified + ' verified' + (failures.length ? '; ' + failures.length + ' require attention. ' + failures[0] : '.');
+      status.textContent = verified + ' verified' + (failures.length ? '; ' + failures.length + ' require attention. ' + failures[0] : '.') + ' Reload the page to refresh the results.';
       status.className = 'small ' + (failures.length ? 'text-warning' : 'text-success');
     }
-    if (!failures.length) window.location.reload();
-    else button.disabled = false;
+    verificationToast('Verification finished: ' + verified + ' verified' + (failures.length ? ', ' + failures.length + ' need attention.' : '.'), failures.length > 0);
   });
 
   // One-click verify: mark every unreviewed image reviewed, then finalize through the same routes the Verify page uses.

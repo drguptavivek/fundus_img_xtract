@@ -922,6 +922,8 @@ def test_data_manager_browser_separates_verify_wai_and_remidio_actions(
     assert response.status_code == 200
     assert b">Verify all date<" in response.data
     assert b">Verify all month<" in response.data
+    assert b'"capture_date": "2023-10-27"' in response.data
+    assert b'data-date-verify-all-status role="status" aria-live="polite"' in response.data
     assert b">Run WAI inference<" in response.data
     assert b">Fetch missing Remidio<" in response.data
     assert b'id="fetchMissingRemidioModal"' in response.data

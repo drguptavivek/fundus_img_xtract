@@ -91,8 +91,11 @@ logs: ## Print last 200 log lines for all services. Override with TAIL=100.
 	$(COMPOSE) logs --tail=$(TAIL)
 
 .PHONY: logs-tail
-logs-tail: ## Follow last 200 log lines for all services. Override with TAIL=100.
-	$(COMPOSE) logs --tail=$(TAIL) -f
+logs-tail: ## Follow container output and web HTTP/rate-limit logs. Override with TAIL=100.
+	@trap 'kill $$logs_pid $$files_pid 2>/dev/null || true' EXIT INT TERM; \
+	  $(COMPOSE) logs --tail=$(TAIL) -f & logs_pid=$$!; \
+	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
+	  wait
 
 .PHONY: logs-main
 logs-main: ## Print last 200 log lines for web and Celery services.
@@ -103,12 +106,16 @@ logs-main-tail: ## Follow last 200 log lines for web and Celery services.
 	$(COMPOSE) logs --tail=$(TAIL) -f $(SERVICES)
 
 .PHONY: logs-web
-logs-web: ## Print last 200 web service log lines.
+logs-web: ## Print web container output and HTTP/rate-limit file logs.
 	$(COMPOSE) logs --tail=$(TAIL) web
+	$(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" "$$@"' sh $(TAIL)
 
 .PHONY: logs-web-tail
-logs-web-tail: ## Follow last 200 web service log lines.
-	$(COMPOSE) logs --tail=$(TAIL) -f web
+logs-web-tail: ## Follow web container output and HTTP/rate-limit file logs.
+	@trap 'kill $$logs_pid $$files_pid 2>/dev/null || true' EXIT INT TERM; \
+	  $(COMPOSE) logs --tail=$(TAIL) -f web & logs_pid=$$!; \
+	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
+	  wait
 
 .PHONY: logs-celery logs-workers
 logs-celery: ## Print last 200 Celery worker and beat log lines.

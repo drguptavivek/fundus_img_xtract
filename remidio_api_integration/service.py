@@ -344,6 +344,7 @@ def encounter_set_bulk_verification_rows(
         {
             "encounter_id": encounter.id,
             "encounter_uuid": encounter.uuid,
+            "capture_date": encounter.capture_date_dt.isoformat(),
             "image_uuids": [
                 image.uuid
                 for image in sorted(

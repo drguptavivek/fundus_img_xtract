@@ -646,6 +646,8 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(verify_remedio_dr_bp)
     app.register_blueprint(verify_remedio_nodr_bp)
     app.register_blueprint(verify_encounter_set_bp)
+    from verify_encounter_set.rate_limits import configure_review_rate_limit
+    configure_review_rate_limit(app)
     app.register_blueprint(media_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(audit_bp)

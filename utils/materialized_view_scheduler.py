@@ -91,7 +91,8 @@ def _load_per_disease_views(app):
 def _refresh_single_view(app, view_name):
     with app.app_context():
         with transaction_scope() as db:
-            db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
+            concurrent = " CONCURRENTLY" if view_name.startswith("mvw_image_listing_") and view_name.endswith("_v2") else ""
+            db.execute(text(f"REFRESH MATERIALIZED VIEW{concurrent} {view_name}"))
 
 
 def refresh_ai_inference_runs_materialized_view() -> bool:

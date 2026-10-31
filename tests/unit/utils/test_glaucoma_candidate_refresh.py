@@ -60,3 +60,41 @@ def test_glaucoma_migration_upgrade_downgrade_and_reupgrade(db_session):
         # A repeated upgrade must preserve indexes and the single schedule row.
         migration.upgrade()
         assert db_session.execute(text("SELECT count(*) FROM celery_beat_schedules WHERE name=:name"), {'name': migration.SCHEDULE}).scalar() == 1
+
+
+def test_all_configured_disease_mvs_rebuild_and_schedule_roundtrip(db_session):
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from utils.mvw_image_listing_v2 import _mv_name
+
+    path = Path('migrations/versions/f9a2b3c4d5e6_optimize_all_disease_listings.py')
+    spec = importlib.util.spec_from_file_location('all_listing_migration', path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    db_session.execute(text('CREATE SCHEMA all_listing_migration_test'))
+    db_session.execute(text('SET LOCAL search_path=all_listing_migration_test, public'))
+    db_session.execute(text('CREATE TABLE diseases(id integer PRIMARY KEY,name text)'))
+    configured = [(1,'Glaucoma'),(2,'DR'),(95,'New Configured Disease')]
+    for disease_id, name in configured:
+        db_session.execute(text('INSERT INTO diseases VALUES (:id,:name)'), {'id': disease_id,'name': name})
+    operations = Operations(MigrationContext.configure(db_session.connection()))
+    with Operations.context(operations.migration_context):
+        migration.upgrade()
+        migration.upgrade()
+        for disease_id, name in configured:
+            view = _mv_name(name, disease_id)
+            definition = db_session.execute(text('SELECT pg_get_viewdef(to_regclass(:name))'), {'name': 'all_listing_migration_test.'+view}).scalar()
+            assert 'matched_images' in definition
+            assert 'NOT MATERIALIZED' in definition
+            assert db_session.execute(text("SELECT count(*) FROM pg_indexes WHERE schemaname='all_listing_migration_test' AND tablename=:view"), {'view': view}).scalar() == 26
+        assert db_session.execute(text('SELECT interval_seconds FROM celery_beat_schedules WHERE name=:name'), {'name': migration.SCHEDULE}).scalar() == 300
+        assert db_session.execute(text("SELECT count(*) FROM celery_beat_schedules WHERE name IN ('Glaucoma Image Listing Refresh (60s)','Image Listing V2 Refresh (60m)')")).scalar() == 0
+        migration.downgrade()
+        for disease_id, name in configured:
+            definition = db_session.execute(text('SELECT pg_get_viewdef(to_regclass(:name))'), {'name': 'all_listing_migration_test.'+_mv_name(name,disease_id)}).scalar()
+            assert ('matched_images' in definition) == (disease_id == 1)
+        assert db_session.execute(text("SELECT interval_seconds FROM celery_beat_schedules WHERE name='Image Listing V2 Refresh (60m)'")).scalar() == 3600
+        migration.upgrade()
+        assert db_session.execute(text('SELECT count(*) FROM celery_beat_schedules WHERE name=:name'), {'name': migration.SCHEDULE}).scalar() == 1

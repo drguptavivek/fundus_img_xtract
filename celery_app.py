@@ -157,10 +157,10 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute=0, hour="2"),
         }
 
-        # Image listing v2 MVs - refresh hourly (a refresh takes ~5 min of DB CPU)
-        beat_schedule["mvw-image-listing-v2-refresh-60min"] = {
+        # Configured disease listings: optimized query, shared five-minute schedule.
+        beat_schedule["Image Listing V2 Refresh (5m)"] = {
             "task": "celery_tasks.tasks.mv_tasks.refresh_image_listing_v2_task",
-            "schedule": crontab(minute=15, hour="*"),
+            "schedule": 300.0,
         }
 
         beat_schedule["remidio-api-prospective-sync-hourly"] = {

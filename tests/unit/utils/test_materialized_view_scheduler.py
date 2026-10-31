@@ -78,7 +78,7 @@ def test_refresh_materialized_view_uses_isolated_transactions(monkeypatch):
         "REFRESH MATERIALIZED VIEW mvw_encounter_pivot",
         "REFRESH MATERIALIZED VIEW mvw_image_listing_all",
         "REFRESH MATERIALIZED VIEW ai_inference_runs_mv",
-        "REFRESH MATERIALIZED VIEW mvw_image_listing_glaucoma_1_v2",
-        "REFRESH MATERIALIZED VIEW mvw_image_listing_dr_2_v2",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY mvw_image_listing_glaucoma_1_v2",
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY mvw_image_listing_dr_2_v2",
     ]
     assert len(scope_entries) == 12

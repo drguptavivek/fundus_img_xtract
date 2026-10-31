@@ -559,35 +559,48 @@ metadata, plus retries, reconciliation and a race-safe bootstrap. Until then thi
 table is manually refreshed and may become stale; it is not used by application
 readers. Follow-up: `fundus_img_xtract-kqdn`.
 
-### Automatic application glaucoma listing refresh (every minute)
+### Configured disease listings: one-time optimized rebuild and five-minute refresh
 
-Migration `e8f1a2b3c4d5` rebuilds `mvw_image_listing_glaucoma_1_v2` with the
-validated equality joins and inlined base/task CTEs. It builds and indexes a
-replacement before swapping names transactionally, preserving existing index
-names, owner, grants and comment. Dependencies are never dropped with CASCADE;
-a dependency or lock failure rolls back the migration. Downgrade restores the
-original OR join and removes the new schedule. A downgrade may take several
-minutes on production-sized data. The migration is intentionally scoped to
-Glaucoma disease ID 1; other disease MVs retain their existing definitions.
+Migration `e8f1a2b3c4d5` first optimized the application glaucoma listing.
+Migration `f9a2b3c4d5e6` extends this to every configured disease: it reads IDs and
+names from `diseases`, derives each existing naming convention with `_mv_name`,
+and regenerates the per-disease listing SQL using disjoint equality joins and
+inlined base/task CTEs. This includes DR and encounter-status diseases, without
+hard-coding a disease list. New disease views continue to be created by the daily
+ensure task with the optimized builder. Ordinary refreshes never replace stored
+view definitions; pre-existing views require this one-time migration.
 
-The migration installs `Glaucoma Image Listing Refresh (60s)` in the existing
-DB-backed Beat schedule management, on the maintenance queue. Celery task
-`celery_tasks.tasks.mv_tasks.refresh_glaucoma_listing_task` calls the internal
-`analytics.image_listing_projection` service to perform a complete concurrent
-refresh. A transaction advisory lock skips overlapping copies of this task;
-20-second SQL timeout and bounded retries surface errors in Celery logs.
-The general worker must load the task before the migration enables scheduling.
-Beat normally discovers the schedule within 60 seconds without restarting web.
+Each replacement is built and indexed before a transactional name swap, retaining
+existing index names, owner, grants and comment. No CASCADE is used; dependency
+or lock failures roll the migration back. Downgrade restores original OR joins
+for other diseases while retaining the preceding glaucoma optimization, and
+restores the preceding hourly/all-disease and minute/glaucoma schedules. A
+production-size downgrade may take several minutes.
 
-Normal freshness is one minute plus queue and refresh time, not a guaranteed
-latency bound. The complete query re-evaluates new records, verification, task
-states, human/AI grades, metadata changes and deletions. No source triggers or
-incremental invalidation queue are required. Disable the schedule in existing
-schedule management to stop periodic refresh. The prototype candidate MVs and
-incremental table remain separate experiments and are not application readers.
+The shared DB-backed Beat entry `Image Listing V2 Refresh (5m)` runs
+`celery_tasks.tasks.mv_tasks.refresh_image_listing_v2_task` on the maintenance
+queue every 300 seconds. It replaces the hourly all-disease and dedicated minute
+glaucoma schedules. The code fallback uses the same entry name to avoid a second
+schedule when DB entries are merged. Daily missing-view creation stays enabled.
+The separate glaucoma task remains available for rollback compatibility.
 
-Live rollout on 2026-10-31 reached Alembic head `e8f1a2b3c4d5`. The regenerated
-application MV retained 26 indexes and 22,351 rows, with zero row differences
-against the freshly refreshed fast candidate. Beat dispatched the new task at
-08:31:42 UTC; the first worker run succeeded in 2.16 seconds including task setup.
-Only the idle general worker was restarted; web continued serving requests.
+Existing forced paths remain functional: review submissions enqueue a targeted
+refresh after commit with the existing 30-second debounce; general/manual refresh
+now uses CONCURRENTLY for every per-disease listing MV. All paths target the same
+regenerated application views. General pivots and the all-image MV retain their
+existing refresh behavior. Normal periodic freshness is five minutes plus queue
+and refresh time; explicit refreshes can update sooner. Web need not restart for
+the stored MV definition swap. Worker/Beat code reload is required for the changed
+fallback and general refresh behavior.
+
+The earlier prototype candidate MVs and incremental table remain separate
+experiments and are not application readers. Their cleanup is tracked separately.
+
+Live rollout on 2026-10-31 reached head `f9a2b3c4d5e6`: all 19 configured
+per-disease MVs have optimized stored definitions. Before/after counts and full
+row-content fingerprints were identical for every view. Existing index
+sets were retained. A forced all-disease refresh through the existing Celery task
+completed in 3.73 seconds: 19 refreshed, zero errors. General worker and Beat
+were reloaded; web remained healthy without restart. Thirteen focused tests
+passed, including configured-name creation, migration round trips, scheduling,
+manual refresh selection, OR-join row multiplicity, and review debounce retries.

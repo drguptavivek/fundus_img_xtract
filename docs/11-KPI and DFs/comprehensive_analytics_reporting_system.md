@@ -526,3 +526,35 @@ of ordinary refresh overhead. No production session defaults or application
 view definitions were changed in this experiment. Sub-second indexed refresh
 has not been demonstrated; an incremental projection is a separate design option.
 Both candidates remain for evaluation and should be cleaned up after promotion.
+
+### Incremental glaucoma projection experiment
+
+An isolated table, `glaucoma_listing_incremental_candidate`, retains all 26 read
+indexes and is maintained by `refresh_glaucoma_listing_incremental_candidate(integer[])`.
+The function accepts at most 1,000 non-null affected task IDs. It serializes writers
+with a transaction-scoped advisory lock and atomically deletes/recomputes only those
+tasks from the live source query. Missing or moved tasks are removed; duplicate IDs
+do not multiply rows. A guarded predicate rewrite fails before deleting anything
+if the source view definition changes unexpectedly. The function uses invoker
+permissions and parameterized task IDs. This is an internal SQL prototype, with
+no application API, scheduler, source triggers, or reader changes.
+
+Setup: `scripts/analytics/glaucoma_incremental_candidate.sql`; reproducible timing
+and full row comparison: `scripts/analytics/benchmark_glaucoma_incremental_candidate.sql`.
+Run through psql with `ON_ERROR_STOP=1`. Setup initially copies the full candidate;
+it must not be treated as a safe online bootstrap with concurrent source writes.
+Regression tests use a private schema on test-db and exercise updates, deletions,
+disease moves, duplicate IDs, empty batches, and refusing unexpected definitions.
+
+Observed update times on 2026-10-31: 1 task 87.115ms, 10 tasks 45.527ms,
+100 tasks 55.108ms, 1,000 tasks 141.338ms. Full bidirectional `EXCEPT ALL` found
+zero differences against the freshly refreshed full candidate across 22,351 rows.
+These are individual warm-system samples, not a latency guarantee. The initial
+full copy and full reconciliation still require whole-dataset work.
+
+The caller must supply every affected task ID. Production use requires transactional
+invalidation covering task/grade/consensus changes and deletes, disease reassignment,
+image/encounter/verification changes and shared hospital/lab/camera/area/AI model
+metadata, plus retries, reconciliation and a race-safe bootstrap. Until then this
+table is manually refreshed and may become stale; it is not used by application
+readers. Follow-up: `fundus_img_xtract-kqdn`.

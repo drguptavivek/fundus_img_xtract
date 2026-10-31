@@ -401,7 +401,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Services Task Creation](docs/03-Tasks/taskCreationServices.md) - Task creation services and related functionality
 
 ### Analytics & Reporting System
-- [Comprehensive Analytics & Reporting System](docs/11-KPI and DFs/comprehensive_analytics_reporting_system.md) - Complete materialized views and analytics platform documentation, including per-disease listing join optimization and candidate benchmarks
+- [Comprehensive Analytics & Reporting System](docs/11-KPI and DFs/comprehensive_analytics_reporting_system.md) - Complete materialized views and analytics platform documentation, including glaucoma listing optimization, migration, one-minute Celery refresh, and candidate benchmarks
 - [AI Inference Runs Materialized View](docs/06-Analytics/AI_Inference_Runs_Materialized_View.md) - Normalized AI API inference run analytics for WAI statistics
 - [Encounter Pivot View User Guide](docs/11-KPI and DFs/06-Encounter-Pivot-View-User-Guide.md) - Complete guide for using the encounter pivot materialized view for research analytics and operational reporting
 - [Analytics User Guide](docs/user-guide/viewing-analytics.md) - User interface for viewing analytics and reports

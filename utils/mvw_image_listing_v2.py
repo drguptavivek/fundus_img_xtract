@@ -163,7 +163,7 @@ def _build_mv_sql(
         task_join = "FROM matched_images b JOIN disease_tasks dt ON dt.task_id = b.matched_task_id"
     return f"""
     CREATE MATERIALIZED VIEW {mv_name} AS
-    WITH base_images AS (
+    WITH base_images AS {"NOT MATERIALIZED" if optimize_task_join else ""} (
         SELECT
             diu.uuid AS image_uuid,
             diu.uuid AS direct_image_uuid,
@@ -269,7 +269,7 @@ def _build_mv_sql(
         WHERE pe.is_set_based = TRUE
         {encounter_set_image_select}
     ),
-    disease_tasks AS (
+    disease_tasks AS {"NOT MATERIALIZED" if optimize_task_join else ""} (
         SELECT
             t.id AS task_id,
             t.uuid AS task_uuid,

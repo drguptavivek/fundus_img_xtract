@@ -558,3 +558,36 @@ image/encounter/verification changes and shared hospital/lab/camera/area/AI mode
 metadata, plus retries, reconciliation and a race-safe bootstrap. Until then this
 table is manually refreshed and may become stale; it is not used by application
 readers. Follow-up: `fundus_img_xtract-kqdn`.
+
+### Automatic application glaucoma listing refresh (every minute)
+
+Migration `e8f1a2b3c4d5` rebuilds `mvw_image_listing_glaucoma_1_v2` with the
+validated equality joins and inlined base/task CTEs. It builds and indexes a
+replacement before swapping names transactionally, preserving existing index
+names, owner, grants and comment. Dependencies are never dropped with CASCADE;
+a dependency or lock failure rolls back the migration. Downgrade restores the
+original OR join and removes the new schedule. A downgrade may take several
+minutes on production-sized data. The migration is intentionally scoped to
+Glaucoma disease ID 1; other disease MVs retain their existing definitions.
+
+The migration installs `Glaucoma Image Listing Refresh (60s)` in the existing
+DB-backed Beat schedule management, on the maintenance queue. Celery task
+`celery_tasks.tasks.mv_tasks.refresh_glaucoma_listing_task` calls the internal
+`analytics.image_listing_projection` service to perform a complete concurrent
+refresh. A transaction advisory lock skips overlapping copies of this task;
+20-second SQL timeout and bounded retries surface errors in Celery logs.
+The general worker must load the task before the migration enables scheduling.
+Beat normally discovers the schedule within 60 seconds without restarting web.
+
+Normal freshness is one minute plus queue and refresh time, not a guaranteed
+latency bound. The complete query re-evaluates new records, verification, task
+states, human/AI grades, metadata changes and deletions. No source triggers or
+incremental invalidation queue are required. Disable the schedule in existing
+schedule management to stop periodic refresh. The prototype candidate MVs and
+incremental table remain separate experiments and are not application readers.
+
+Live rollout on 2026-10-31 reached Alembic head `e8f1a2b3c4d5`. The regenerated
+application MV retained 26 indexes and 22,351 rows, with zero row differences
+against the freshly refreshed fast candidate. Beat dispatched the new task at
+08:31:42 UTC; the first worker run succeeded in 2.16 seconds including task setup.
+Only the idle general worker was restarted; web continued serving requests.

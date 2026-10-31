@@ -139,3 +139,25 @@ def ensure_image_listing_v2_task(self, schedule_time: str | None = None) -> dict
     )
     _LOGGER.info("mvw_image_listing_v2 ensure results: %s", sanitize_log_value(results))
     return results
+
+
+@celery_app.task(
+    name="celery_tasks.tasks.mv_tasks.refresh_glaucoma_listing_task",
+    bind=True,
+    acks_late=True,
+    max_retries=3,
+    soft_time_limit=25,
+    time_limit=30,
+)
+def refresh_glaucoma_listing_task(self) -> dict:
+    """Refresh the complete optimized application glaucoma listing."""
+    from dataclasses import asdict
+    from analytics.image_listing_projection.service import refresh_glaucoma_listing
+
+    try:
+        result = asdict(refresh_glaucoma_listing())
+    except Exception as exc:
+        _LOGGER.exception("Glaucoma listing refresh failed")
+        raise self.retry(exc=exc, countdown=5)
+    _LOGGER.info("Glaucoma listing refresh: %s", sanitize_log_value(result))
+    return result

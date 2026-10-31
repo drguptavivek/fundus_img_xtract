@@ -513,3 +513,16 @@ were taken at different times and do not isolate lock waits or cache effects.
 The existing production view has not been replaced. Candidate promotion and
 cleanup require an explicit follow-up deployment; changing the builder alone
 only affects newly created views.
+
+Further candidate-only benchmarks retained all 26 equivalent indexes. Concurrent
+refresh of the first candidate took 1.412s and 1.352s (1.236s with session-local
+`jit=off`, `work_mem=64MB`). A second isolated view,
+`mvw_image_listing_glaucoma_1_v2_fast_candidate`, inlines the base-image and
+disease-task CTEs with `NOT MATERIALIZED`: initial build 0.769s, indexed concurrent
+refresh 1.316s and 1.239s, or 1.132s with the same session-local tuning. A full
+bidirectional `EXCEPT ALL` comparison with the first candidate found zero differences.
+The full-JSON GIN index alone took approximately 0.95s to build, explaining much
+of ordinary refresh overhead. No production session defaults or application
+view definitions were changed in this experiment. Sub-second indexed refresh
+has not been demonstrated; an incremental projection is a separate design option.
+Both candidates remain for evaluation and should be cleaned up after promotion.

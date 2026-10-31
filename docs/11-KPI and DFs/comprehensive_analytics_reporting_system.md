@@ -496,3 +496,20 @@ CREATE INDEX idx_mvw_grading_data_features ON mvw_grading_data_all USING GIN((re
 - Performance profilers
 - Resource usage monitors
 - Error tracking systems
+### Per-disease listing join optimization (2026-10-31)
+
+The listing SQL builder uses disjoint source-specific equality joins instead of
+one four-way OR join. Later branches exclude earlier matching predicates with
+`IS NOT TRUE`, preserving NULL handling, overlapping foreign keys, and row
+multiplicity. `optimize_task_join=False` retains the original query for comparison.
+Existing materialized views retain their stored definition until explicitly rebuilt.
+
+A separate production candidate, `mvw_image_listing_glaucoma_1_v2_candidate`,
+was created for evaluation; the scheduler does not select this candidate name.
+It matched all 22,351 existing rows in both directions using `EXCEPT ALL`.
+With the same 26 indexes, two candidate refreshes took 2.264 and 2.193 seconds,
+compared with the earlier recorded 177.509-second refresh. These measurements
+were taken at different times and do not isolate lock waits or cache effects.
+The existing production view has not been replaced. Candidate promotion and
+cleanup require an explicit follow-up deployment; changing the builder alone
+only affects newly created views.

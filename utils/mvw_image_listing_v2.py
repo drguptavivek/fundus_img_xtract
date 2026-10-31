@@ -79,6 +79,7 @@ def _build_mv_sql(
     *,
     include_encounter_set_images: bool = False,
     prefer_updated_role_grade: bool = True,
+    optimize_task_join: bool = True,
 ) -> str:
     disease_name_literal = _escape_literal(disease_name)
     role_grade_order = (
@@ -138,18 +139,28 @@ def _build_mv_sql(
     encounter_set_image_result_column = (
         "b.encounter_set_image_id," if include_encounter_set_images else ""
     )
-    encounter_set_image_join = ""
-    encounter_join = (
-        "(b.patient_encounter_id IS NOT NULL AND dt.patient_encounter_id = b.patient_encounter_id)"
-    )
+    encounter_join = "(b.patient_encounter_id IS NOT NULL AND dt.patient_encounter_id = b.patient_encounter_id)"
     if include_encounter_set_images:
-        encounter_set_image_join = """
-        (b.encounter_set_image_id IS NOT NULL AND dt.encounter_set_image_id = b.encounter_set_image_id) OR
-        """
-        encounter_join = (
-            "(b.encounter_set_image_id IS NULL AND b.patient_encounter_id IS NOT NULL "
-            "AND dt.patient_encounter_id = b.patient_encounter_id)"
-        )
+        encounter_join = "(b.encounter_set_image_id IS NULL AND b.patient_encounter_id IS NOT NULL AND dt.patient_encounter_id = b.patient_encounter_id)"
+    predicates = [
+        "(b.direct_image_upload_id IS NOT NULL AND dt.direct_image_upload_id = b.direct_image_upload_id)",
+        "(b.encounter_file_id IS NOT NULL AND dt.encounter_file_id = b.encounter_file_id)",
+    ]
+    if include_encounter_set_images:
+        predicates.append("(b.encounter_set_image_id IS NOT NULL AND dt.encounter_set_image_id = b.encounter_set_image_id)")
+    predicates.append(encounter_join)
+    matched_cte = ""
+    task_join = "FROM base_images b JOIN disease_tasks dt ON (" + " OR ".join(predicates) + ")"
+    if optimize_task_join:
+        # Disjoint branches preserve OR semantics, including overlapping foreign
+        # keys. IS NOT TRUE is essential for nullable source IDs.
+        branches = []
+        for index, predicate in enumerate(predicates):
+            exclusions = "".join(f" AND ({prior}) IS NOT TRUE" for prior in predicates[:index])
+            branches.append("SELECT b.*, dt.task_id AS matched_task_id FROM base_images b "
+                            f"JOIN disease_tasks dt ON {predicate}{exclusions}")
+        matched_cte = ", matched_images AS (" + " UNION ALL ".join(branches) + ")"
+        task_join = "FROM matched_images b JOIN disease_tasks dt ON dt.task_id = b.matched_task_id"
     return f"""
     CREATE MATERIALIZED VIEW {mv_name} AS
     WITH base_images AS (
@@ -360,6 +371,7 @@ def _build_mv_sql(
         JOIN ai_models m ON a.ai_model_id = m.id
         GROUP BY a.task_id
     )
+    {matched_cte}
     SELECT
         b.image_uuid,
         b.direct_image_uuid,
@@ -431,13 +443,7 @@ def _build_mv_sql(
             WHEN rg.resident_grade_name = rg.resident2_grade_name THEN 'match'
             ELSE 'mismatch'
         END AS resident_vs_resident2
-    FROM base_images b
-    JOIN disease_tasks dt ON (
-        (b.direct_image_upload_id IS NOT NULL AND dt.direct_image_upload_id = b.direct_image_upload_id) OR
-        (b.encounter_file_id IS NOT NULL AND dt.encounter_file_id = b.encounter_file_id) OR
-        {encounter_set_image_join}
-        {encounter_join}
-    )
+    {task_join}
     LEFT JOIN consensus c ON dt.task_id = c.task_id
     LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
     LEFT JOIN role_grade_pivot rg ON dt.task_id = rg.task_id

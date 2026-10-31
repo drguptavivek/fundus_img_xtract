@@ -52,3 +52,38 @@ def test_image_listing_views_have_unique_task_key_and_concurrent_refresh():
         "ON mvw_image_listing_test_1_v2(task_id);"
     )
     assert "REFRESH MATERIALIZED VIEW CONCURRENTLY {mv_name}" in module_source
+
+
+def test_split_task_join_preserves_nulls_overlap_and_duplicate_rows(db_session):
+    """Compare row multiplicities against OR semantics for every source kind."""
+    from sqlalchemy import text
+
+    sql = _build_mv_sql("unused", 1, "Glaucoma", include_encounter_set_images=True)
+    branches = sql.split(", matched_images AS (", 1)[1].split(")\n    SELECT", 1)[0]
+    query = """
+        WITH base_images(image_uuid, direct_image_upload_id, encounter_file_id,
+                         encounter_set_image_id, patient_encounter_id) AS (
+            VALUES ('direct',1,NULL,NULL,NULL), ('zip',NULL,2,NULL,10),
+                   ('set',NULL,NULL,NULL,10), ('physical',NULL,NULL,3,10),
+                   ('unmatched',NULL,NULL,NULL,NULL),
+                   ('duplicate',1,NULL,NULL,NULL), ('duplicate',1,NULL,NULL,NULL)
+        ), disease_tasks(task_id, direct_image_upload_id, encounter_file_id,
+                         encounter_set_image_id, patient_encounter_id) AS (
+            VALUES (1,1,NULL,NULL,NULL), (2,NULL,2,NULL,10),
+                   (3,NULL,NULL,3,10), (4,NULL,NULL,NULL,10),
+                   (5,NULL,99,NULL,10), (6,NULL,NULL,NULL,NULL)
+        ), optimized AS (
+    """ + branches + """
+        ), original AS (
+            SELECT b.*, dt.task_id AS matched_task_id
+            FROM base_images b JOIN disease_tasks dt ON
+                dt.direct_image_upload_id=b.direct_image_upload_id OR
+                dt.encounter_file_id=b.encounter_file_id OR
+                dt.encounter_set_image_id=b.encounter_set_image_id OR
+                (b.encounter_set_image_id IS NULL AND
+                 dt.patient_encounter_id=b.patient_encounter_id)
+        )
+        SELECT * FROM ((SELECT * FROM original EXCEPT ALL SELECT * FROM optimized)
+        UNION ALL (SELECT * FROM optimized EXCEPT ALL SELECT * FROM original)) differences
+    """
+    assert db_session.execute(text(query)).all() == []

@@ -15,10 +15,23 @@ route here answers `401 {"success": false, "error": {"code": "reauth_required"}}
 until the client re-authenticates (`POST /api/mobile/v1/auth/reauth` or a
 passkey assertion). The lease heartbeat does not count as activity.
 
+For bearer-only requests, invalid or expired access credentials return HTTP
+`401 {"success": false, "error": {"code": "invalid_access_token", "message":
+"Access token is invalid or expired."}}` before CSRF validation, without a login
+redirect or clearing the browser session. This also applies to the bearer-enabled
+viewer and image-metadata APIs. Cookie-authenticated requests retain CSRF checks,
+including when an Authorization header is also supplied. Responses are private
+and must not be cached. Refresh using `POST /api/mobile/v1/auth/refresh` with
+`{"refresh_token": "...", "device_id": "..."}`, then retry once with the new
+access token; invalid/revoked refresh credentials require sign-in again.
+The workbench proactively refreshes within five seconds of access-token expiry
+and retains unsaved observations in page memory while a request fails. Keep the
+page open until a save succeeds; reloading can discard unsaved changes.
+
 - All endpoints require an authenticated `resident` or `ophthalmologist`.
 - Task access is checked against the user's disease, project, role-slot, and
   lab-unit allocation.
-- Every `POST` requires the application's normal CSRF token.
+- Cookie-authenticated mutations require `X-CSRFToken` (or a form CSRF token).
 - Session reads and mutations use `Cache-Control: no-store, private`.
 - A session token is returned only when a session is acquired or resumed. Send
   it as `X-Workbench-Token`, with the integer generation in

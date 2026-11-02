@@ -123,6 +123,13 @@
     return refreshing;
   }
 
+  async function ensureFresh() {
+    const tokens = read();
+    if (tokens?.refresh_token && tokens.expires_at && Date.now() >= tokens.expires_at - 5000) {
+      await refresh();
+    }
+  }
+
   async function reauthPassword(password) {
     const payload = await postJson('/auth/reauth', { password }, { auth: true });
     write({ ...read(), access_token: payload.access_token, expires_at: Date.now() + (Number(payload.expires_in) || 900) * 1000, auth_time: payload.auth_time });
@@ -244,7 +251,7 @@
   } catch (_) {}
 
   window.GraderAuth = {
-    read, write, bearer, headers: bearer, deviceId, login, loginWithPasskey, passkeyLoginOptions, refresh, logout, reauthPassword, reauthPasskey,
+    read, write, bearer, headers: bearer, deviceId, login, loginWithPasskey, passkeyLoginOptions, refresh, ensureFresh, logout, reauthPassword, reauthPasskey,
     registerPasskey, listPasskeys, passkeysSupported, platformAuthenticatorAvailable, requireReauth, fetch: authFetch,
     ensureWorker, syncWorker, isSignedIn: () => Boolean(read()?.refresh_token),
   };

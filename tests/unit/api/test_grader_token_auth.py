@@ -3,6 +3,9 @@ access token resolves current_user on session-protected routes, and CSRF is
 skipped only for bearer-authenticated requests."""
 from __future__ import annotations
 
+import jwt
+import pytest
+
 from tests.helpers.factories import UserFactory
 from tests.unit.api.test_mobile_auth import JWT_SECRET, _seed_mobile_user
 
@@ -133,6 +136,94 @@ def test_invalid_bearer_leaves_request_anonymous(client):
 
     assert response.status_code == 302
     assert "/grader/login" in response.headers["Location"]
+
+
+@pytest.mark.parametrize("csrf_state", ["missing", "stale", "matching"])
+@pytest.mark.parametrize("action,method", [("draft", "PUT"), ("heartbeat", "POST"), ("submit", "POST")])
+def test_expired_grader_bearer_returns_401_without_clearing_session(
+    client, db_session, monkeypatch, csrf_state, action, method,
+):
+    from flask_wtf.csrf import generate_csrf
+
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    tokens = _login_web(client, user).get_json()
+    claims = jwt.decode(tokens["access_token"], JWT_SECRET, algorithms=["HS256"])
+    claims["exp"] = 1
+    expired = jwt.encode(claims, JWT_SECRET, algorithm="HS256")
+    headers = {"Authorization": f"Bearer {expired}"}
+    with client.application.test_request_context():
+        signed_csrf = generate_csrf()
+        from flask import session
+        csrf_value = session["csrf_token"]
+    with client.session_transaction() as browser_session:
+        browser_session["recovery_marker"] = "keep"
+        if csrf_state != "missing":
+            browser_session["csrf_token"] = csrf_value
+    if csrf_state != "missing":
+        headers["X-CSRFToken"] = signed_csrf if csrf_state == "matching" else "stale"
+    monkeypatch.setitem(client.application.config, "WTF_CSRF_ENABLED", True)
+
+    response = client.open(
+        f"/api/grading/workbench/sessions/missing/{action}",
+        method=method, headers=headers, json={},
+    )
+
+    assert response.status_code == 401
+    assert response.get_json()["error"]["code"] == "invalid_access_token"
+    assert "Location" not in response.headers
+    assert "no-store" in response.headers["Cache-Control"]
+    with client.session_transaction() as browser_session:
+        assert browser_session["recovery_marker"] == "keep"
+        if csrf_state != "missing":
+            assert browser_session["csrf_token"] == csrf_value
+
+    refreshed = client.post("/api/mobile/v1/auth/refresh", json={
+        "refresh_token": tokens["refresh_token"], "device_id": "browser-1",
+    })
+    assert refreshed.status_code == 200
+    # Same stale/missing CSRF state: valid bearer reaches domain validation.
+    headers["Authorization"] = f"Bearer {refreshed.get_json()['access_token']}"
+    recovered = client.open(
+        f"/api/grading/workbench/sessions/missing/{action}",
+        method=method, headers=headers, json={},
+    )
+    assert recovered.is_json
+    expected_status, expected_code = {
+        "draft": (409, "session_expired"),
+        "heartbeat": (404, "not_found"),
+        "submit": (422, "incomplete_submission"),
+    }[action]
+    assert recovered.status_code == expected_status, recovered.get_json()
+    assert recovered.get_json()["error"]["code"] == expected_code
+
+
+def test_invalid_bearer_api_returns_401_even_with_csrf_disabled(client):
+    response = client.put("/api/grading/workbench/sessions/missing/draft", json={},
+                          headers={"Authorization": "Bearer invalid"})
+    assert response.status_code == 401
+    assert response.get_json()["error"]["code"] == "invalid_access_token"
+
+
+@pytest.mark.parametrize("valid_bearer", [False, True])
+def test_cookie_authenticated_grading_keeps_csrf_with_bearer_header(
+    client, db_session, monkeypatch, valid_bearer,
+):
+    import logging
+
+    messages = []
+    monkeypatch.setattr(logging.getLogger("auth"), "error",
+                        lambda message, *args: messages.append(message % args))
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    token = _login_web(client, user).get_json()["access_token"] if valid_bearer else "invalid"
+    monkeypatch.setitem(client.application.config, "WTF_CSRF_ENABLED", True)
+    with client.session_transaction() as browser_session:
+        browser_session["_user_id"] = str(user.id)
+    response = client.put("/api/grading/workbench/sessions/missing/draft", json={},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 400
+    assert "CSRF Error - Message: The CSRF token is missing." in messages
 
 
 def test_grader_login_page_is_public(client):

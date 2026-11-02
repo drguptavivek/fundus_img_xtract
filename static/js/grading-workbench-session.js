@@ -45,8 +45,7 @@
     'Content-Type': 'application/json',
     'X-CSRFToken': csrf,
     'X-Workbench-Token': token,
-    'X-Workbench-Generation': generation,
-    ...(window.GraderAuth ? window.GraderAuth.headers() : {})
+    'X-Workbench-Generation': generation
   };
 
   async function loadPanelMedia(panel) {
@@ -498,6 +497,7 @@
     let response;
     try {
       const auth = window.GraderAuth;
+      if (auth) await auth.ensureFresh();
       const send = () => fetch(path, {...options, headers: {...headers, ...(auth ? auth.headers() : {})}});
       response = await send();
       // Token sessions: after 30 idle minutes the server asks for a fresh
@@ -515,10 +515,13 @@
           response = await send();
         }
       }
-    } catch (_) {
-      const error = new Error('The grading server is temporarily unavailable. Your unsaved draft will retry.');
-      error.code = 'network_error';
-      error.transient = true;
+    } catch (cause) {
+      const signInRequired = cause.status === 401 || ['not_signed_in', 'signed_out'].includes(cause.code);
+      const error = new Error(signInRequired
+        ? 'Your login session has expired. Keep this page open and sign in again before saving.'
+        : 'The grading server is temporarily unavailable. Your unsaved draft will retry.');
+      error.code = signInRequired ? 'authentication_required' : 'network_error';
+      error.transient = !signInRequired;
       throw error;
     }
 

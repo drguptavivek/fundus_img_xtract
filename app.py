@@ -228,6 +228,25 @@ def _register_csrf_protection(app: Flask) -> None:
     app.config["WTF_CSRF_CHECK_DEFAULT"] = False
 
     def csrf_protect():
+        # Invalid bearer-only API credentials must reach the client's refresh
+        # path before CSRF or the login guard can clear its browser session.
+        if (
+            request.endpoint is not None
+            and request.path.startswith("/api/")
+            and request.path.startswith(BEARER_SESSION_PATH_PREFIXES)
+            and request.headers.get("Authorization", "").startswith("Bearer ")
+            and not session.get("_user_id")
+        ):
+            from auth.routes import resolve_bearer_user
+
+            if resolve_bearer_user(request) is None:
+                response = jsonify(success=False, error={
+                    "code": "invalid_access_token",
+                    "message": "Access token is invalid or expired.",
+                })
+                response.status_code = 401
+                response.headers["Cache-Control"] = "no-store, private"
+                return response
         if not app.config.get("WTF_CSRF_ENABLED", True):
             return
         # A request authenticated purely by a mobile bearer token (the grader

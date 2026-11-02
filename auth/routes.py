@@ -77,7 +77,8 @@ def load_user_from_bearer_token(req):
         return None
     token = auth_header.split(" ", 1)[1].strip()
     try:
-        claims = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+        claims = jwt.decode(token, jwt_secret, algorithms=["HS256"],
+            options={"require": ["exp", "iat", "sub", "typ", "jti", "mobile_session_id"]})
     except jwt.InvalidTokenError:
         return None
     if claims.get("typ") and claims.get("typ") != "access":
@@ -685,7 +686,7 @@ def captcha_audio():
     
     return Response("Audio format error", status=500)
 
-@auth_bp.route("/logout", methods=["POST", "GET"])
+@auth_bp.route("/logout", methods=["POST"])
 @login_required
 @rate_limit("30 per minute")
 def logout():

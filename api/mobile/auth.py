@@ -7,7 +7,7 @@ from flask import current_app, jsonify, request
 
 from auth.credentials import credential_authenticated
 from auth.utils import get_client_ip
-from db_transaction_manager import transaction_scope
+from services.mobile.auth_transactions import authentication_transaction
 from auth.decorators import token_auth_required
 from services.mobile.auth_sessions import (
     MobileAuthError,
@@ -29,7 +29,7 @@ logger = logging.getLogger("api.mobile.auth")
 
 @mobile_api_bp.route("/auth/login", methods=["POST"])
 @credential_authenticated
-@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
+@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key, ip_limit="20 per minute")
 def login():
     payload = request.get_json(silent=True) or {}
     username = (payload.get("username") or "").strip()
@@ -46,21 +46,20 @@ def login():
         return captcha_error
 
     try:
-        with transaction_scope() as db:
-            return jsonify(
-                login_mobile_user(
-                    db,
-                    MobileLoginRequest(
-                        username=username,
-                        password=password,
-                        device_id=device_id,
-                        device_name=device_name,
-                        ip_address=get_client_ip(),
-                        enrolment_code=enrolment_code,
-                        platform=platform,
-                    ),
-                )
+        with authentication_transaction() as db:
+            result = login_mobile_user(
+                db,
+                MobileLoginRequest(
+                    username=username,
+                    password=password,
+                    device_id=device_id,
+                    device_name=device_name,
+                    ip_address=get_client_ip(),
+                    enrolment_code=enrolment_code,
+                    platform=platform,
+                ),
             )
+            return jsonify(result)
     except MobileAuthError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
     except RuntimeError as exc:
@@ -80,20 +79,19 @@ def refresh():
     if not refresh_token or not device_id:
         return jsonify({"error": "refresh_token and device_id are required"}), 400
 
-    try:
-        with transaction_scope() as db:
+    with authentication_transaction() as db:
+        try:
             return jsonify(refresh_mobile_tokens(db, RefreshTokenRequest(refresh_token=refresh_token, device_id=device_id)))
-    except MobileAuthError as exc:
-        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+        except MobileAuthError as exc:
+            # A denied refresh may deliberately revoke a blocked device/user.
+            return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 
 
 def require_web_captcha(platform: str | None, captcha_input, *, consume: bool = True):
-    """Browsers (``platform == "web"``) must solve the session CAPTCHA on
-    sign-in, exactly as the web login form does; native apps are unchanged.
+    """All clients must solve the session CAPTCHA before sign-in.
+    Client-declared platform metadata never grants a security exemption.
     ``consume=False`` peeks (the passkey lookup), leaving the CAPTCHA for the
     credential step. Returns an error response or ``None``."""
-    if platform != "web":
-        return None
     from utils.captcha import captcha_manager
 
     valid, message = captcha_manager.validate_captcha((captcha_input or "").strip(), consume=consume)
@@ -118,7 +116,7 @@ def reauth():
     if not password:
         return jsonify({"error": "password_required", "message": "password is required"}), 400
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             context = validate_access_session(db, request.mobile_claims)
             from mobile_devices.service import device_platform
 
@@ -146,7 +144,7 @@ def logout():
         return jsonify({"error": "refresh_token is required"}), 400
 
     access_claims = _optional_access_claims()
-    with transaction_scope() as db:
+    with authentication_transaction() as db:
         logout_mobile_session(db, refresh_token=refresh_token, access_claims=access_claims)
         return ("", 204)
 

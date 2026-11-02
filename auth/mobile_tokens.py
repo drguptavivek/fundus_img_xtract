@@ -260,6 +260,7 @@ def find_session_by_refresh_token(db, refresh_token: str) -> MobileAuthSession |
         select(MobileAuthSession)
         .options(selectinload(MobileAuthSession.user))
         .where(MobileAuthSession.refresh_token_hash == refresh_hash)
+        .with_for_update(of=MobileAuthSession)
     ).scalar_one_or_none()
 
 

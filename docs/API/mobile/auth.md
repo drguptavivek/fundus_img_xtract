@@ -421,8 +421,8 @@ state lives server-side (Redis, 5-minute TTL; in-process fallback) keyed by
 
 ## Passkey sign-in (mobile tokens)
 
-For clients that hold no token yet (grader PWA fresh sign-in). No CAPTCHA
-(as for `/auth/login`); the login rate limit and lockouts apply.
+For clients that hold no token yet (grader PWA fresh sign-in). CAPTCHA is
+required on the options request; the login rate limit and lockouts apply.
 
 | Route | Body | Result |
 |---|---|---|
@@ -440,17 +440,24 @@ from `GET /refresh-captcha` on the same origin. The browser session cookie binds
 the challenge to the subsequent login request, which includes `captcha`.
 When available, the audio challenge plays within the login screen from
 `GET /captcha-audio`; refreshing the CAPTCHA stops the old audio.
-Native builds send their platform without a CAPTCHA. The field PWA returns to
+All clients, including native builds, must now solve a session-bound CAPTCHA.
+Native clients must retain the challenge session cookie and send `captcha`;
+older clients without this flow receive `400 captcha_invalid`. The field PWA returns to
 full sign-in when the server requires reauthentication; it does not implement
 passkey reauthentication. Previously stored web sessions without platform
 identification require a new sign-in after the client update.
 
-Requests with `"platform": "web"` (the grader PWA) must include `captcha`
+All platforms (including omitted or unrecognized platform values) must include `captcha`
 solved against the session CAPTCHA (`GET /refresh-captcha`, `GET
 /captcha-audio`) on `POST /auth/login` and `POST /auth/passkeys/login/options`
-- the same gate as the web form. Native apps are unaffected.
+- the same gate as the web form. The client-controlled platform is never a CAPTCHA exemption.
 
 `POST /auth/reauth` (password) is refused with `403 passkey_required` when the
 session's device platform is `web`: grader re-authentication after 30 idle
 minutes is passkey-only; a session without a passkey signs in again in full
 (username → CAPTCHA → passkey or password).
+
+
+## Persistent failure handling and source bans
+
+Failed login and password reauthentication commit their audit counters and four-hour username/IP locks. Password login is limited independently to 10/minute/account and 20/minute/source IP. Repeated invalid API credentials or scope probes also trigger the shared API source ban described in [internal security review](../security/README.md). Refresh-token rotation is serialized; replayed old refresh tokens are refused. Blocked-device refresh revocations persist. Access JWTs require exp, iat, sub, typ, jti and mobile_session_id, and the subject must match the persisted session user.

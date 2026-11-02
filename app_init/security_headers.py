@@ -31,6 +31,8 @@ def register_csp(app: Flask) -> None:
     @app.after_request
     def add_security_headers(response: Response) -> Response:
         """Add comprehensive security headers including CSP with nonces."""
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         content_type = response.headers.get("Content-Type", "").lower()
         path = request.path
 

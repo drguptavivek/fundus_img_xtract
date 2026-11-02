@@ -93,3 +93,9 @@ python3 project_sync_client.py status --dest ./P1_mirror
 Layout: `data/encounters/<YYYY-MM>/<capture-date>_<encounter-uuid>/{encounter.jsonl, <uuid>.<ext>, <uuid>.edited.<ext>, <uuid>.jsonl}`, `data/direct_images/<YYYY-MM>/…`, `exports/<YYYYmmdd_HHMMSS>/{encounters.csv, images.csv, gradings.csv, project_encounterset_export.xlsx, project_<code>.duckdb, report.json}`, `.sync/{config.json (0600), state.json, sync.log}`.
 
 The client never deletes local files, refuses plain `http` to non-local hosts, strips the bearer on storage redirects, writes atomically, resumes after interruption, moves folders if an encounter's capture date changes, and exits with code 3 when the credential is rejected (revoked/expired/role removed).
+
+## Audit review and saved-export authority
+
+Administrators can review `/project-sync/admin/activity` (JSON/HTMX: `/api/project-sync/admin/activity`) by username, project, IP and time. Every handled sync request persists a privacy-safe audit record; if persistence fails, data delivery returns 503. Authorization headers, patient details and individual media UUIDs are excluded. See [internal security review](../security/README.md) for the complete contract, IP abuse bans, GeoIP, logs and limitations.
+
+Completed exports record their original grant, user, project, lab and identifier scope outside the downloadable directory. A download is rejected (404) if the current grant differs or its current lab/PII permissions no longer cover the saved artifact. The latest-export listing withholds download files in that case. Legacy artifacts without scope metadata must be regenerated. The same full-scope check also protects saved project-workspace exports.

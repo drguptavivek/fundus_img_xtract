@@ -42,6 +42,7 @@ from remote_inference.models import (
     ProjectManualRemoteInferenceWorkflow,
 )
 from review.discrepancy_export import EXPORT_DIR, _write_zips
+from .export_artifacts import record_export_scope
 
 
 EXPORT_KINDS = frozenset({"workbook", "images"})
@@ -147,6 +148,11 @@ def run_project_export_job(job_token: str, request_data: dict[str, Any]) -> None
                     _write_sync_duckdb(db, request.project_id, allowed_labs, grant_pii_labs, export_dir)
             else:
                 _write_image_bundle(export_dir, encounters, images, tasks)
+            record_export_scope(
+                export_dir, project_id=request.project_id, user_id=request.actor_user_id,
+                lab_unit_ids=allowed_labs, pii_lab_unit_ids=grant_pii_labs,
+                grant_uuid=str(request_data["sync_grant_uuid"]) if request_data.get("sync_grant_uuid") else None,
+            )
         db_set_job_status(job_token, "done")
         db_set_item_state(job_token, "project_export", "completed")
     except Exception as exc:

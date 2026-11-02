@@ -314,6 +314,8 @@ def configure_logging(app: Flask) -> dict[str, logging.Logger]:
         "pregraded_processing", logging.INFO, pregraded_processing_handler
     )
     auth_logger = _configure_logger("auth", logging.INFO, auth_handler)
+    _configure_logger("project_sync", logging.INFO, auth_handler)
+    _configure_logger("security.api_abuse", logging.WARNING, auth_handler)
     editing_logger = _configure_logger("editing", logging.INFO, editing_handler)
     consensus_logger = _configure_logger("consensus", logging.INFO, consensus_handler)
     email_success_logger = _configure_logger(

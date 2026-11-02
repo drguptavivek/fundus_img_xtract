@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from flask import jsonify, request, session, url_for
+from flask import current_app, jsonify, request, session, url_for, render_template
 from flask_login import current_user, login_required
 
 from auth.roles import roles_required
@@ -33,6 +33,32 @@ from project_sync.service import (
 from utils.rate_limiter import rate_limit
 
 from . import api_bp
+
+
+@api_bp.route("/project-sync/admin/activity", methods=["GET"])
+@login_required
+@roles_required("admin")
+@rate_limit("30 per minute")
+def project_sync_activity():
+    """Admin audit DTOs, or the shared workspace for explicit HTMX reads."""
+    from project_sync.audit import AuditFilter, review_sync_audit
+    try:
+        filters = AuditFilter.parse(
+            since=request.args.get("since"), until=request.args.get("until"),
+            username=request.args.get("username"), project_id=request.args.get("project_id"),
+            ip_address=request.args.get("ip_address"), before_id=request.args.get("before_id"),
+        )
+        with transaction_scope() as db:
+            page = review_sync_audit(db, admin=current_user, filters=filters)
+    except ProjectSyncError as exc:
+        return _error(exc)
+    if request.headers.get("HX-Request") == "true":
+        response = current_app.make_response(render_template("project_sync/_activity_workspace.html", page=page))
+    else:
+        response = jsonify(page.to_dict())
+    response.headers["Cache-Control"] = "no-store"
+    response.vary.add("HX-Request")
+    return response
 
 REAUTH_SECONDS = 600
 

@@ -1,0 +1,23 @@
+<div id="security-incidents-workspace">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <span class="text-body-secondary">Snapshot: {{ overview.generated_at | user_datetime }}</span>
+    <button class="btn btn-outline-primary" hx-get="{{ url_for('fundus_api.security_incident_overview') }}" hx-target="#security-incidents-workspace" hx-swap="outerHTML">Refresh</button>
+  </div>
+  {% if not overview.geoip_configured %}<div class="alert alert-info">Offline GeoIP is not configured. Source IPs are shown without an inferred location.</div>{% endif %}
+  <h2 class="h5">Active IP blocks</h2>
+  <p class="small text-body-secondary">Up to 100 API abuse blocks and 100 password IP locks. API abuse blocks follow 20 authentication or access denials within 10 minutes. Password locks follow 5 failures. Both last 4 hours.</p>
+  <div class="table-responsive"><table class="table table-sm">
+    <thead><tr><th>Source IP</th><th>Control</th><th>Country / city</th><th>GeoIP status</th><th>Blocked until</th></tr></thead>
+    <tbody>{% for item in overview.active_blocks %}<tr><td><code>{{ item.ip_address }}</code></td><td>{{ item.event }}</td><td>{{ item.geo.country or '-' }} / {{ item.geo.city or '-' }}</td><td>{{ item.geo.status }}{% if item.geo.database_date %}<br><small>Database: {{ item.geo.database_date }}</small>{% endif %}</td><td>{{ item.blocked_until | user_datetime }}</td></tr>{% else %}<tr><td colspan="5">No active IP blocks.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <h2 class="h5 mt-4">Active account locks</h2>
+  <table class="table table-sm"><thead><tr><th>Account</th><th>Locked until</th></tr></thead><tbody>{% for username, until in overview.account_locks %}<tr><td>{{ username }}</td><td>{{ until | user_datetime }}</td></tr>{% else %}<tr><td colspan="2">No active account locks.</td></tr>{% endfor %}</tbody></table>
+  <h2 class="h5 mt-4">Recent security incidents</h2>
+  <p class="small text-body-secondary">Latest 100 incidents in the past 31 days. An expired block remains in the incident history.</p>
+  <div class="table-responsive"><table class="table table-sm">
+    <thead><tr><th>When</th><th>Source IP</th><th>Country / city</th><th>Mitigation</th><th>Triggering request</th><th>Block expiry</th></tr></thead>
+    <tbody>{% for item in overview.incidents %}<tr><td>{{ item.created_at | user_datetime }}</td><td><code>{{ item.ip_address }}</code></td><td>{{ item.geo.country or '-' }} / {{ item.geo.city or '-' }}<br><small>{{ item.geo.status }}</small></td><td>{{ item.event }}</td><td>{{ item.method or '' }} {{ item.endpoint or '-' }}</td><td>{{ item.blocked_until | user_datetime if item.blocked_until else '-' }}</td></tr>{% else %}<tr><td colspan="6">No recorded incidents in this time range.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <h2 class="h5 mt-4">Controls in this application version</h2>
+  <table class="table table-sm"><thead><tr><th>Control</th><th>Policy / status</th></tr></thead><tbody>{% for name, policy in overview.mitigations %}<tr><td>{{ name }}</td><td>{{ policy }}</td></tr>{% endfor %}</tbody></table>
+</div>

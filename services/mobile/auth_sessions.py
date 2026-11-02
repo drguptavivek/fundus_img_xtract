@@ -129,6 +129,7 @@ def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
 
     if user is None or not user.is_active or not verify_password(user.password_hash, login_request.password):
         _record_attempt(db, username, ip, success=False)
+        db.flush()  # Include this attempt even when autoflush is disabled.
         if user and _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
             _lock_user(db, user)
         if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
@@ -287,6 +288,9 @@ def _require_revocation_store_for_field_user(user) -> None:
 
 def refresh_mobile_tokens(db, refresh_request: RefreshTokenRequest) -> dict:
     mobile_session = find_session_by_refresh_token(db, refresh_request.refresh_token)
+    if mobile_session is not None and (not mobile_session.user or not mobile_session.user.is_active):
+        revoke_mobile_session(db, mobile_session, reason="inactive_user")
+        raise MobileAuthError("User is inactive", code="inactive_user", status_code=403)
     if not validate_mobile_session(mobile_session):
         raise MobileAuthError("Invalid refresh token", code="invalid_refresh_token", status_code=401)
     assert mobile_session is not None
@@ -426,6 +430,8 @@ def validate_access_session(db, claims: dict) -> AccessTokenContext:
     ).scalar_one_or_none()
     if mobile_session is None:
         raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
+    if str(claims.get("sub") or "") != str(mobile_session.user_id):
+        raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
     if mobile_session.is_revoked:
         if mobile_session.revoked_reason == "session_superseded":
             raise MobileAuthError(
@@ -478,10 +484,22 @@ def reauthenticate_mobile_session(db, *, context: AccessTokenContext, password: 
     """
     user = context.user
     username = user.username
+    if _is_ip_locked(db, ip_address)[0]:
+        raise MobileAuthError("Too many attempts. IP is temporarily locked.", code="ip_locked", status_code=403)
+    locked_until = user.is_locked_until
+    if locked_until:
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=utcnow().tzinfo)
+        if locked_until > utcnow():
+            raise MobileAuthError("Too many attempts. User is temporarily locked.", code="user_locked", status_code=403)
     if not password or not verify_password(user.password_hash, password):
         _record_attempt(db, username, ip_address, success=False)
+        db.flush()
         if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
             _lock_user(db, user)
+            revoke_mobile_session(db, context.session, reason="reauth_failed")
+        if _recent_failed_by_ip(db, ip_address) >= MAX_FAILS_PER_IP:
+            _lock_ip(db, ip_address)
         raise MobileAuthError("Invalid password", code="invalid_credentials", status_code=401)
     return mark_reauthenticated(db, context=context, ip_address=ip_address, method="password")
 

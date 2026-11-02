@@ -251,6 +251,7 @@ def recent_project_exports(project_id: int):
 @api_bp.route("/projects/<int:project_id>/exports/<job_token>/<filename>", methods=["GET"])
 @login_required
 def download_project_export(project_id: int, job_token: str, filename: str):
+    from project_review.export_artifacts import export_scope_allowed
     if secure_filename(filename) != filename:
         return jsonify({"success": False, "error": "File not found."}), 404
     with transaction_scope() as db:
@@ -263,7 +264,13 @@ def download_project_export(project_id: int, job_token: str, filename: str):
             Job.upload_type == "project_export",
             Job.uploader_user_id == current_user.id,
         )).scalar_one_or_none()
-        if not allowed_labs or job is None:
+        export_dir = (EXPORT_DIR / job_token).resolve()
+        if (not allowed_labs or job is None or job.status != "done"
+            or EXPORT_DIR.resolve() not in export_dir.parents
+            or not export_scope_allowed(
+                export_dir, project_id=project_id, user_id=current_user.id,
+                lab_unit_ids=allowed_labs,
+            )):
             return jsonify({"success": False, "error": "File not found."}), 404
     export_dir = (EXPORT_DIR / job_token).resolve()
     if EXPORT_DIR.resolve() not in export_dir.parents:

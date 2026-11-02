@@ -630,3 +630,61 @@ def test_sync_export_duckdb_follows_the_grants_scope_and_identifier_rights(sync_
     _write_sync_duckdb(db_session, pi_ctx.project_id, pi_labs, pi_pii, with_ids)
     con = duckdb.connect(str(with_ids / "project_SYNC_P.duckdb"), read_only=True)
     assert ("PID-A1", True) in con.execute("select patient_id, identifiers_included from encounters").fetchall()
+
+
+@pytest.mark.parametrize("method,path", [
+    ("get", "/whoami"), ("get", "/encounters"), ("get", "/direct-images"),
+    ("post", "/sidecars"), ("get", "/media/probed-uuid"), ("post", "/exports"),
+    ("get", "/exports/latest"), ("get", "/exports/probed-job/export.duckdb"),
+])
+def test_all_sync_data_endpoints_reject_invalid_credentials(sync_on, client, world, method, path):
+    response = getattr(client, method)("/api/sync/v1" + path, headers={"Authorization": "Bearer pds_wrong"})
+    assert response.status_code == 401
+    assert response.json["error"] == "invalid_sync_credential"
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_saved_sync_export_rechecks_full_scope_and_original_grant(sync_on, db_session, world, monkeypatch, app, tmp_path):
+    from dataclasses import replace
+    from models import Job
+    from project_sync import exports
+    from project_review.export_artifacts import record_export_scope
+
+    monkeypatch.setattr(exports, "EXPORT_DIR", tmp_path)
+    monkeypatch.setattr(exports, "enqueue_project_export", lambda *args: None)
+    _, credential = _approved_credential(db_session, world, world["pi"], include_pii=True)
+    ctx = service.authenticate_credential(db_session, credential=credential, meta=META)
+    requested = exports.request_export(db_session, ctx, app=app, ip_address="10.0.0.1")
+    job = db_session.query(Job).filter_by(token=requested.token).one()
+    job.status = "done"
+    db_session.flush()
+    directory = tmp_path / job.token
+    directory.mkdir()
+    artifact = directory / "export.duckdb"
+    artifact.write_bytes(b"private export")
+    with pytest.raises(ProjectSyncNotFound):
+        exports.export_file(db_session, ctx, token=job.token, filename=artifact.name)
+    record_export_scope(directory, project_id=ctx.project_id, user_id=ctx.user_id,
+                        lab_unit_ids=ctx.lab_unit_ids, pii_lab_unit_ids=ctx.pii_lab_unit_ids,
+                        grant_uuid=ctx.grant_uuid)
+    assert exports.export_file(db_session, ctx, token=job.token, filename=artifact.name) == artifact
+    assert exports.latest_export(db_session, ctx).files == (artifact.name,)
+    for denied in [replace(ctx, grant_uuid="replacement-grant"),
+                   replace(ctx, lab_unit_ids=frozenset({world["lab_a1"].id})),
+                   replace(ctx, pii_lab_unit_ids=frozenset())]:
+        with pytest.raises(ProjectSyncNotFound):
+            exports.export_file(db_session, denied, token=job.token, filename=artifact.name)
+        assert exports.latest_export(db_session, denied).files == ()
+
+
+def test_sync_request_logs_do_not_include_credentials(sync_on, client, db_session, world, caplog, monkeypatch):
+    import logging
+    from api.sync import routes
+    monkeypatch.setattr(routes.logger, "handlers", [caplog.handler])
+    _, credential = _approved_credential(db_session, world, world["dm"])
+    caplog.set_level(logging.INFO, logger="project_sync.api")
+    response = client.get("/api/sync/v1/whoami", headers={"Authorization": f"Bearer {credential}"})
+    assert response.status_code == 200
+    assert "sync_request" in caplog.text
+    assert "status=200" in caplog.text
+    assert credential not in caplog.text

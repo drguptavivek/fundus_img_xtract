@@ -16,6 +16,7 @@ from auth.utils import utcnow
 from job_store import db_create_job
 from models import Job
 from project_review.export_service import EXPORT_DIR, enqueue_project_export, validate_export_request
+from project_review.export_artifacts import export_scope_allowed
 
 from .dto import SyncContext
 from .exceptions import ProjectSyncConflict, ProjectSyncNotFound
@@ -108,11 +109,25 @@ def request_export(db, ctx: SyncContext, *, app, ip_address: str | None) -> Sync
 
 def latest_export(db, ctx: SyncContext) -> SyncExportJob | None:
     job = db.execute(_jobs(db, ctx).order_by(Job.created_at.desc(), Job.id.desc()).limit(1)).scalar_one_or_none()
-    return _to_dto(job) if job is not None else None
+    if job is None:
+        return None
+    result = _to_dto(job)
+    if job.status == "done" and not _scope_allowed(ctx, job.token):
+        return SyncExportJob(result.token, result.status, result.error, result.created_at, result.updated_at, ())
+    return result
+
+
+def _scope_allowed(ctx: SyncContext, token: str) -> bool:
+    export_dir = _export_dir(token)
+    return export_dir is not None and export_scope_allowed(
+        export_dir, project_id=ctx.project_id, user_id=ctx.user_id,
+        lab_unit_ids=ctx.lab_unit_ids, pii_lab_unit_ids=ctx.pii_lab_unit_ids,
+        grant_uuid=ctx.grant_uuid,
+    )
 
 
 def export_file(db, ctx: SyncContext, *, token: str, filename: str) -> Path:
     job = db.execute(_jobs(db, ctx).where(Job.token == token)).scalar_one_or_none()
-    if job is None or filename not in _files(job):
+    if job is None or not _scope_allowed(ctx, token) or filename not in _files(job):
         raise ProjectSyncNotFound("Export file not found.")
     return _export_dir(token) / filename

@@ -1,0 +1,37 @@
+{% from '_forms.html' import csrf_field %}
+<div id="sync-activity-workspace">
+  <form id="sync-activity-filters" class="row g-2 mb-3" method="get" action="{{ url_for('project_sync_pages.activity') }}"
+        hx-get="{{ url_for('fundus_api.project_sync_activity') }}" hx-target="#sync-activity-workspace" hx-swap="outerHTML">
+    {{ csrf_field() }}
+    <div class="col-md-2"><label for="sync-user" class="form-label">Username</label><input id="sync-user" class="form-control" name="username" value="{{ page.filters.username }}"></div>
+    <div class="col-md-2"><label for="sync-project" class="form-label">Project ID</label><input id="sync-project" type="number" min="1" class="form-control" name="project_id" value="{{ page.filters.project_id or '' }}"></div>
+    <div class="col-md-2"><label for="sync-ip" class="form-label">Source IP</label><input id="sync-ip" class="form-control" name="ip_address" value="{{ page.filters.ip_address }}"></div>
+    <div class="col-md-2"><label for="sync-since" class="form-label">Since (UTC)</label><input id="sync-since" class="form-control" name="since" value="{{ page.filters.since.isoformat() }}"></div>
+    <div class="col-md-2"><label for="sync-until" class="form-label">Until (UTC)</label><input id="sync-until" class="form-control" name="until" value="{{ page.filters.until.isoformat() }}"></div>
+    <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary" type="submit">Apply filters</button></div>
+  </form>
+  <div class="alert alert-info" role="status">{{ page.total_events }} events match these filters. Up to 50 events per page; maximum review window is 31 days.</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr><th>When</th><th>Who</th><th>Project</th><th>Source IP</th><th>Event / request</th><th>Outcome</th><th>Response size</th><th>Client</th></tr></thead>
+      <tbody>
+      {% for event in page.events %}
+        <tr>
+          <td class="text-nowrap">{{ event.created_at | user_datetime }}</td>
+          <td>{{ event.username or 'Unauthenticated / deleted user' }}</td>
+          <td>{{ event.project_code or 'Unknown' }}{% if event.project_id %} (#{{ event.project_id }}){% endif %}</td>
+          <td><code>{{ event.ip_address or '-' }}</code></td>
+          <td>{{ event.event }}{% if event.endpoint %}<br><small>{{ event.method }} {{ event.endpoint }}</small>{% endif %}{% if event.grant_uuid %}<br><small class="text-body-secondary">Grant {{ event.grant_uuid }}</small>{% endif %}</td>
+          <td>{% if event.http_status %}<span class="badge {{ 'text-bg-danger' if event.http_status >= 400 else 'text-bg-success' }}">{{ event.http_status }}</span>{% else %}Lifecycle event{% endif %}{% if event.duration_ms is not none %}<br><small>{{ event.duration_ms }} ms</small>{% endif %}</td>
+          <td>{{ event.response_bytes if event.response_bytes is not none else 'Unknown' }}{% if event.response_bytes is not none %} bytes{% endif %}</td>
+          <td class="small text-break">{{ event.user_agent or '-' }}</td>
+        </tr>
+      {% else %}<tr><td colspan="8" class="text-body-secondary">No activity in this time range.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page.next_before_id %}
+  <button type="button" class="btn btn-outline-primary" hx-get="{{ url_for('fundus_api.project_sync_activity', before_id=page.next_before_id) }}"
+          hx-include="#sync-activity-filters" hx-target="#sync-activity-workspace" hx-swap="outerHTML">Older events</button>
+  {% endif %}
+</div>

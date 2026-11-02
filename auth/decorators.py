@@ -37,7 +37,8 @@ def token_auth_required(f):
         
         try:
             # We use HS256 by default for mobile device tokens
-            data = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            data = jwt.decode(token, jwt_secret, algorithms=["HS256"],
+            options={"require": ["exp", "iat", "sub", "typ", "jti", "mobile_session_id"]})
             if data.get("typ") and data.get("typ") != "access":
                 return jsonify({"message": "Invalid token type"}), 401
 

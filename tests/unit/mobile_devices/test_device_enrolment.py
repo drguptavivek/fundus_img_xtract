@@ -324,8 +324,8 @@ def test_login_rate_limit_keys_on_username_not_only_ip():
         third = get_login_rate_limit_key()
 
     # Same username from a different IP shares a bucket; a different username does not.
-    assert first.startswith("login:victim|")
-    assert second.startswith("login:victim|")
+    assert first == "login:victim"
+    assert second == first
     assert third != first
 
 

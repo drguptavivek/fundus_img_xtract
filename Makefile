@@ -94,7 +94,7 @@ logs: ## Print last 200 log lines for all services. Override with TAIL=100.
 logs-tail: ## Follow container output and web HTTP/rate-limit logs. Override with TAIL=100.
 	@trap 'kill $$logs_pid $$files_pid 2>/dev/null || true' EXIT INT TERM; \
 	  $(COMPOSE) logs --tail=$(TAIL) -f & logs_pid=$$!; \
-	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
+	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log" "$${LOG_DIR:-/app/logs}/auth.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
 	  wait
 
 .PHONY: logs-main
@@ -108,13 +108,13 @@ logs-main-tail: ## Follow last 200 log lines for web and Celery services.
 .PHONY: logs-web
 logs-web: ## Print web container output and HTTP/rate-limit file logs.
 	$(COMPOSE) logs --tail=$(TAIL) web
-	$(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" "$$@"' sh $(TAIL)
+	$(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log" "$${LOG_DIR:-/app/logs}/auth.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" "$$@"' sh $(TAIL)
 
 .PHONY: logs-web-tail
 logs-web-tail: ## Follow web container output and HTTP/rate-limit file logs.
 	@trap 'kill $$logs_pid $$files_pid 2>/dev/null || true' EXIT INT TERM; \
 	  $(COMPOSE) logs --tail=$(TAIL) -f web & logs_pid=$$!; \
-	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
+	  $(COMPOSE) exec -T web sh -c 'n=$$1; set -- "$${LOG_DIR:-/app/logs}/http_error.log" "$${LOG_DIR:-/app/logs}/flask_limiter.log" "$${LOG_DIR:-/app/logs}/auth.log"; access=$${GUNICORN_ACCESS_LOG:-/var/log/fundus-img-xtract/gunicorn_access.log}; [ "$$access" != - ] || access=/var/log/fundus-img-xtract/gunicorn_access.log; [ ! -f "$$access" ] || set -- "$$@" "$$access"; exec tail -n "$$n" -F "$$@"' sh $(TAIL) & files_pid=$$!; \
 	  wait
 
 .PHONY: logs-celery logs-workers

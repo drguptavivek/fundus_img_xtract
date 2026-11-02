@@ -15,6 +15,12 @@ from .service import eligible_projects, list_admin_grants, list_user_grants, syn
 bp = Blueprint("project_sync_pages", __name__, url_prefix="/project-sync")
 
 
+@bp.route("/admin/activity", methods=["GET"])
+@roles_required("admin")
+def activity():
+    return render_template("project_sync/activity.html")
+
+
 def _user_workspace_context(db) -> dict:
     enabled = sync_enabled()
     return {

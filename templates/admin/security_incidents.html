@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Security Incidents & IP Blocks{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3">Security Incidents &amp; IP Blocks</h1>
+    <a class="btn btn-outline-secondary" href="{{ url_for('project_sync_pages.activity') }}">Review sync activity</a>
+  </div>
+  <p class="text-body-secondary">Application-enforced blocks and recorded incidents. GeoIP is approximate; VPNs, proxies, and shared networks can hide the actual source. This view does not include firewall or reverse-proxy bans.</p>
+  <div id="security-incidents-workspace" hx-get="{{ url_for('fundus_api.security_incident_overview') }}" hx-trigger="load" hx-swap="outerHTML"><p role="status">Loading security incidents…</p></div>
+</div>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
+{% endblock %}

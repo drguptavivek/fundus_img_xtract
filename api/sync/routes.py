@@ -7,6 +7,7 @@ docs/API/project_sync/README.md.
 from __future__ import annotations
 
 import logging
+import time
 from functools import wraps
 
 from flask import current_app, g, jsonify, make_response, request, send_file
@@ -30,6 +31,7 @@ from project_sync.inventory import (
     parse_page,
 )
 from project_sync.service import authenticate_credential
+from project_sync.audit import record_sync_request
 from project_sync.throttle import ProjectSyncBusy, acquire_slot, release_slot
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
@@ -37,6 +39,44 @@ from utils.rate_limiter import rate_limit
 from . import project_sync_api_bp
 
 logger = logging.getLogger("project_sync.api")
+
+
+@project_sync_api_bp.before_request
+def _start_sync_request():
+    g.sync_request_started = time.monotonic()
+
+
+@project_sync_api_bp.after_request
+def _log_sync_request(response):
+    context = getattr(g, "project_sync", None)
+    duration_ms = round((time.monotonic() - getattr(g, "sync_request_started", time.monotonic())) * 1000)
+    logger.info(
+        "sync_request ip=%s method=%s endpoint=%s grant=%s status=%s duration_ms=%s bytes=%s",
+        sanitize_log_value(request.remote_addr), request.method,
+        sanitize_log_value(request.endpoint),
+        sanitize_log_value(getattr(context, "grant_uuid", None)), response.status_code,
+        duration_ms,
+        response.content_length,
+    )
+    if not getattr(g, "api_abuse_blocked", False):
+        try:
+            with transaction_scope() as db:
+                record_sync_request(
+                    db, context=context, ip_address=get_client_ip(),
+                    user_agent=request.headers.get("User-Agent", ""),
+                    endpoint=request.endpoint or "unmatched", method=request.method,
+                    http_status=response.status_code, response_bytes=response.content_length,
+                    duration_ms=duration_ms,
+                )
+        except Exception as exc:
+            logger.error("Sync audit persistence failed error=%s", sanitize_log_value(type(exc).__name__))
+            response.close()
+            denied = jsonify({"error": "audit_unavailable", "message": "Sync audit is temporarily unavailable. Retry later."})
+            denied.status_code = 503
+            denied.headers["Cache-Control"] = "no-store"
+            denied.headers["Retry-After"] = "60"
+            return denied
+    return response
 
 
 def _error(exc: ProjectSyncError):

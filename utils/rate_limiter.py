@@ -17,6 +17,7 @@ import os
 import logging
 from functools import wraps
 from typing import Callable, Optional, Union
+from weakref import WeakKeyDictionary
 
 from flask import request, jsonify, current_app, g, has_request_context
 from flask_limiter import Limiter
@@ -64,7 +65,7 @@ def get_rate_limit_key() -> str:
 
 
 def get_login_rate_limit_key() -> str:
-    """Bucket login attempts per submitted username as well as per IP.
+    """Bucket login attempts per account, independently of the source IP.
 
     ``get_rate_limit_key`` cannot help on ``/auth/login``: nobody is
     authenticated yet, so every attempt keys to the IP. Including the claimed
@@ -82,7 +83,7 @@ def get_login_rate_limit_key() -> str:
         username = ""
     username = username.strip().lower()[:150]
     if username:
-        return f"login:{username}|ip:{get_remote_address()}"
+        return f"login:{username}"
     return f"login:ip:{get_remote_address()}"
 
 # Initialize limiter (will be configured in init_rate_limiting)
@@ -208,7 +209,8 @@ def rate_limit(
     
     return decorator
 
-def auth_rate_limit(limit: str = "5 per minute", key_func: Optional[Callable] = None) -> Callable:
+def auth_rate_limit(limit: str = "5 per minute", key_func: Optional[Callable] = None,
+                    *, ip_limit: Optional[str] = None) -> Callable:
     """
     Specialized rate limit for authentication endpoints.
     More restrictive than general rate limits.
@@ -217,6 +219,8 @@ def auth_rate_limit(limit: str = "5 per minute", key_func: Optional[Callable] = 
     bucketed per claimed username as well as per IP.
     """
     def decorator(f: Callable) -> Callable:
+        limited_views = WeakKeyDictionary()
+
         @wraps(f)
         def wrapped(*args, **kwargs):
             # Get the limiter from app context or use global
@@ -244,7 +248,14 @@ def auth_rate_limit(limit: str = "5 per minute", key_func: Optional[Callable] = 
             }
             if key_func is not None:
                 limit_kwargs["key_func"] = key_func
-            return current_limiter.limit(limit, **limit_kwargs)(f)(*args, **kwargs)
+            limited_view = limited_views.get(current_limiter)
+            if limited_view is None:
+                limited_view = current_limiter.limit(limit, **limit_kwargs)(f)
+                if ip_limit:
+                    ip_kwargs = {**limit_kwargs, "key_func": get_remote_address}
+                    limited_view = current_limiter.limit(ip_limit, **ip_kwargs)(limited_view)
+                limited_views[current_limiter] = limited_view
+            return limited_view(*args, **kwargs)
         
         return wrapped
     

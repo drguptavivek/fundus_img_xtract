@@ -465,3 +465,5 @@ admin_bp.add_url_rule("/api/security/package-updates/packages", view_func=htmx_p
 admin_bp.add_url_rule("/api/security/package-updates/history/htmx", view_func=htmx_scan_history, methods=["GET"])
 admin_bp.add_url_rule("/api/security/package-updates/updates.yaml", view_func=api_package_updates_yaml, methods=["GET"])
 admin_bp.add_url_rule("/api/security/package-updates/instructions", view_func=api_package_updates_instructions, methods=["GET"])
+
+from . import security_incident_routes

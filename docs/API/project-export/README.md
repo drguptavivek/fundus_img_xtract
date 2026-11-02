@@ -97,3 +97,5 @@ COCO JSON. ZIP paths use
 Downloads a completed artifact. The request repeats project export authority,
 requires the job to belong to the current user and project, and rejects unsafe
 filenames. Invalid or unauthorized requests return `404`.
+
+Saved export downloads revalidate the full lab scope recorded when the artifact was generated, in addition to job ownership, project and completion state. If scope was removed, or the legacy artifact has no authorization metadata, download returns 404 and the export must be regenerated. See [internal security review](../security/README.md).

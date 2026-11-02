@@ -13,7 +13,7 @@ from flask import jsonify, request
 from auth.credentials import credential_authenticated
 from auth.decorators import token_auth_required
 from auth.utils import get_client_ip, utcnow
-from db_transaction_manager import transaction_scope
+from services.mobile.auth_transactions import authentication_transaction
 from passkeys import service as passkey_service
 from passkeys.models import MobilePasskey  # noqa: F401 - registers the table with the metadata
 from passkeys.service import PasskeyError
@@ -53,7 +53,7 @@ def _require_recent_password(context):
 @mobile_api_bp.route("/auth/passkeys", methods=["GET"])
 @token_auth_required
 def list_passkeys():
-    with transaction_scope() as db:
+    with authentication_transaction() as db:
         context = _context(db)
         return jsonify({"passkeys": [item.to_dict() for item in passkey_service.list_passkeys(db, user_id=context.user.id)]})
 
@@ -63,7 +63,7 @@ def list_passkeys():
 @rate_limit("10 per minute")
 def passkey_register_options():
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             context = _context(db)
             _require_recent_password(context)
             return jsonify(passkey_service.begin_registration(db, user=context.user))
@@ -82,7 +82,7 @@ def passkey_register_verify():
     if not isinstance(credential, dict):
         return jsonify({"error": "credential_required", "message": "credential is required."}), 400
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             context = _context(db)
             _require_recent_password(context)
             passkey = passkey_service.complete_registration(
@@ -105,7 +105,7 @@ def passkey_register_verify():
 @rate_limit("20 per minute")
 def passkey_reauth_options():
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             context = _context(db)
             return jsonify(passkey_service.begin_assertion(db, user=context.user))
     except PasskeyError as exc:
@@ -123,7 +123,7 @@ def passkey_reauth_verify():
     if not isinstance(credential, dict):
         return jsonify({"error": "credential_required", "message": "credential is required."}), 400
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             context = _context(db)
             passkey_service.complete_assertion(
                 db,
@@ -142,7 +142,7 @@ def passkey_reauth_verify():
 @token_auth_required
 @rate_limit("10 per minute")
 def passkey_delete(passkey_id: int):
-    with transaction_scope() as db:
+    with authentication_transaction() as db:
         context = _context(db)
         if not passkey_service.delete_passkey(db, user_id=context.user.id, passkey_id=passkey_id):
             return jsonify({"error": "not_found", "message": "Passkey not found."}), 404
@@ -176,7 +176,7 @@ def passkey_login_options():
     if captcha_error:
         return captcha_error
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             user = mobile_login_gate(db, username=username, ip=get_client_ip())
             if user is None:
                 return _no_passkey()
@@ -208,7 +208,7 @@ def passkey_login_verify():
 
         captcha_manager.clear_captcha()  # spent by this sign-in attempt
     try:
-        with transaction_scope() as db:
+        with authentication_transaction() as db:
             user = mobile_login_gate(db, username=username, ip=ip)
             if user is None:
                 return jsonify({"error": "invalid_credentials", "message": "Passkey sign-in failed"}), 401

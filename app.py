@@ -56,7 +56,7 @@ def _env_domain(key: str) -> str | None:
 def _parse_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
     if not raw:
-        return ["http://localhost:5001", "http://127.0.0.1:5001"]
+        return []
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -348,6 +348,8 @@ def _register_https_redirect(app: Flask) -> None:
 
 
 def _initialize_middleware(app: Flask) -> None:
+    from app_init.api_abuse import register_api_abuse_guard
+    register_api_abuse_guard(app)
     init_rate_limiting(app)
     PayloadSizeValidator(app)
     cors_origins = app.config.get("CORS_ALLOWED_ORIGINS", [])
@@ -357,7 +359,7 @@ def _initialize_middleware(app: Flask) -> None:
         r"/email-sse": {"origins": cors_origins, "supports_credentials": True},
         r"/check-session": {"origins": cors_origins, "supports_credentials": True},
     }
-    CORS(app, resources=cors_resources, supports_credentials=True)
+    CORS(app, resources=cors_resources, supports_credentials=True, always_send=False)
 
 
 def _ensure_core_roles() -> None:
@@ -719,7 +721,6 @@ PUBLIC_SESSION_PATHS = frozenset(
         "/healthz",
         "/check-email-status",
         "/email-sse",
-        "/test-rate-limit",
         "/refresh-captcha",
         "/captcha-audio",
         "/analytics",
@@ -1112,11 +1113,6 @@ def _register_utility_routes(app: Flask) -> None:
     @rate_limit("30 per minute")
     def style_guide():
         return render_template("style_guide.html")
-
-    @app.route("/test-rate-limit")
-    @rate_limit("10 per minute")
-    def test_rate_limit():
-        return jsonify({"message": "Rate limit test endpoint", "timestamp": time.time()})
 
     @app.route("/healthz", methods=["GET"])
     @rate_limit("100 per minute")

@@ -257,7 +257,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Grader PWA](docs/16-NewFeature/grader_pwa/README.md) - Installable same-origin grading client at `/grader/` that reuses the workbench body, filters and session controller; plan in `PLAN.md`
 - [Project Grader Allocation API](docs/API/grading-allocation/README.md) - REST contract, authorization, target shapes, coverage, activation, and error behavior
 - [EncounterSet Grading API](docs/API/encounter-set-grading/README.md) - Mutable effective policy plans, frozen runtime records, and lazy post-revision reconciliation
-- [Grader Dashboard API](docs/API/grading-dashboard/README.md) - Current-user eligibility, daily mixed grading history, filters, pagination, and session trends
+- [Grader Dashboard API](docs/API/grading-dashboard/README.md) - Project image and EncounterSet queues, current-user eligibility, daily mixed grading history, filters, pagination, and session trends
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Public KPI API](docs/API/public-analytics/README.md) - Cached system-wide JSON and HTMX aggregates for public and mobile consumers
 - [Mobile API and hosted PWA](docs/API/mobile/README.md) - Bearer-auth mobile surface (platform metadata, mandatory CAPTCHA, device enrolment, uploads, field encounter browser) and the `/mobile/` PWA served from `static/mobile-pwa/`

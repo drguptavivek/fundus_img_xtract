@@ -12,6 +12,16 @@ derive, while `legacy_diseases` carries **no counts** — each disease is counte
 on demand through the per-disease endpoint below, so one large queue cannot hold
 up the rest of the dashboard.
 
+Despite its compatibility name, `legacy_diseases` includes both non-project
+eligibility and active project `disease_image` allocations. Project-only image
+graders do not need legacy disease/lab permissions. Allocations require an active
+project and project lab, and a qualifying ophthalmologist role. Resident
+allocations cover both initial grading slots; Arbitrator allocations cover
+arbitration. Per-disease counts still enforce exact project allocations and
+exclude unallocated project tasks and unauthorized non-project tasks. Project
+EncounterSet allocations remain in `project_encounter_sets`. These same rules
+apply to the dashboard HTML fragments and `GET /api/grading/me/queues/<disease_id>`.
+
 Requires the `resident` or `ophthalmologist` role. Results are scoped to the
 caller; there is no user parameter.
 

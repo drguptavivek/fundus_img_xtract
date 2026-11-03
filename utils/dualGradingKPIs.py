@@ -18,6 +18,7 @@ from models import (
     Grade,
     GradingTask,
     LabUnit,
+    Project,
     LinkedDiseaseGrading,
     User,
     UserDiseaseUnitRole,
@@ -25,7 +26,12 @@ from models import (
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
-from grading_allocation.constants import capacity_for_role_slot
+from grading_allocation.constants import AllocationCapacity, capacity_for_role_slot
+from grading_allocation.eligibility import (
+    _current_user_eligibility_snapshot,
+    _role_names_have_capacity,
+    legacy_eligible_lab_unit_ids,
+)
 from grading_allocation.dashboard import (
     exclude_project_encounter_set_tasks,
     exclude_unallocated_project_tasks,
@@ -102,6 +108,7 @@ def _pending_count(
     *,
     user_id: int,
     role_slot: str,
+    disease_id: int,
 ) -> int:
     """Count a pending queue without materialising it.
 
@@ -113,6 +120,9 @@ def _pending_count(
     capacity = capacity_for_role_slot(role_slot)
     if capacity is None:
         return 0
+    query = _filter_non_project_eligibility(
+        db, query, user_id=user_id, disease_id=disease_id, capacity=capacity
+    )
     query = filter_to_exact_allocation(
         query, user_id=user_id, capacity=capacity.value
     )
@@ -121,16 +131,27 @@ def _pending_count(
     return query.with_entities(func.count(distinct(GradingTask.id))).scalar() or 0
 
 
+def _filter_non_project_eligibility(db, query, *, user_id, disease_id, capacity):
+    legacy_labs = legacy_eligible_lab_unit_ids(
+        db, user_id=user_id, disease_id=disease_id, capacity=capacity
+    )
+    return query.filter(or_(
+        GradingTask.project_id.isnot(None),
+        GradingTask.lab_unit_id.in_(legacy_labs),
+    ))
+
+
 def _resolve_user_disease_slots(db, user_id: int):
     """Which diseases and slots the user may grade, without counting any work.
 
-    Derived purely from role rows and the linked-disease map, so this stays
+    Derived from legacy permissions, project image allocations and the linked-disease map, so this stays
     cheap no matter how large the task table grows. Splitting it out lets the
     dashboard render its queue cards immediately and fetch each disease's
     counts afterwards, instead of blocking the page on the whole queue.
 
     Returns ``(user, disease_names, disease_lab_units)`` or ``None`` when the
-    user does not exist or holds no active grading role.
+    user does not exist or has no discoverable disease queues. These rows are
+    queue candidates; counts separately enforce each task's ownership and scope.
     """
     user = (
         db.query(User)
@@ -147,7 +168,22 @@ def _resolve_user_disease_slots(db, user_id: int):
         UserDiseaseUnitRole.user_id == user_id,
         UserDiseaseUnitRole.active == True,  # noqa: E712 - SQL boolean comparison
     ).all()
-    if not eligible_roles:
+    # Discover project image queues without granting legacy eligibility.
+    role_names, allocation_keys = _current_user_eligibility_snapshot(db, user_id=user_id)
+    active_projects = set(db.execute(select(Project.id).where(Project.active.is_(True))).scalars())
+    slot_rows = [
+        (role.disease_id, role.lab_unit_id, role.can_grade_resident,
+         role.can_grade_resident2, role.can_arbitrate)
+        for role in eligible_roles
+    ]
+    for project_id, lab_id, scope, disease_id, _est_id, capacity in allocation_keys:
+        if scope != "disease_image" or project_id not in active_projects:
+            continue
+        if not _role_names_have_capacity(role_names, AllocationCapacity(capacity)):
+            continue
+        slot_rows.append((disease_id, lab_id, capacity == "resident",
+                          capacity == "resident", capacity == "arbitrator"))
+    if not slot_rows:
         return None
 
     # Load the small linked-disease graph once. The previous implementation
@@ -199,9 +235,9 @@ def _resolve_user_disease_slots(db, user_id: int):
 
     # Group eligible lab units by disease, including linked diseases from primary permissions
     disease_lab_units = {}
-    for role in eligible_roles:
-        primary_id = root_disease_id(role.disease_id)
-        if role.disease_id != primary_id:
+    for allocated_disease_id, lab_id, resident, resident2, arbitrator in slot_rows:
+        primary_id = root_disease_id(allocated_disease_id)
+        if allocated_disease_id != primary_id:
             continue
         linked_ids = linked_disease_ids(primary_id)
         all_ids = [primary_id] + linked_ids
@@ -219,10 +255,10 @@ def _resolve_user_disease_slots(db, user_id: int):
                 if is_currently_primary:
                     disease_lab_units[disease_id]['is_linked_only'] = False
 
-            disease_lab_units[disease_id]['lab_units'].add(role.lab_unit_id)
-            disease_lab_units[disease_id]['can_grade_resident'] |= role.can_grade_resident
-            disease_lab_units[disease_id]['can_grade_resident2'] |= role.can_grade_resident2
-            disease_lab_units[disease_id]['can_arbitrate'] |= role.can_arbitrate
+            disease_lab_units[disease_id]['lab_units'].add(lab_id)
+            disease_lab_units[disease_id]['can_grade_resident'] |= resident
+            disease_lab_units[disease_id]['can_grade_resident2'] |= resident2
+            disease_lab_units[disease_id]['can_arbitrate'] |= arbitrator
     return user, disease_names, disease_lab_units
 
 
@@ -342,6 +378,7 @@ def get_user_kpi_pending_task_count_data(
                 q,
                 user_id=user_id,
                 role_slot="resident",
+                disease_id=disease_id,
             )
 
             # Include inconsistent resident tasks that are assignable by resident slot
@@ -372,6 +409,7 @@ def get_user_kpi_pending_task_count_data(
                 inconsistent_q,
                 user_id=user_id,
                 role_slot="resident",
+                disease_id=disease_id,
             )
 
             counts['resident_pending'] = resident_pending_count + inconsistent_count
@@ -407,6 +445,7 @@ def get_user_kpi_pending_task_count_data(
                 q,
                 user_id=user_id,
                 role_slot="resident2",
+                disease_id=disease_id,
             )
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
@@ -461,6 +500,10 @@ def get_user_kpi_pending_task_count_data(
             
             q = filter_to_exact_allocation(
                 q, user_id=user_id, capacity="arbitrator"
+            )
+            q = _filter_non_project_eligibility(
+                db, q, user_id=user_id, disease_id=disease_id,
+                capacity=AllocationCapacity.ARBITRATOR,
             )
             # Use distinct because the join might produce multiple rows per primary task
             eligible_arbitration_rows = (

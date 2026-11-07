@@ -227,6 +227,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Remidio API Encounter Migration](docs/API/remidio-api-encounter-migration/README.md) - Admin preview/apply workflow for correcting wrongly routed Remidio EncounterSets and resetting incomplete source grading work
 - [Remidio Image Re-pull](docs/API/remidio-image-repull/README.md) - Admin job that restores full-fidelity Remidio images re-encoded by the old metadata strip (newest first, no DB writes); Remidio ingestion skips the PII scan
 - [Remidio Error Log API](docs/API/remidio-errors/README.md) - Data Manager-scoped sanitized route and download failures from project sync jobs
+- [Remidio Setup and Sync Recovery](docs/16-NewFeature/Remedio_dashboard_integration/remidio-setup-workflow.md) - Connection setup, token retry interpretation, and concurrent exam persistence
 - [Project Remote Inference API](docs/API/remote-inference/README.md) - Project-owned automated and manual Wadhwani workflow controls, including the [Data Manager project-wide WAI backfill](docs/API/remote-inference/project-wai-backfill.md)
 - [EncounterSetTypes API](docs/API/encounter-set-types/README.md) - Reusable encounter-set type CRUD and metadata-schema contract
 - [EncounterSet EMR Export API](docs/API/uploads/encounter-set-emr-export.md) - Masked and PII monthly or all-months EncounterSet XLSX export with OCR and patient/encounter metadata columns

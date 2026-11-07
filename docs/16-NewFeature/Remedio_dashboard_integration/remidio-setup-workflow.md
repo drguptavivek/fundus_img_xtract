@@ -2,6 +2,21 @@
 
 This workflow is for connecting a Remidio dashboard account to EyeImageManager projects.
 
+## Sync recovery and overlapping pulls
+
+Gateway requests refresh both cached tokens after an authentication rejection and
+retry up to three times with exponential backoff. A `TokenInvalidException`
+warning alone does not mean a sync failed: correlate it with the retry, final
+response, and project sync item outcome. Successful empty responses do not prove
+upstream completeness; reconcile against Remidio inventory when auditing gaps.
+
+Exam persistence uses PostgreSQL conflict handling on the connection/exam key and
+locks the exam row until the caller's transaction completes. Overlapping routing
+profiles reuse the same exam and serialize its image/report metadata updates.
+Existing encounter and downloaded-asset links are preserved. No schema migration
+is required. Deploying this persistence change requires restarting the Celery
+workers that execute syncs, with operator approval.
+
 ## 1. Configure Remidio Sites
 
 In Remidio:

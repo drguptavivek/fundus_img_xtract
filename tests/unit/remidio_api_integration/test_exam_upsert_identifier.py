@@ -111,3 +111,67 @@ def test_service_resolves_the_identifier_from_a_numeric_site_id(db_session, conn
     assert _site_custom_identifier_for(db_session, connection.id, "comoph_4834") == "comoph_4834"
     assert _site_custom_identifier_for(db_session, connection.id, "unknown-site") is None
     assert _site_custom_identifier_for(db_session, connection.id, "") is None
+
+
+def test_competing_exam_insert_is_reused_without_aborting_transaction(db_session, connection, monkeypatch):
+    """An exam appearing immediately before INSERT must take the conflict path."""
+    original_execute = db_session.execute
+    competing_ids = []
+
+    def execute_after_competing_insert(statement, *args, **kwargs):
+        from sqlalchemy.dialects.postgresql import Insert
+
+        if isinstance(statement, Insert) and not competing_ids:
+            competing = RemidioExam(
+                remidio_connection_id=connection.id,
+                remidio_exam_id="exam-1",
+                site_custom_identifier="comoph_4834",
+                pull_source="getExamsByDate",
+            )
+            db_session.add(competing)
+            db_session.flush()
+            competing_ids.append(competing.id)
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", execute_after_competing_insert)
+    summary = upsert_exam_payloads(
+        db_session,
+        connection_id=connection.id,
+        payloads=[_payload(site_custom_identifier=None, pull_source="getPatientWithLastExam")],
+    )
+    assert summary.exams_created == 0
+    assert summary.exams_updated == 1
+    exam = db_session.query(RemidioExam).filter_by(id=competing_ids[0]).one()
+    assert exam.site_custom_identifier == "comoph_4834"
+    assert exam.pull_source == "getPatientWithLastExam"
+    assert db_session.is_active
+
+
+def test_repeated_exam_in_one_pull_is_counted_as_update(db_session, connection):
+    from dataclasses import replace
+    from models import RemidioImage, RemidioReport
+    from remidio_api_integration.schemas import RemidioImagePayload, RemidioReportPayload
+
+    payload = _payload(site_custom_identifier="comoph_4834", pull_source="getExamsByDate")
+    payload = replace(
+        payload,
+        images=[RemidioImagePayload(
+            remidio_image_id="image-1", device_type="FOP", image_bucket=None,
+            image_variant=None, laterality=None, field=None, quality=None,
+            width=None, height=None, remidio_path=None, remidio_thumbnail_path=None,
+            raw_json={},
+        )],
+        reports=[RemidioReportPayload(
+            remidio_report_id="report-1", report_type="DR", report_local_id=None,
+            generated_date_ms=None, generated_at=None, remidio_path=None, raw_json={},
+        )],
+    )
+    summary = upsert_exam_payloads(db_session, connection_id=connection.id, payloads=[payload, payload])
+    assert summary.exams_created == 1
+    assert summary.exams_updated == 1
+    assert summary.images_created == summary.images_updated == 1
+    assert summary.reports_created == summary.reports_updated == 1
+    assert db_session.query(RemidioExam).filter_by(remidio_connection_id=connection.id).count() == 1
+    exam = db_session.query(RemidioExam).filter_by(remidio_connection_id=connection.id).one()
+    assert db_session.query(RemidioImage).filter_by(remidio_exam_id=exam.id).count() == 1
+    assert db_session.query(RemidioReport).filter_by(remidio_exam_id=exam.id).count() == 1

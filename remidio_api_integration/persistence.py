@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert
 
 from auth.utils import utcnow
 from models import RemidioExam, RemidioImage, RemidioReport, RemidioSite
@@ -41,22 +42,35 @@ def upsert_exam_payloads(db: Session, *, connection_id: int, payloads: list[Remi
     summary = _MutableSummary(exams_seen=len(payloads))
     site_cache = _site_cache(db, connection_id)
 
-    for payload in payloads:
+    # Keep lock acquisition deterministic when a response contains several exams.
+    for payload in sorted(payloads, key=lambda item: item.remidio_exam_id):
+        # A SELECT followed by INSERT races with other routing profiles pulling
+        # the same connection/site. PostgreSQL waits for the competing insert;
+        # the following SELECT then sees and locks its committed row.
+        created_id = db.execute(
+            insert(RemidioExam)
+            .values(
+                remidio_connection_id=connection_id,
+                remidio_exam_id=payload.remidio_exam_id,
+                pull_source=payload.pull_source,
+            )
+            .on_conflict_do_nothing(constraint="uq_remidio_exam_connection_exam_id")
+            .returning(RemidioExam.id)
+        ).scalar_one_or_none()
         exam = (
             db.query(RemidioExam)
             .filter(
                 RemidioExam.remidio_connection_id == connection_id,
                 RemidioExam.remidio_exam_id == payload.remidio_exam_id,
             )
-            .one_or_none()
+            .with_for_update(of=RemidioExam)
+            .populate_existing()
+            .one()
         )
-        if exam is None:
+        # Hold the parent lock through child writes until the caller commits.
+        # This also serializes image/report query-then-insert operations.
+        if created_id is not None:
             summary.exams_created += 1
-            exam = RemidioExam(
-                remidio_connection_id=connection_id,
-                remidio_exam_id=payload.remidio_exam_id,
-            )
-            db.add(exam)
         else:
             summary.exams_updated += 1
 
